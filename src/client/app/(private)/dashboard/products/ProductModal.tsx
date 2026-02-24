@@ -50,7 +50,6 @@ const ProductModal: React.FC<ProductModalProps> = ({
           images: [],
           lowStockThreshold: 10,
           barcode: "",
-          warehouseLocation: "",
           price: 0,
           sku: "",
           stock: 0,

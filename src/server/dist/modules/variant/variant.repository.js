@@ -105,7 +105,7 @@ class VariantRepository {
         return __awaiter(this, void 0, void 0, function* () {
             const { variantId, skip = 0, take = 10 } = params;
             return database_config_1.default.restock.findMany({
-                where: { variantId },
+                where: variantId === "all" ? {} : { variantId },
                 orderBy: { createdAt: "desc" },
                 skip,
                 take,
@@ -118,7 +118,9 @@ class VariantRepository {
     }
     countRestocks(params) {
         return __awaiter(this, void 0, void 0, function* () {
-            return database_config_1.default.restock.count({ where: { variantId: params.variantId } });
+            return database_config_1.default.restock.count({
+                where: params.variantId === "all" ? {} : { variantId: params.variantId },
+            });
         });
     }
     createVariant(data, tx) {

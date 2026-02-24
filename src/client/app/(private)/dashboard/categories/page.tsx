@@ -14,10 +14,11 @@ import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import CategoryForm, { CategoryFormData } from "./CategoryForm";
 import useToast from "@/app/hooks/ui/useToast";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const CategoriesDashboard = () => {
   const { showToast } = useToast();
-  const { data, isLoading, error } = useGetAllCategoriesQuery({});
+  const { data, isLoading, error, refetch } = useGetAllCategoriesQuery({});
   const [createCategory, { isLoading: isCreating }] =
     useCreateCategoryMutation();
   const [deleteCategory, { isLoading: isDeleting }] =
@@ -46,7 +47,9 @@ const CategoriesDashboard = () => {
       label: "Description",
       sortable: true,
       render: (row) => (
-        <span className="font-medium text-gray-800">{row?.name || "N/A"}</span>
+        <span className="font-medium text-gray-800">
+          {row?.description || "N/A"}
+        </span>
       ),
     },
     {
@@ -55,6 +58,7 @@ const CategoriesDashboard = () => {
       render: (row) => (
         <div className="flex space-x-2">
           <button
+            type="button"
             onClick={() => handleDeletePrompt(row?.id)}
             className="p-1 text-red-500 hover:text-red-600 transition-colors duration-200"
             aria-label="Delete category"
@@ -92,23 +96,18 @@ const CategoriesDashboard = () => {
     payload.append("name", formData.name || "");
     payload.append("description", formData.description || "");
 
-    if (data.images && Array.isArray(data.images)) {
-      data.images.forEach((file: any) => {
+    if (formData.images && Array.isArray(formData.images)) {
+      formData.images.forEach((file: any) => {
         if (file instanceof File) {
           payload.append("images", file);
         }
       });
     }
 
-    console.log("FormData payload:");
-    for (const [key, value] of payload.entries()) {
-      console.log(`${key}: ${value instanceof File ? value.name : value}`);
-    }
-
     try {
       await createCategory(payload).unwrap();
       setIsCreateModalOpen(false);
-      form.reset({ name: "" });
+      form.reset({ name: "", description: "", images: [] });
       showToast("Category created successfully", "success");
     } catch (err) {
       console.error("Failed to create category:", err);
@@ -150,7 +149,7 @@ const CategoriesDashboard = () => {
         <div className="text-center py-12">
           <p className="text-lg text-red-500">
             Error loading categories:{" "}
-            {(error as any)?.message || "Unknown error"}
+            {getApiErrorMessage(error, "Unknown error")}
           </p>
         </div>
       ) : categories.length === 0 ? (
@@ -164,6 +163,7 @@ const CategoriesDashboard = () => {
           columns={columns}
           isLoading={isLoading}
           className="bg-white rounded-xl shadow-md border border-gray-100"
+          onRefresh={refetch}
         />
       )}
 

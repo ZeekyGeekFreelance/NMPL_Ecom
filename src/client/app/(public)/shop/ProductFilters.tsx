@@ -1,13 +1,21 @@
 "use client";
-import React from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { X, SlidersHorizontal } from "lucide-react";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import CheckBox from "@/app/components/atoms/CheckBox";
 import { debounce } from "lodash";
 
+type SortByOption =
+  | "RELEVANCE"
+  | "PRICE_ASC"
+  | "PRICE_DESC"
+  | "RATING_DESC"
+  | "NAME_ASC";
+
 export interface FilterValues {
   search: string;
+  sortBy?: SortByOption;
   categoryId?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -32,7 +40,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
   isMobile = false,
   onCloseMobile,
 }) => {
-  const { control, watch, reset, handleSubmit } = useForm<FilterValues>({
+  const { control, watch, reset, handleSubmit, getValues } = useForm<FilterValues>({
     defaultValues: initialFilters,
   });
 
@@ -40,14 +48,28 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
   const formValues = watch();
 
   // Debounced search update
-  const debouncedSearch = debounce((searchValue: string) => {
-    onFilterChange({ ...formValues, search: searchValue });
-  }, 500);
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((searchValue: string) => {
+        const currentValues = getValues();
+        onFilterChange({ ...currentValues, search: searchValue });
+      }, 300),
+    [getValues, onFilterChange]
+  );
+
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
 
   // Handle search input change
-  const handleSearchChange = (value: string) => {
-    debouncedSearch(value);
-  };
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      debouncedSearch(value);
+    },
+    [debouncedSearch]
+  );
 
   // Handle form submission (Apply Filters)
   const onSubmit = (data: FilterValues) => {
@@ -59,6 +81,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
   const handleReset = () => {
     reset({
       search: "",
+      sortBy: "RELEVANCE",
       categoryId: undefined,
       minPrice: undefined,
       maxPrice: undefined,
@@ -69,6 +92,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
     });
     onFilterChange({
       search: "",
+      sortBy: "RELEVANCE",
       categoryId: undefined,
       minPrice: undefined,
       maxPrice: undefined,
@@ -89,9 +113,22 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
     })),
   ];
 
+  const sortOptions = [
+    { label: "Relevance", value: "RELEVANCE" },
+    { label: "Price: Low to High", value: "PRICE_ASC" },
+    { label: "Price: High to Low", value: "PRICE_DESC" },
+    { label: "Top Rated", value: "RATING_DESC" },
+    { label: "Name: A to Z", value: "NAME_ASC" },
+  ];
+
   // Count active filters
-  const activeFilterCount = Object.values(formValues).filter(
-    (value) => value !== undefined && value !== "" && value !== false
+  const activeFilterCount = Object.entries(formValues).filter(
+    ([key, value]) => {
+      if (key === "sortBy") {
+        return value !== undefined && value !== "" && value !== "RELEVANCE";
+      }
+      return value !== undefined && value !== "" && value !== false;
+    }
   ).length;
 
   return (
@@ -165,6 +202,25 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
                     field.onChange(e);
                     handleSearchChange(e.target.value);
                   }}
+                />
+              )}
+            />
+          </div>
+
+          {/* Sort */}
+          <div className="space-y-3">
+            <label className="text-sm font-semibold text-gray-800">Sort By</label>
+            <Controller
+              name="sortBy"
+              control={control}
+              render={({ field }) => (
+                <Dropdown
+                  options={sortOptions}
+                  value={field.value || "RELEVANCE"}
+                  onChange={(value) =>
+                    field.onChange((value as SortByOption) || "RELEVANCE")
+                  }
+                  className="w-full"
                 />
               )}
             />

@@ -50,11 +50,6 @@ class ChatService {
             let type = "TEXT";
             let url;
             if (file) {
-                console.log("File received:", {
-                    mimetype: file.mimetype,
-                    size: file.size,
-                    originalname: file.originalname,
-                });
                 try {
                     const uploadResult = yield new Promise((resolve, reject) => {
                         const stream = cloudinary_1.v2.uploader.upload_stream({
@@ -73,7 +68,6 @@ class ChatService {
                         bufferStream.push(null);
                         bufferStream.pipe(stream);
                     });
-                    console.log("Cloudinary upload result:", uploadResult);
                     type = file.mimetype.startsWith("image/") ? "IMAGE" : "VOICE";
                     url = uploadResult.secure_url;
                 }

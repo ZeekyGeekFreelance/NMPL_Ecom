@@ -55,7 +55,7 @@ const UserMenu = ({ menuOpen, closeMenu, user }) => {
           href: "/orders",
           label: "My Orders",
           icon: <ShoppingCart size={18} className="text-emerald-500" />,
-          show: true,
+          show: user?.role === "USER",
         },
         {
           href: "/profile",
@@ -67,7 +67,7 @@ const UserMenu = ({ menuOpen, closeMenu, user }) => {
           href: "/support",
           label: "Contact Support",
           icon: <Group size={18} className="text-blue-500" />,
-          show: true,
+          show: user?.role === "USER",
         },
       ],
     },

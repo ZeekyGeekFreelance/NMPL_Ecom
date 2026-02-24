@@ -30,7 +30,12 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const galleryRef = useRef<HTMLDivElement>(null);
 
-  // Update selectedIndex when selectedImage changes
+  useEffect(() => {
+    const nextImage = defaultImage || images[0] || generateProductPlaceholder(name);
+    setSelectedImage(nextImage);
+    setIsZoomed(false);
+  }, [defaultImage, images, name]);
+
   useEffect(() => {
     const index = images.findIndex((img) => img === selectedImage);
     if (index !== -1) {
@@ -40,7 +45,6 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
     }
   }, [selectedImage, images]);
 
-  // Handle full-screen change events
   useEffect(() => {
     const handleFullScreenChange = () => {
       setIsFullScreen(!!document.fullscreenElement);
@@ -75,7 +79,7 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
   };
 
   const handleZoomToggle = () => {
-    setIsZoomed(!isZoomed);
+    setIsZoomed((previous) => !previous);
   };
 
   const handleFullScreenToggle = async () => {
@@ -96,6 +100,7 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
         console.error("Failed to exit fullscreen:", err);
       }
     }
+
     setIsZoomed(false);
   };
 
@@ -125,93 +130,53 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
     );
   }
 
+  const maxVisibleDots = 8;
+
   return (
     <div
       ref={galleryRef}
       className={`relative ${
-        isFullScreen ? "bg-black h-screen w-screen p-4" : ""
+        isFullScreen ? "bg-black h-screen w-screen p-3 sm:p-6" : "p-4 sm:p-6"
       }`}
     >
       <button
         onClick={handleFullScreenToggle}
-        className="absolute top-4 right-4 z-10 rounded-full p-2 bg-white bg-opacity-80 shadow-md hover:bg-gray-100"
+        className="absolute top-4 right-4 z-20 rounded-full p-2 bg-white/85 shadow-md hover:bg-gray-100"
         aria-label={isFullScreen ? "Exit fullscreen" : "View fullscreen"}
       >
         {isFullScreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
       </button>
 
       <div
-        className={`flex ${
-          isFullScreen ? "h-full" : ""
-        } flex-col md:flex-row gap-6`}
+        className={`flex flex-col gap-4 ${
+          isFullScreen ? "h-full max-w-6xl mx-auto" : ""
+        }`}
       >
-        {/* Thumbnails */}
-        <div
-          className={`flex md:flex-col gap-3 ${
-            isFullScreen
-              ? "md:max-h-screen overflow-y-auto"
-              : "md:max-h-[540px] overflow-x-auto md:overflow-y-auto"
-          }`}
-        >
-          {images.map((img, index) => (
-            <button
-              key={index}
-              onClick={() => handleImageSelect(img, index)}
-              className={`relative border-2 rounded-xl p-1 transition-all duration-200 ${
-                selectedImage === img
-                  ? "border-indigo-600 shadow-md"
-                  : "border-gray-200 hover:border-indigo-400"
-              }`}
-            >
-              <div className="relative w-20 h-20">
-                <Image
-                  src={img}
-                  alt={`${name} thumbnail ${index + 1}`}
-                  fill
-                  sizes="80px"
-                  className="rounded-lg object-cover"
-                  priority={index < 2}
-                  onError={(e) => {
-                    e.currentTarget.src = generateProductPlaceholder(name);
-                  }}
-                />
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Main Image Container */}
-        <div
-          className={`relative flex-1 ${
-            isFullScreen ? "flex items-center justify-center" : ""
-          }`}
-        >
-          {/* Navigation Arrows */}
-          <div className="absolute inset-y-0 left-2 flex items-center z-10">
+        <div className="relative flex-1 min-h-0">
+          <div className="absolute inset-y-0 left-2 sm:left-4 flex items-center z-10">
             <button
               onClick={handlePrevImage}
-              className="bg-white bg-opacity-80 hover:bg-opacity-100 rounded-full p-2 shadow-md transition-all transform hover:scale-105"
+              className="bg-white/85 hover:bg-white rounded-full p-2 shadow-md transition-all transform hover:scale-105"
               aria-label="Previous image"
             >
               <ChevronLeft size={20} />
             </button>
           </div>
 
-          <div className="absolute inset-y-0 right-2 flex items-center z-10">
+          <div className="absolute inset-y-0 right-2 sm:right-4 flex items-center z-10">
             <button
               onClick={handleNextImage}
-              className="bg-white bg-opacity-80 hover:bg-opacity-100 rounded-full p-2 shadow-md transition-all transform hover:scale-105"
+              className="bg-white/85 hover:bg-white rounded-full p-2 shadow-md transition-all transform hover:scale-105"
               aria-label="Next image"
             >
               <ChevronRight size={20} />
             </button>
           </div>
 
-          {/* Zoom Control */}
           <div className="absolute top-4 right-16 flex gap-2 z-10">
             <button
               onClick={handleZoomToggle}
-              className={`bg-white bg-opacity-80 rounded-full p-2 shadow-md transition-all ${
+              className={`bg-white/85 rounded-full p-2 shadow-md transition-all ${
                 isZoomed ? "bg-indigo-100 text-indigo-600" : "hover:bg-gray-100"
               }`}
               aria-label={isZoomed ? "Exit zoom" : "Zoom image"}
@@ -220,19 +185,20 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
             </button>
           </div>
 
-          {/* Main Image */}
           <div
-            className={`flex items-center justify-center ${
-              isFullScreen ? "h-full" : "bg-gray-50 rounded-2xl p-6"
-            } overflow-hidden`}
+            className={`flex items-center justify-center overflow-hidden rounded-2xl ${
+              isFullScreen
+                ? "h-full bg-black"
+                : "min-h-[360px] sm:min-h-[500px] bg-gray-50 px-6 py-4"
+            }`}
             onMouseMove={handleMouseMove}
             style={{ cursor: isZoomed ? "zoom-out" : "zoom-in" }}
             onClick={handleZoomToggle}
           >
             <div
-              className={`relative ${
-                isFullScreen ? "max-h-full max-w-full" : "h-[500px] w-full"
-              } overflow-hidden rounded-xl`}
+              className={`relative overflow-hidden rounded-xl w-full ${
+                isFullScreen ? "h-full max-h-full" : "h-[340px] sm:h-[460px]"
+              }`}
             >
               <Image
                 src={selectedImage}
@@ -258,10 +224,80 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
             </div>
           </div>
 
-          {/* Image Counter */}
-          <div className="absolute bottom-6 left-6 bg-white bg-opacity-80 px-3 py-1 rounded-full text-sm text-gray-700 shadow-sm">
+          <div className="absolute bottom-4 left-4 bg-white/85 px-3 py-1 rounded-full text-sm text-gray-700 shadow-sm">
             {selectedIndex + 1} / {images.length || 1}
           </div>
+        </div>
+
+        <div className={`${isFullScreen ? "pb-2" : ""}`}>
+          <div className="flex items-center justify-center gap-3 px-2">
+            <button
+              onClick={handlePrevImage}
+              className="shrink-0 rounded-full border border-gray-300 bg-white p-1.5 text-gray-700 hover:bg-gray-50"
+              aria-label="Previous thumbnail"
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            <div className="flex-1 overflow-x-auto">
+              <div className="mx-auto flex min-w-max items-center justify-center gap-2 py-1 px-1">
+                {images.map((img, index) => (
+                  <button
+                    key={`${img}-${index}`}
+                    onClick={() => handleImageSelect(img, index)}
+                    className={`relative border-2 rounded-xl p-1 transition-all duration-200 shrink-0 ${
+                      selectedImage === img
+                        ? "border-indigo-600 shadow-md"
+                        : "border-gray-200 hover:border-indigo-400"
+                    }`}
+                    aria-label={`View image ${index + 1}`}
+                  >
+                    <div className="relative w-14 h-14 sm:w-16 sm:h-16">
+                      <Image
+                        src={img}
+                        alt={`${name} thumbnail ${index + 1}`}
+                        fill
+                        sizes="64px"
+                        className="rounded-lg object-cover"
+                        priority={index < 2}
+                        onError={(e) => {
+                          e.currentTarget.src = generateProductPlaceholder(name);
+                        }}
+                      />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={handleNextImage}
+              className="shrink-0 rounded-full border border-gray-300 bg-white p-1.5 text-gray-700 hover:bg-gray-50"
+              aria-label="Next thumbnail"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          <div className="mt-2 flex items-center justify-center gap-1.5">
+            {images.slice(0, maxVisibleDots).map((_, index) => {
+              const isActive = index === selectedIndex;
+              return (
+                <span
+                  key={`dot-${index}`}
+                  className={`inline-block rounded-full transition-all ${
+                    isActive ? "w-3 h-3 bg-indigo-600" : "w-2 h-2 bg-gray-300"
+                  }`}
+                />
+              );
+            })}
+          </div>
+
+          {images.length > maxVisibleDots && (
+            <p className="mt-1 text-center text-gray-400 text-sm tracking-[0.25em]">
+              ...
+            </p>
+          )}
         </div>
       </div>
     </div>

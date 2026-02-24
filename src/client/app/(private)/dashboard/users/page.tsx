@@ -38,7 +38,7 @@ const UsersDashboard = () => {
 
   const shouldFetchUsers = pathname === "/dashboard/users";
 
-  const { data, isLoading, error } = useGetAllUsersQuery(undefined, {
+  const { data, isLoading, error, refetch } = useGetAllUsersQuery(undefined, {
     skip: !shouldFetchUsers,
   });
 
@@ -50,7 +50,6 @@ const UsersDashboard = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateAdminModalOpen, setIsCreateAdminModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserFormData | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | number | null>(
     null
@@ -102,6 +101,8 @@ const UsersDashboard = () => {
       key: "id",
       label: "Account Ref",
       sortable: true,
+      searchAccessor: (row: any) =>
+        row?.accountReference || toAccountReference(row?.id || ""),
       render: (row: any) => (
         <span className="text-sm text-gray-600 font-mono">
           <ToggleableText
@@ -192,8 +193,8 @@ const UsersDashboard = () => {
           >
             <AdminActionGuard action="update_user" showFallback={false}>
               <button
+                type="button"
                 onClick={() => {
-                  setEditingUser(row);
                   form.reset(row);
                   setIsModalOpen(true);
                 }}
@@ -212,6 +213,7 @@ const UsersDashboard = () => {
           >
             <AdminActionGuard action="delete_user" showFallback={false}>
               <button
+                type="button"
                 onClick={() => {
                   setUserToDelete(row.id);
                   setIsConfirmModalOpen(true);
@@ -236,7 +238,6 @@ const UsersDashboard = () => {
       const { id, ...payload } = data;
       await updateUser({ id: String(id), data: payload }).unwrap();
       setIsModalOpen(false);
-      setEditingUser(null);
       showToast("User updated successfully", "success");
     } catch (err: any) {
       console.error("Failed to update user:", err);
@@ -335,6 +336,7 @@ const UsersDashboard = () => {
                 columns={columns}
                 isLoading={isLoading}
                 className="w-full"
+                onRefresh={refetch}
               />
             )}
           </motion.div>

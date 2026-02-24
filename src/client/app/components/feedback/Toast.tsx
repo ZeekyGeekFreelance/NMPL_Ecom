@@ -34,7 +34,7 @@ const toastVariants = {
 const Toast = () => {
   const dispatch = useAppDispatch();
   const { toasts } = useAppSelector((state) => state.toasts);
-  const timeoutRefs = useRef({});
+  const timeoutRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     toasts.forEach((toast) => {
@@ -53,7 +53,7 @@ const Toast = () => {
     };
   }, [toasts, dispatch]);
 
-  const handleClose = (id) => {
+  const handleClose = (id: string) => {
     clearTimeout(timeoutRefs.current[id]);
     delete timeoutRefs.current[id];
     dispatch(removeToast(id));

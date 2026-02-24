@@ -5,6 +5,7 @@ import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@apollo/server/express4";
 import { PrismaClient } from "@prisma/client";
 import { combinedSchemas } from "./v1/schema";
+import optionalAuth from "@/shared/middlewares/optionalAuth";
 
 const prisma = new PrismaClient();
 
@@ -16,6 +17,7 @@ export async function configureGraphQL(app: express.Application) {
 
   app.use(
     "/api/v1/graphql",
+    optionalAuth,
     cors({
       origin:
         process.env.NODE_ENV === "production"

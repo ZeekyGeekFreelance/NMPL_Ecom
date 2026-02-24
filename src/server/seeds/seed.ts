@@ -1,10 +1,10 @@
-import { PrismaClient } from "@prisma/client";
+﻿import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function cleanup() {
-  console.log("🧹 Cleaning up existing data...");
+  console.log("ðŸ§¹ Cleaning up existing data...");
 
   // Delete in reverse order of dependencies to respect foreign key constraints
   await prisma.chatMessage.deleteMany();
@@ -32,11 +32,11 @@ async function cleanup() {
   await prisma.category.deleteMany();
   await prisma.user.deleteMany();
 
-  console.log("✅ Cleanup completed");
+  console.log("âœ… Cleanup completed");
 }
 
 async function main() {
-  console.log("🌱 Starting database seeding...");
+  console.log("ðŸŒ± Starting database seeding...");
 
   // Clean up existing data first
   await cleanup();
@@ -648,7 +648,6 @@ async function main() {
           price: 999.99,
           stock: 25,
           barcode: "1234567890001",
-          warehouseLocation: "WH-1A",
           attributes: [
             { attributeId: storageAttribute.id, valueId: storage128GB.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -660,7 +659,6 @@ async function main() {
           price: 1099.99,
           stock: 20,
           barcode: "1234567890002",
-          warehouseLocation: "WH-1B",
           attributes: [
             { attributeId: storageAttribute.id, valueId: storage256GB.id },
             { attributeId: colorAttribute.id, valueId: colorBlue.id },
@@ -684,7 +682,6 @@ async function main() {
           price: 899.99,
           stock: 30,
           barcode: "1234567890003",
-          warehouseLocation: "WH-2A",
           attributes: [
             { attributeId: storageAttribute.id, valueId: storage256GB.id },
             { attributeId: colorAttribute.id, valueId: colorGreen.id },
@@ -710,7 +707,6 @@ async function main() {
           price: 19.99,
           stock: 50,
           barcode: "1234567890004",
-          warehouseLocation: "WH-3A",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeS.id },
             { attributeId: colorAttribute.id, valueId: colorRed.id },
@@ -722,7 +718,6 @@ async function main() {
           price: 19.99,
           stock: 45,
           barcode: "1234567890005",
-          warehouseLocation: "WH-3B",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeM.id },
             { attributeId: colorAttribute.id, valueId: colorBlue.id },
@@ -734,7 +729,6 @@ async function main() {
           price: 19.99,
           stock: 40,
           barcode: "1234567890006",
-          warehouseLocation: "WH-3C",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeL.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -758,7 +752,6 @@ async function main() {
           price: 59.99,
           stock: 35,
           barcode: "1234567890007",
-          warehouseLocation: "WH-4A",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeM.id },
             { attributeId: colorAttribute.id, valueId: colorBlue.id },
@@ -770,7 +763,6 @@ async function main() {
           price: 59.99,
           stock: 30,
           barcode: "1234567890008",
-          warehouseLocation: "WH-4B",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeL.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -796,7 +788,6 @@ async function main() {
           price: 129.99,
           stock: 25,
           barcode: "1234567890009",
-          warehouseLocation: "WH-5A",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeL.id },
             { attributeId: colorAttribute.id, valueId: colorWhite.id },
@@ -812,7 +803,6 @@ async function main() {
           price: 129.99,
           stock: 20,
           barcode: "1234567890010",
-          warehouseLocation: "WH-5B",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeXL.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -840,7 +830,6 @@ async function main() {
           price: 179.99,
           stock: 15,
           barcode: "1234567890011",
-          warehouseLocation: "WH-6A",
           attributes: [
             { attributeId: sizeAttribute.id, valueId: sizeL.id },
             { attributeId: colorAttribute.id, valueId: colorRed.id },
@@ -870,7 +859,6 @@ async function main() {
           price: 149.99,
           stock: 10,
           barcode: "1234567890012",
-          warehouseLocation: "WH-7A",
           attributes: [
             { attributeId: materialAttribute.id, valueId: materialWood.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -894,7 +882,6 @@ async function main() {
           price: 299.99,
           stock: 8,
           barcode: "1234567890013",
-          warehouseLocation: "WH-8A",
           attributes: [
             { attributeId: materialAttribute.id, valueId: materialMetal.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -920,7 +907,6 @@ async function main() {
           price: 49.99,
           stock: 20,
           barcode: "1234567890014",
-          warehouseLocation: "WH-9A",
           attributes: [
             { attributeId: materialAttribute.id, valueId: materialLeather.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -931,7 +917,6 @@ async function main() {
           price: 49.99,
           stock: 18,
           barcode: "1234567890015",
-          warehouseLocation: "WH-9B",
           attributes: [
             { attributeId: materialAttribute.id, valueId: materialLeather.id },
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
@@ -954,7 +939,6 @@ async function main() {
           price: 89.99,
           stock: 12,
           barcode: "1234567890016",
-          warehouseLocation: "WH-10A",
           attributes: [
             { attributeId: colorAttribute.id, valueId: colorBlack.id },
             { attributeId: materialAttribute.id, valueId: materialMetal.id },
@@ -965,7 +949,6 @@ async function main() {
           price: 89.99,
           stock: 10,
           barcode: "1234567890017",
-          warehouseLocation: "WH-10B",
           attributes: [
             { attributeId: colorAttribute.id, valueId: colorYellow.id },
             { attributeId: materialAttribute.id, valueId: materialMetal.id },
@@ -1004,7 +987,6 @@ async function main() {
           stock: variantData.stock,
           lowStockThreshold: 10,
           barcode: variantData.barcode,
-          warehouseLocation: variantData.warehouseLocation,
           images: [],
         },
       });
@@ -1024,8 +1006,8 @@ async function main() {
     }
   }
 
-  console.log("✅ Database seeded successfully!");
-  console.log("\n📋 Created:");
+  console.log("âœ… Database seeded successfully!");
+  console.log("\nðŸ“‹ Created:");
   console.log(`- Users: Superadmin, Admin, User`);
   console.log(
     `- Categories: ${electronicsCategory.name}, ${clothingCategory.name}, ${footwearCategory.name}, ${furnitureCategory.name}, ${accessoriesCategory.name}`
@@ -1037,7 +1019,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error("❌ Error seeding database:", e);
+    console.error("âŒ Error seeding database:", e);
     process.exit(1);
   })
   .finally(async () => {

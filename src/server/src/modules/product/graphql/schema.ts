@@ -30,7 +30,6 @@ const typeDefs = gql`
     stock: Int!
     lowStockThreshold: Int!
     barcode: String
-    warehouseLocation: String
     attributes: [ProductVariantAttribute!]!
   }
 

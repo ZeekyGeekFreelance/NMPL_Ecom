@@ -119,7 +119,7 @@ const MaintenancePage = () => {
           <p className="text-gray-600 text-lg leading-relaxed max-w-md mx-auto">
             {isOnline
               ? "We're currently performing scheduled maintenance to improve your experience. Please check back soon."
-              : "It looks like you've lost your internet connection. Please check your network and try again."}
+              : "It looks like you&apos;ve lost your internet connection. Please check your network and try again."}
           </p>
         </motion.div>
 
@@ -214,7 +214,7 @@ const MaintenancePage = () => {
 
           {retryCount > 0 && (
             <p className="text-sm text-gray-500">
-              Attempt {retryCount} - We're working to restore service
+              Attempt {retryCount} - We&apos;re working to restore service
             </p>
           )}
         </motion.div>

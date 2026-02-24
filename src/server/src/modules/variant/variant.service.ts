@@ -99,7 +99,6 @@ export class VariantService {
     stock: number;
     lowStockThreshold?: number;
     barcode?: string;
-    warehouseLocation?: string;
     attributes: { attributeId: string; valueId: string }[];
   }) {
     const { productId, attributes } = data;
@@ -199,7 +198,6 @@ export class VariantService {
       stock: number;
       lowStockThreshold?: number;
       barcode?: string;
-      warehouseLocation?: string;
       attributes: { attributeId: string; valueId: string }[];
     }>
   ) {

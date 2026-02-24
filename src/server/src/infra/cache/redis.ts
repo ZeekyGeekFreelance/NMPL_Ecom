@@ -1,5 +1,6 @@
 import Redis from "ioredis";
 
+const isDevelopment = process.env.NODE_ENV !== "production";
 const parsedPort = Number(process.env.REDIS_PORT ?? "6379");
 const fallbackPort = Number.isFinite(parsedPort) ? parsedPort : 6379;
 const redisUrl = process.env.REDIS_URL?.trim();
@@ -18,7 +19,11 @@ const redis = redisHost
       });
 
 redis
-  .on("connect", () => console.log("Connected to Redis"))
+  .on("connect", () => {
+    if (isDevelopment) {
+      console.log("Connected to Redis");
+    }
+  })
   .on("error", (err) => console.error("Redis error:", err));
 
 export default redis;

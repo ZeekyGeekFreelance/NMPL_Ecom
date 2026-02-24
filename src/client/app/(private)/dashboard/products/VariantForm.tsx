@@ -48,7 +48,6 @@ const VariantForm: React.FC<VariantFormProps> = ({
               stock: 0,
               lowStockThreshold: 10,
               barcode: "",
-              warehouseLocation: "",
               images: [],
               attributes: categoryAttributes
                 .filter((attr) => attr.isRequired)
@@ -207,24 +206,6 @@ const VariantForm: React.FC<VariantFormProps> = ({
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Warehouse Location
-              </label>
-              <Controller
-                name={`variants.${index}.warehouseLocation`}
-                control={control}
-                render={({ field }) => (
-                  <input
-                    {...field}
-                    type="text"
-                    className={inputStyles}
-                    placeholder="WH-A1"
-                  />
-                )}
-              />
-            </div>
-
             <div className="md:col-span-2">
               <ImageUploader
                 control={control}
@@ -251,7 +232,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                   {attr.isRequired && <span className="text-red-500">*</span>}
                 </label>
                 <Controller
-                  name={`variants.${index}.attributes[${attrIndex}].valueId`}
+                  name={`variants.${index}.attributes.${attrIndex}.valueId`}
                   control={control}
                   rules={
                     attr.isRequired
@@ -268,7 +249,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                       onChange={(value) => {
                         field.onChange(value);
                         form.setValue(
-                          `variants.${index}.attributes[${attrIndex}].attributeId`,
+                          `variants.${index}.attributes.${attrIndex}.attributeId`,
                           attr.id
                         );
                       }}

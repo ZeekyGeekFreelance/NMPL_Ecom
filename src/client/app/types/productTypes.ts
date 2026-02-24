@@ -18,7 +18,6 @@ export interface Product {
     stock: number;
     lowStockThreshold: number;
     barcode: string | null;
-    warehouseLocation: string | null;
     attributes: {
       id: string;
       attribute: {

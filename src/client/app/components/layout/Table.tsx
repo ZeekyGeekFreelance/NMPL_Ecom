@@ -6,6 +6,7 @@ import TableActions from "../molecules/TableActions";
 import TableBody from "../molecules/TableBody";
 import PaginationComponent from "../organisms/Pagination";
 import { useRouter } from "next/navigation";
+import useDebounce from "@/app/hooks/network/useDebounce";
 
 interface Column {
   key: string;
@@ -14,6 +15,7 @@ interface Column {
   render?: (row: any) => React.ReactNode;
   sortAccessor?: (row: any) => unknown;
   searchAccessor?: (row: any) => unknown;
+  exportAccessor?: (row: any) => unknown;
   width?: string;
   align?: "left" | "center" | "right";
 }
@@ -57,7 +59,7 @@ const extractTextFromReactNode = (node: React.ReactNode): string => {
     return node.map((child) => extractTextFromReactNode(child)).join(" ");
   }
 
-  if (React.isValidElement(node)) {
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
     return extractTextFromReactNode(node.props?.children);
   }
 
@@ -91,6 +93,7 @@ const collectSearchableText = (value: unknown): string[] => {
 const normalizeString = (value: unknown): string =>
   String(value ?? "")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
 
 const scoreFieldAgainstQuery = (fieldValue: string, query: string): number => {
@@ -166,6 +169,7 @@ const Table: React.FC<TableProps> = ({
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(columns.map((col) => col.key))
   );
+  const debouncedSearchQuery = useDebounce(searchQuery, 180);
 
   useEffect(() => {
     setVisibleColumns((previousVisibleColumns) => {
@@ -194,10 +198,12 @@ const Table: React.FC<TableProps> = ({
   }, [data]);
 
   const handleSort = (key: string) => {
-    const newSortDirection =
-      sortKey === key && sortDirection === "asc" ? "desc" : "asc";
-    setSortKey(key);
-    setSortDirection(newSortDirection);
+    setSortKey((previousSortKey) => {
+      setSortDirection((previousDirection) =>
+        previousSortKey === key && previousDirection === "asc" ? "desc" : "asc"
+      );
+      return key;
+    });
   };
 
   const handleSearch = (data: { searchQuery: string }) =>
@@ -242,7 +248,7 @@ const Table: React.FC<TableProps> = ({
       return [];
     }
 
-    const normalizedQuery = normalizeString(searchQuery);
+    const normalizedQuery = normalizeString(debouncedSearchQuery);
 
     const rowsWithScores = data
       .map((row) => {
@@ -296,24 +302,35 @@ const Table: React.FC<TableProps> = ({
     });
 
     return rowsWithScores.map((entry) => entry.row);
-  }, [columns, data, searchQuery, sortDirection, sortKey]);
+  }, [columns, data, debouncedSearchQuery, sortDirection, sortKey]);
 
   const handleRefresh = useCallback(() => {
-    try {
-      onRefresh?.();
-    } finally {
+    setSearchQuery("");
+    setSortKey(null);
+    setSortDirection("asc");
+    setSelectedRows(new Set());
+
+    Promise.resolve(onRefresh?.())
+      .catch((error) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to refresh table data", error);
+        }
+      })
+      .finally(() => {
       router.refresh();
-    }
+      });
   }, [onRefresh, router]);
 
   const handleSelectRow = (rowId: string) => {
-    const newSelected = new Set(selectedRows);
-    if (newSelected.has(rowId)) {
-      newSelected.delete(rowId);
-    } else {
-      newSelected.add(rowId);
-    }
-    setSelectedRows(newSelected);
+    setSelectedRows((previousSelectedRows) => {
+      const nextSelectedRows = new Set(previousSelectedRows);
+      if (nextSelectedRows.has(rowId)) {
+        nextSelectedRows.delete(rowId);
+      } else {
+        nextSelectedRows.add(rowId);
+      }
+      return nextSelectedRows;
+    });
   };
 
   const handleSelectAll = () => {
@@ -328,16 +345,17 @@ const Table: React.FC<TableProps> = ({
   };
 
   const handleToggleColumn = (columnKey: string) => {
-    const newVisibleColumns = new Set(visibleColumns);
-    if (newVisibleColumns.has(columnKey)) {
-      if (newVisibleColumns.size > 1) {
-        // Prevent hiding all columns
-        newVisibleColumns.delete(columnKey);
+    setVisibleColumns((previousVisibleColumns) => {
+      const nextVisibleColumns = new Set(previousVisibleColumns);
+      if (nextVisibleColumns.has(columnKey)) {
+        if (nextVisibleColumns.size > 1) {
+          nextVisibleColumns.delete(columnKey);
+        }
+      } else {
+        nextVisibleColumns.add(columnKey);
       }
-    } else {
-      newVisibleColumns.add(columnKey);
-    }
-    setVisibleColumns(newVisibleColumns);
+      return nextVisibleColumns;
+    });
   };
 
   if (!Array.isArray(data)) {
@@ -348,7 +366,7 @@ const Table: React.FC<TableProps> = ({
 
   const filteredColumns = columns.filter((col) => visibleColumns.has(col.key));
   const displayedTotalResults =
-    searchQuery.trim().length > 0
+    debouncedSearchQuery.trim().length > 0
       ? rankedAndSortedData.length
       : totalResults !== undefined
         ? totalResults

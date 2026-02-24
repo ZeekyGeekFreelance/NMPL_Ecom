@@ -27,7 +27,7 @@ const ProductsDashboard = () => {
   const pathname = usePathname();
   const shouldFetchProducts = pathname === "/dashboard/products";
 
-  const { data, isLoading } = useGetAllProductsQuery(
+  const { data, isLoading, refetch } = useGetAllProductsQuery(
     { select: { variants: true } }, // Ensure variants are included
     { skip: !shouldFetchProducts }
   );
@@ -61,10 +61,6 @@ const ProductsDashboard = () => {
         variant.lowStockThreshold?.toString() || "10"
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
-      payload.append(
-        `variants[${index}][warehouseLocation]`,
-        variant.warehouseLocation || ""
-      );
       // Append attributes as JSON
       payload.append(
         `variants[${index}][attributes]`,
@@ -89,12 +85,6 @@ const ProductsDashboard = () => {
         payload.append(`variants[${index}][imageIndexes]`, JSON.stringify([]));
       }
     });
-
-    // Log the payload for debugging
-    console.log("Creating product with payload:");
-    for (const [key, value] of payload.entries()) {
-      console.log(`${key}:`, value);
-    }
 
     try {
       await createProduct(payload).unwrap();
@@ -129,10 +119,6 @@ const ProductsDashboard = () => {
         String(variant.lowStockThreshold ?? 10)
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
-      payload.append(
-        `variants[${index}][warehouseLocation]`,
-        variant.warehouseLocation || ""
-      );
       payload.append(
         `variants[${index}][attributes]`,
         JSON.stringify(variant.attributes || [])
@@ -198,7 +184,9 @@ const ProductsDashboard = () => {
     setProductToDelete(null);
   };
 
-  const handleFileUploadSuccess = () => {};
+  const handleFileUploadSuccess = () => {
+    void refetch();
+  };
 
   const columns = [
     {
@@ -216,12 +204,12 @@ const ProductsDashboard = () => {
       label: "Variants",
       sortable: false,
       render: (row: any) => (
-        <div>
+        <div className="flex flex-wrap gap-2">
           {row.variants?.length > 0 ? (
             row.variants.map((v: any) => (
               <span
                 key={v.id}
-                className="inline-block mr-2 bg-gray-100 px-2 py-1 rounded"
+                className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700"
               >
                 {v.sku}
               </span>
@@ -236,14 +224,16 @@ const ProductsDashboard = () => {
       key: "salesCount",
       label: "Sales Count",
       sortable: true,
-      render: (row: any) => row.salesCount,
+      render: (row: any) => <span className="tabular-nums">{row.salesCount}</span>,
+      align: "right" as const,
     },
     {
       key: "actions",
       label: "Actions",
       render: (row: any) => (
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={() => {
               setEditingProduct({
                 id: row.id,
@@ -258,14 +248,15 @@ const ProductsDashboard = () => {
               });
               setIsModalOpen(true);
             }}
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
           >
             <Edit size={16} />
             Edit
           </button>
           <button
+            type="button"
             onClick={() => handleDeleteProduct(row.id)}
-            className="text-red-600 hover:text-red-800 flex items-center gap-1"
+            className="flex items-center gap-1 text-red-600 hover:text-red-800"
             disabled={isDeleting}
           >
             <Trash2 size={16} />
@@ -279,21 +270,23 @@ const ProductsDashboard = () => {
   ];
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Product List</h1>
           <p className="text-sm text-gray-500">Manage and view your products</p>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex flex-wrap gap-3">
           <button
+            type="button"
             onClick={() => setIsFileUploadOpen(!isFileUploadOpen)}
-            className="px-4 py-2 bg-[#5d8a02] text-white rounded-md flex items-center"
+            className="flex items-center rounded-md bg-[#5d8a02] px-4 py-2 text-white"
           >
             <Upload className="mr-2 h-4 w-4" />
             Excel Sheet
           </button>
           <button
+            type="button"
             onClick={() => {
               setEditingProduct(null);
               setIsModalOpen(true);
@@ -323,12 +316,12 @@ const ProductsDashboard = () => {
       <Table
         data={products}
         columns={columns}
-        isLoading={isLoading}
-        emptyMessage="No products available"
-        onRefresh={() => console.log("refreshed")}
-        totalPages={data?.totalPages}
-        totalResults={data?.totalResults}
-        resultsPerPage={data?.resultsPerPage}
+            isLoading={isLoading}
+            emptyMessage="No products available"
+            onRefresh={refetch}
+            totalPages={data?.totalPages}
+            totalResults={data?.totalResults}
+            resultsPerPage={data?.resultsPerPage}
         currentPage={data?.currentPage}
       />
 

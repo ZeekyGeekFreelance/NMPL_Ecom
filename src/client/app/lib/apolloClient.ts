@@ -9,10 +9,11 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 const errorLink = onError(({ graphQLErrors, networkError }) => {
-  if (graphQLErrors) console.error("GraphQL Error", graphQLErrors);
-  if (networkError) console.error("Network Error", networkError);
+  if (process.env.NODE_ENV !== "production") {
+    if (graphQLErrors) console.error("GraphQL Error", graphQLErrors);
+    if (networkError) console.error("Network Error", networkError);
+  }
 });
-console.log("GRAPHQL_URL: ", GRAPHQL_URL);
 export const initializeApollo = (initialState = null) => {
   const httpLink = new HttpLink({
     uri: GRAPHQL_URL,

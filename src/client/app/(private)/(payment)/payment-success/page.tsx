@@ -2,6 +2,7 @@
 import { motion } from "framer-motion";
 import { CheckCircle, ShoppingCart, Headphones } from "lucide-react";
 import Link from "next/link";
+import { withAuth } from "@/app/components/HOC/WithAuth";
 
 const PaymentSucceeded = () => {
   return (
@@ -51,5 +52,5 @@ const PaymentSucceeded = () => {
   );
 };
 
-export default PaymentSucceeded;
+export default withAuth(PaymentSucceeded, { allowedRoles: ["USER"] });
 

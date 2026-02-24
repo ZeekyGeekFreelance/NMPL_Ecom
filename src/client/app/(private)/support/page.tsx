@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useCreateChatMutation,
   useGetUserChatsQuery,
@@ -10,16 +10,14 @@ import { withAuth } from "@/app/components/HOC/WithAuth";
 
 const SupportPage = () => {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  console.log("activeChatId => ", activeChatId);
-  const { data: chats, isLoading } = useGetUserChatsQuery(undefined);
-  console.log("user chats => ", chats);
-
+  const { data: chatsData, isLoading } = useGetUserChatsQuery(undefined);
   const [createChat, { isLoading: isCreatingChat }] = useCreateChatMutation();
+
+  const chats = useMemo(() => chatsData?.chats || [], [chatsData?.chats]);
 
   const handleCreateChat = async () => {
     try {
       const result = await createChat(undefined).unwrap();
-      console.log("create chat result => ", result);
       const newChatId = result.chat.id;
       setActiveChatId(newChatId);
     } catch (err) {
@@ -29,69 +27,70 @@ const SupportPage = () => {
 
   return (
     <MainLayout>
-      {/* Sidebar with chat list */}
-      <div className="flex items-start justify-between p-8">
-        <div className="w-[30%] bg-white border-r border-gray-200 p-4 min-h-screen">
-          <h2 className="font-semibold text-lg mb-4">Support Conversations</h2>
+      <div className="mx-auto w-full max-w-7xl px-4 py-4 md:py-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
+          <aside className="rounded-xl border border-gray-200 bg-white p-4 md:h-[calc(100vh-140px)] md:overflow-y-auto">
+            <h2 className="mb-4 text-lg font-semibold">Support Conversations</h2>
 
-          {isLoading ? (
-            <div>Loading your conversations...</div>
-          ) : chats?.chats?.length === 0 ? (
-            <div className="text-gray-500">No conversations yet</div>
-          ) : (
-            <ul className="space-y-2">
-              {chats?.chats?.map((chat) => (
-                <li
-                  key={chat.id}
-                  onClick={() => setActiveChatId(chat.id)}
-                  className={`p-3 rounded cursor-pointer ${
-                    activeChatId === chat.id
-                      ? "bg-blue-100 text-blue-800"
-                      : "hover:bg-gray-100"
-                  }`}
-                >
-                  <div className="font-medium">
-                    Support Ticket #{chat.id.substring(0, 8)}
-                  </div>
-                  <div className="text-sm text-gray-500 flex items-center">
-                    <span
-                      className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                        chat.status === "OPEN" ? "bg-green-500" : "bg-gray-400"
+            {isLoading ? (
+              <div className="text-sm text-gray-500">Loading conversations...</div>
+            ) : chats.length === 0 ? (
+              <div className="text-sm text-gray-500">No conversations yet</div>
+            ) : (
+              <ul className="space-y-2">
+                {chats.map((chat) => (
+                  <li key={chat.id}>
+                    <button
+                      onClick={() => setActiveChatId(chat.id)}
+                      className={`w-full rounded-lg p-3 text-left transition ${
+                        activeChatId === chat.id
+                          ? "bg-blue-100 text-blue-800"
+                          : "hover:bg-gray-100"
                       }`}
-                    ></span>
-                    {chat.status === "OPEN" ? "Active" : "Resolved"}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                    >
+                      <div className="font-medium">
+                        Support Ticket #{chat.id.substring(0, 8)}
+                      </div>
+                      <div className="mt-1 flex items-center text-sm text-gray-500">
+                        <span
+                          className={`mr-2 inline-block h-2 w-2 rounded-full ${
+                            chat.status === "OPEN" ? "bg-green-500" : "bg-gray-400"
+                          }`}
+                        />
+                        {chat.status === "OPEN" ? "Active" : "Resolved"}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          <button
-            onClick={handleCreateChat}
-            disabled={isCreatingChat}
-            className={`mt-4 w-full text-white p-2 rounded transition-colors ${
-              isCreatingChat
-                ? "bg-blue-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-            }`}
-          >
-            {isCreatingChat ? "Creating..." : "New Conversation"}
-          </button>
-        </div>
+            <button
+              onClick={handleCreateChat}
+              disabled={isCreatingChat}
+              className={`mt-4 w-full rounded-lg p-2 text-white transition-colors ${
+                isCreatingChat
+                  ? "cursor-not-allowed bg-blue-400"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {isCreatingChat ? "Creating..." : "New Conversation"}
+            </button>
+          </aside>
 
-        {/* Main chat area */}
-        <div className="flex-1">
-          {activeChatId ? (
-            <ChatContainer chatId={activeChatId} />
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              Select a conversation or start a new one
-            </div>
-          )}
+          <section className="min-h-[420px] rounded-xl border border-gray-200 bg-white md:h-[calc(100vh-140px)] md:overflow-hidden">
+            {activeChatId ? (
+              <ChatContainer chatId={activeChatId} />
+            ) : (
+              <div className="flex h-full items-center justify-center px-4 text-center text-gray-500">
+                Select a conversation or start a new one.
+              </div>
+            )}
+          </section>
         </div>
       </div>
     </MainLayout>
   );
 };
 
-export default withAuth(SupportPage);
+export default withAuth(SupportPage, { allowedRoles: ["USER"] });

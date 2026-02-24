@@ -83,18 +83,18 @@ class ReportsController {
             switch (type) {
                 case "sales":
                     data = yield this.reportsService.generateSalesReport(query);
-                    filename = `sales-report-${new Date().toISOString()}.${format}`;
+                    filename = this.buildExportFilename("sales-report", format);
                     break;
                 case "user_retention":
                     data = yield this.reportsService.generateUserRetentionReport(query);
-                    filename = `user-retention-report-${new Date().toISOString()}.${format}`;
+                    filename = this.buildExportFilename("user-retention-report", format);
                     break;
                 case "all":
                     data = {
                         sales: yield this.reportsService.generateSalesReport(query),
                         userRetention: yield this.reportsService.generateUserRetentionReport(query),
                     };
-                    filename = `combined-report-${new Date().toISOString()}.${format}`;
+                    filename = this.buildExportFilename("combined-report", format);
                     break;
                 default:
                     throw new AppError_1.default(400, "Invalid report type");
@@ -139,6 +139,23 @@ class ReportsController {
                 format,
             });
         }));
+    }
+    resolveFileExtension(extension) {
+        if (typeof extension === "string" && extension.trim()) {
+            return extension.trim();
+        }
+        if (Array.isArray(extension)) {
+            const match = extension.find((item) => typeof item === "string" && item.trim());
+            if (match) {
+                return match.trim();
+            }
+        }
+        return "csv";
+    }
+    buildExportFilename(prefix, extension) {
+        const normalizedExtension = this.resolveFileExtension(extension);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        return `${prefix}-${timestamp}.${normalizedExtension}`;
     }
 }
 exports.ReportsController = ReportsController;

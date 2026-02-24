@@ -34,6 +34,22 @@ body {
   font-family: var(--font-poppins);
 }
 
+a[href],
+button,
+[role="button"],
+summary,
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 .bg-primary {
   background-color: var(--primary);
 }

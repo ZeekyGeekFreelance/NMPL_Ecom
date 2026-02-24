@@ -7,6 +7,8 @@ import { makeLogsService } from "../logs/logs.factory";
 import { uploadToCloudinary } from "@/shared/utils/uploadToCloudinary";
 import AppError from "@/shared/errors/AppError";
 
+const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
+
 export class ProductController {
   private logsService = makeLogsService();
   constructor(private productService: ProductService) {}
@@ -68,14 +70,6 @@ export class ProductController {
         variants: rawVariants,
       } = req.body;
 
-      // Log for debugging
-      console.log(
-        "req.body:",
-        JSON.stringify(req.body, null, 2),
-        "req.files:",
-        req.files
-      );
-
       // Validate variants
       const variants = rawVariants || [];
       if (!Array.isArray(variants) || variants.length === 0) {
@@ -116,7 +110,6 @@ export class ProductController {
             if (idx >= 0 && idx < imageResults.length) {
               return imageResults[idx].url;
             }
-            console.warn(`Invalid image index ${idx} for variant ${index}`);
             return null;
           })
           .filter((url: string | null) => url !== null);
@@ -164,8 +157,6 @@ export class ProductController {
         isTrending,
         isBestSeller,
       } = req.body;
-
-      console.log("req.body:", req.body, "req.files:", req.files);
 
       // Parse variants from req.body
       let parsedVariants: any[] = [];
@@ -237,34 +228,6 @@ export class ProductController {
                 );
               }
 
-              // Try to get files from imageIndexes or variants[${index}][images][${fileIndex}]
-              let variantFiles: Express.Multer.File[] = [];
-              let imageIndexes: number[] = [];
-              try {
-                imageIndexes = variant.imageIndexes
-                  ? JSON.parse(variant.imageIndexes)
-                  : [];
-                if (Array.isArray(imageIndexes)) {
-                  variantFiles = imageIndexes
-                    .map((idx) => files[idx])
-                    .filter(Boolean) as Express.Multer.File[];
-                }
-              } catch {
-                // Fallback to old format
-                variantFiles = files.filter((f) =>
-                  f.fieldname.startsWith(`variants[${index}][images][`)
-                );
-              }
-
-              // Upload files to Cloudinary
-              let imageUrls: string[] = [];
-              if (variantFiles.length > 0) {
-                const uploadedImages = await uploadToCloudinary(variantFiles);
-                imageUrls = uploadedImages
-                  .map((img) => img.url)
-                  .filter(Boolean);
-              }
-
               // Validate images from req.body
               let bodyImages = variant.images || [];
               if (typeof bodyImages === "string") {
@@ -287,11 +250,127 @@ export class ProductController {
                 );
               }
 
-              // Combine uploaded images with body images
-              imageUrls = [
-                ...imageUrls,
-                ...bodyImages.filter((img: string) => img),
-              ];
+              const orderedImageEntries = (bodyImages as string[]).filter(
+                (img: string) => Boolean(img)
+              );
+              const hasInlineFileTokens = orderedImageEntries.some((entry) =>
+                entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX)
+              );
+
+              let imageIndexes: number[] = [];
+              try {
+                const parsedImageIndexes = variant.imageIndexes
+                  ? JSON.parse(variant.imageIndexes)
+                  : [];
+                imageIndexes = Array.isArray(parsedImageIndexes)
+                  ? parsedImageIndexes
+                  : [];
+              } catch {
+                imageIndexes = [];
+              }
+
+              const inlineFileIndexes = hasInlineFileTokens
+                ? orderedImageEntries
+                    .filter((entry) =>
+                      entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX)
+                    )
+                    .map((entry) =>
+                      Number.parseInt(
+                        entry.slice(UPLOADED_IMAGE_TOKEN_PREFIX.length),
+                        10
+                      )
+                    )
+                    .filter(
+                      (idx) =>
+                        Number.isInteger(idx) && idx >= 0 && idx < files.length
+                    )
+                : [];
+
+              const requestedFileIndexes =
+                inlineFileIndexes.length > 0
+                  ? inlineFileIndexes
+                  : imageIndexes.filter(
+                      (idx) =>
+                        Number.isInteger(idx) && idx >= 0 && idx < files.length
+                    );
+              const uniqueFileIndexes = [...new Set(requestedFileIndexes)];
+
+              let uploadedImageUrlsByIndex = new Map<number, string>();
+              let uploadedImageUrls: string[] = [];
+
+              if (uniqueFileIndexes.length > 0) {
+                const variantFiles = uniqueFileIndexes
+                  .map((idx) => files[idx])
+                  .filter(Boolean) as Express.Multer.File[];
+
+                if (variantFiles.length > 0) {
+                  const uploadedImages = await uploadToCloudinary(variantFiles);
+                  uploadedImageUrls = uploadedImages
+                    .map((img) => img.url)
+                    .filter(Boolean);
+
+                  uniqueFileIndexes.forEach((fileIndex, fileOrder) => {
+                    const imageUrl = uploadedImageUrls[fileOrder];
+                    if (imageUrl) {
+                      uploadedImageUrlsByIndex.set(fileIndex, imageUrl);
+                    }
+                  });
+                }
+              } else {
+                // Backward compatibility for legacy multipart field names.
+                const legacyVariantFiles = files.filter((f) =>
+                  f.fieldname.startsWith(`variants[${index}][images][`)
+                );
+
+                if (legacyVariantFiles.length > 0) {
+                  const uploadedImages =
+                    await uploadToCloudinary(legacyVariantFiles);
+                  uploadedImageUrls = uploadedImages
+                    .map((img) => img.url)
+                    .filter(Boolean);
+                }
+              }
+
+              const orderedUploadedUrls = hasInlineFileTokens
+                ? inlineFileIndexes
+                    .map((fileIndex) => uploadedImageUrlsByIndex.get(fileIndex))
+                    .filter(
+                      (imageUrl): imageUrl is string =>
+                        typeof imageUrl === "string" && imageUrl.length > 0
+                    )
+                : requestedFileIndexes
+                    .map((fileIndex) => uploadedImageUrlsByIndex.get(fileIndex))
+                    .filter(
+                      (imageUrl): imageUrl is string =>
+                        typeof imageUrl === "string" && imageUrl.length > 0
+                    );
+
+              const imageUrls: string[] = hasInlineFileTokens
+                ? orderedImageEntries
+                    .map((entry) => {
+                      if (entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX)) {
+                        const fileIndex = Number.parseInt(
+                          entry.slice(UPLOADED_IMAGE_TOKEN_PREFIX.length),
+                          10
+                        );
+                        return uploadedImageUrlsByIndex.get(fileIndex) || "";
+                      }
+
+                      return entry;
+                    })
+                    .filter(
+                      (imageUrl): imageUrl is string =>
+                        typeof imageUrl === "string" && imageUrl.length > 0
+                    )
+                : [
+                    ...(orderedUploadedUrls.length > 0
+                      ? orderedUploadedUrls
+                      : uploadedImageUrls),
+                    ...orderedImageEntries,
+                  ].filter(
+                    (imageUrl): imageUrl is string =>
+                      typeof imageUrl === "string" && imageUrl.length > 0
+                  );
 
               // Validate other fields
               if (

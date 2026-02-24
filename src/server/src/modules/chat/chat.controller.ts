@@ -31,9 +31,7 @@ export class ChatController {
     }
 
     const userId = req.user.id;
-    console.log("userId => ", userId);
     const chats = await this.chatService.getUserChats(userId);
-    console.log("chats => ", chats);
 
     sendResponse(res, 200, {
       data: { chats },
@@ -86,7 +84,6 @@ export class ChatController {
     const { chatId, content } = req.body;
     const user = req.user!;
     const file = req.file;
-    console.log("file => ", file);
 
     const message = await this.chatService.sendMessage(
       chatId,

@@ -2,6 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocketManager = void 0;
 const socket_io_1 = require("socket.io");
+const isDevelopment = process.env.NODE_ENV !== "production";
+const debugLog = (...args) => {
+    if (isDevelopment) {
+        console.log(...args);
+    }
+};
 class SocketManager {
     constructor(httpServer) {
         this.io = new socket_io_1.Server(httpServer, {
@@ -14,28 +20,28 @@ class SocketManager {
             },
         });
         this.io.on("connection", (socket) => {
-            console.log("New client connected:", socket.id);
+            debugLog("New client connected:", socket.id);
             // * This listens when a client joins a room
             socket.on("joinChat", (chatId) => {
                 socket.join(`chat:${chatId}`);
-                console.log(`Client ${socket.id} joined chat:${chatId}`);
+                debugLog(`Client ${socket.id} joined chat:${chatId}`);
             });
             // * This listens when a client joins the admin room
             socket.on("joinAdmin", () => {
                 socket.join("admin");
-                console.log(`Client ${socket.id} joined admin room`);
+                debugLog(`Client ${socket.id} joined admin room`);
             });
             // * This listens when a client makes a call
             socket.on("callOffer", ({ chatId, offer }) => {
                 socket
                     .to(`chat:${chatId}`)
                     .emit("callOffer", { offer, from: socket.id });
-                console.log(`Call offer sent for chat:${chatId} from ${socket.id}`);
+                debugLog(`Call offer sent for chat:${chatId} from ${socket.id}`);
             });
             // * This listens when a client answers a call
             socket.on("callAnswer", ({ chatId, answer, to }) => {
                 socket.to(to).emit("callAnswer", { answer });
-                console.log(`Call answer sent to ${to} for chat:${chatId}`);
+                debugLog(`Call answer sent to ${to} for chat:${chatId}`);
             });
             // * This listens when a client sends an ICE(interactive connection establishment) candidate => used to establish a peer connection
             /**
@@ -46,16 +52,15 @@ class SocketManager {
               These candidates are then sent to the other peer, which uses them to establish a connection.
              */
             socket.on("iceCandidate", ({ chatId, candidate, to }) => {
-                console.log("candidate => ", candidate);
                 socket.to(to).emit("iceCandidate", { candidate });
-                console.log(`ICE candidate sent to ${to} for chat:${chatId}`);
+                debugLog(`ICE candidate sent to ${to} for chat:${chatId}`);
             });
             socket.on("endCall", ({ chatId }) => {
                 socket.to(`chat:${chatId}`).emit("callEnded");
-                console.log(`Call ended for chat:${chatId}`);
+                debugLog(`Call ended for chat:${chatId}`);
             });
             socket.on("disconnect", () => {
-                console.log("Client disconnected:", socket.id);
+                debugLog("Client disconnected:", socket.id);
             });
         });
     }

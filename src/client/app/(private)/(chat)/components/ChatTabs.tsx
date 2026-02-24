@@ -8,15 +8,12 @@ import {
   Video,
   Settings,
   X,
-  MessageSquare,
-  Users,
   BarChart3,
 } from "lucide-react";
 
 interface ChatTabsProps {
   isOpen: boolean;
   onClose: () => void;
-  chat: any;
   onResolve?: () => void;
   canResolve?: boolean;
 }
@@ -26,7 +23,6 @@ type TabType = "notes" | "calls" | "settings" | "analytics";
 const ChatTabs: React.FC<ChatTabsProps> = ({
   isOpen,
   onClose,
-  chat,
   onResolve,
   canResolve = false,
 }) => {

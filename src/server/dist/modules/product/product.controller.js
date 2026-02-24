@@ -19,6 +19,7 @@ const slugify_1 = __importDefault(require("@/shared/utils/slugify"));
 const logs_factory_1 = require("../logs/logs.factory");
 const uploadToCloudinary_1 = require("@/shared/utils/uploadToCloudinary");
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
+const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
 class ProductController {
     constructor(productService) {
         this.productService = productService;
@@ -54,8 +55,6 @@ class ProductController {
         }));
         this.createProduct = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             const { name, description, isNew, isTrending, isBestSeller, isFeatured, categoryId, variants: rawVariants, } = req.body;
-            // Log for debugging
-            console.log("req.body:", JSON.stringify(req.body, null, 2), "req.files:", req.files);
             // Validate variants
             const variants = rawVariants || [];
             if (!Array.isArray(variants) || variants.length === 0) {
@@ -95,7 +94,6 @@ class ProductController {
                     if (idx >= 0 && idx < imageResults.length) {
                         return imageResults[idx].url;
                     }
-                    console.warn(`Invalid image index ${idx} for variant ${index}`);
                     return null;
                 })
                     .filter((url) => url !== null);
@@ -123,7 +121,6 @@ class ProductController {
             var _a;
             const { id: productId } = req.params;
             const { name, description, categoryId, isNew, isFeatured, isTrending, isBestSeller, } = req.body;
-            console.log("req.body:", req.body, "req.files:", req.files);
             // Parse variants from req.body
             let parsedVariants = [];
             for (const key in req.body) {
@@ -174,38 +171,13 @@ class ProductController {
                         parsedLowStockThreshold < 0) {
                         throw new AppError_1.default(400, `Variant at index ${index} must have a valid non-negative low stock threshold`);
                     }
-                    // Try to get files from imageIndexes or variants[${index}][images][${fileIndex}]
-                    let variantFiles = [];
-                    let imageIndexes = [];
-                    try {
-                        imageIndexes = variant.imageIndexes
-                            ? JSON.parse(variant.imageIndexes)
-                            : [];
-                        if (Array.isArray(imageIndexes)) {
-                            variantFiles = imageIndexes
-                                .map((idx) => files[idx])
-                                .filter(Boolean);
-                        }
-                    }
-                    catch (_a) {
-                        // Fallback to old format
-                        variantFiles = files.filter((f) => f.fieldname.startsWith(`variants[${index}][images][`));
-                    }
-                    // Upload files to Cloudinary
-                    let imageUrls = [];
-                    if (variantFiles.length > 0) {
-                        const uploadedImages = yield (0, uploadToCloudinary_1.uploadToCloudinary)(variantFiles);
-                        imageUrls = uploadedImages
-                            .map((img) => img.url)
-                            .filter(Boolean);
-                    }
                     // Validate images from req.body
                     let bodyImages = variant.images || [];
                     if (typeof bodyImages === "string") {
                         try {
                             bodyImages = JSON.parse(bodyImages);
                         }
-                        catch (_b) {
+                        catch (_a) {
                             throw new AppError_1.default(400, `Invalid images format at variant index ${index}`);
                         }
                     }
@@ -213,11 +185,82 @@ class ProductController {
                         bodyImages.some((img) => img && typeof img !== "string")) {
                         throw new AppError_1.default(400, `Images at variant index ${index} must be an array of strings or empty`);
                     }
-                    // Combine uploaded images with body images
-                    imageUrls = [
-                        ...imageUrls,
-                        ...bodyImages.filter((img) => img),
-                    ];
+                    const orderedImageEntries = bodyImages.filter((img) => Boolean(img));
+                    const hasInlineFileTokens = orderedImageEntries.some((entry) => entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX));
+                    let imageIndexes = [];
+                    try {
+                        const parsedImageIndexes = variant.imageIndexes
+                            ? JSON.parse(variant.imageIndexes)
+                            : [];
+                        imageIndexes = Array.isArray(parsedImageIndexes)
+                            ? parsedImageIndexes
+                            : [];
+                    }
+                    catch (_b) {
+                        imageIndexes = [];
+                    }
+                    const inlineFileIndexes = hasInlineFileTokens
+                        ? orderedImageEntries
+                            .filter((entry) => entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX))
+                            .map((entry) => Number.parseInt(entry.slice(UPLOADED_IMAGE_TOKEN_PREFIX.length), 10))
+                            .filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < files.length)
+                        : [];
+                    const requestedFileIndexes = inlineFileIndexes.length > 0
+                        ? inlineFileIndexes
+                        : imageIndexes.filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < files.length);
+                    const uniqueFileIndexes = [...new Set(requestedFileIndexes)];
+                    let uploadedImageUrlsByIndex = new Map();
+                    let uploadedImageUrls = [];
+                    if (uniqueFileIndexes.length > 0) {
+                        const variantFiles = uniqueFileIndexes
+                            .map((idx) => files[idx])
+                            .filter(Boolean);
+                        if (variantFiles.length > 0) {
+                            const uploadedImages = yield (0, uploadToCloudinary_1.uploadToCloudinary)(variantFiles);
+                            uploadedImageUrls = uploadedImages
+                                .map((img) => img.url)
+                                .filter(Boolean);
+                            uniqueFileIndexes.forEach((fileIndex, fileOrder) => {
+                                const imageUrl = uploadedImageUrls[fileOrder];
+                                if (imageUrl) {
+                                    uploadedImageUrlsByIndex.set(fileIndex, imageUrl);
+                                }
+                            });
+                        }
+                    }
+                    else {
+                        // Backward compatibility for legacy multipart field names.
+                        const legacyVariantFiles = files.filter((f) => f.fieldname.startsWith(`variants[${index}][images][`));
+                        if (legacyVariantFiles.length > 0) {
+                            const uploadedImages = yield (0, uploadToCloudinary_1.uploadToCloudinary)(legacyVariantFiles);
+                            uploadedImageUrls = uploadedImages
+                                .map((img) => img.url)
+                                .filter(Boolean);
+                        }
+                    }
+                    const orderedUploadedUrls = hasInlineFileTokens
+                        ? inlineFileIndexes
+                            .map((fileIndex) => uploadedImageUrlsByIndex.get(fileIndex))
+                            .filter((imageUrl) => typeof imageUrl === "string" && imageUrl.length > 0)
+                        : requestedFileIndexes
+                            .map((fileIndex) => uploadedImageUrlsByIndex.get(fileIndex))
+                            .filter((imageUrl) => typeof imageUrl === "string" && imageUrl.length > 0);
+                    const imageUrls = hasInlineFileTokens
+                        ? orderedImageEntries
+                            .map((entry) => {
+                            if (entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX)) {
+                                const fileIndex = Number.parseInt(entry.slice(UPLOADED_IMAGE_TOKEN_PREFIX.length), 10);
+                                return uploadedImageUrlsByIndex.get(fileIndex) || "";
+                            }
+                            return entry;
+                        })
+                            .filter((imageUrl) => typeof imageUrl === "string" && imageUrl.length > 0)
+                        : [
+                            ...(orderedUploadedUrls.length > 0
+                                ? orderedUploadedUrls
+                                : uploadedImageUrls),
+                            ...orderedImageEntries,
+                        ].filter((imageUrl) => typeof imageUrl === "string" && imageUrl.length > 0);
                     // Validate other fields
                     if (!variant.sku ||
                         Number.isNaN(parsedPrice) ||

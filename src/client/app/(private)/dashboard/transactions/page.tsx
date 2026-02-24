@@ -39,7 +39,7 @@ const TransactionsDashboard = () => {
   const pathname = usePathname();
   const shouldFetchTransactions = pathname === "/dashboard/transactions";
 
-  const { data, isLoading } = useGetAllTransactionsQuery(undefined, {
+  const { data, isLoading, refetch } = useGetAllTransactionsQuery(undefined, {
     skip: !shouldFetchTransactions,
     pollingInterval: 8000,
     refetchOnFocus: true,
@@ -152,6 +152,7 @@ const TransactionsDashboard = () => {
       key: "id",
       label: "Transaction ID",
       sortable: true,
+      searchAccessor: (row: any) => toTransactionReference(row.id),
       render: (row: any) => (
         <div className="flex items-center space-x-2">
           <span className="font-mono text-sm">
@@ -164,6 +165,7 @@ const TransactionsDashboard = () => {
       key: "orderId",
       label: "Order ID",
       sortable: true,
+      searchAccessor: (row: any) => toOrderReference(row.orderId),
       render: (row: any) => (
         <span className="font-mono text-sm">{toOrderReference(row.orderId)}</span>
       ),
@@ -196,6 +198,7 @@ const TransactionsDashboard = () => {
       render: (row: any) => (
         <div className="flex space-x-2">
           <button
+            type="button"
             onClick={() => handleViewDetails(row.id)}
             className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
           >
@@ -203,6 +206,7 @@ const TransactionsDashboard = () => {
             View
           </button>
           <button
+            type="button"
             onClick={() => handleUpdateStatus(row)}
             className="text-green-600 hover:text-green-800 flex items-center gap-1"
           >
@@ -210,6 +214,7 @@ const TransactionsDashboard = () => {
             Update
           </button>
           <button
+            type="button"
             onClick={() => handleDeleteTransaction(row.id)}
             className="text-red-600 hover:text-red-800 flex items-center gap-1"
           >
@@ -254,7 +259,7 @@ const TransactionsDashboard = () => {
         columns={columns}
         isLoading={isLoading}
         emptyMessage="No transactions available"
-        onRefresh={() => debugLog("refreshed")}
+        onRefresh={refetch}
         totalPages={data?.totalPages}
         totalResults={data?.totalResults}
         resultsPerPage={data?.resultsPerPage}

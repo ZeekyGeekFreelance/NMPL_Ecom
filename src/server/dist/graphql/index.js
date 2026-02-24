@@ -19,6 +19,7 @@ const server_1 = require("@apollo/server");
 const express4_1 = require("@apollo/server/express4");
 const client_1 = require("@prisma/client");
 const schema_1 = require("./v1/schema");
+const optionalAuth_1 = __importDefault(require("@/shared/middlewares/optionalAuth"));
 const prisma = new client_1.PrismaClient();
 function configureGraphQL(app) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -26,7 +27,7 @@ function configureGraphQL(app) {
             schema: schema_1.combinedSchemas,
         });
         yield apolloServer.start();
-        app.use("/api/v1/graphql", (0, cors_1.default)({
+        app.use("/api/v1/graphql", optionalAuth_1.default, (0, cors_1.default)({
             origin: process.env.NODE_ENV === "production"
                 ? ["https://ecommerce-nu-rosy.vercel.app"]
                 : ["http://localhost:3000", "http://localhost:5173"],

@@ -11,6 +11,8 @@ import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
 import useToast from "@/app/hooks/ui/useToast";
 import { ProductFormData } from "@/app/(private)/dashboard/products/product.types";
 
+const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
+
 export const useProductDetail = () => {
   const { id } = useParams();
   const router = useRouter();
@@ -73,7 +75,6 @@ export const useProductDetail = () => {
             stock: v.stock || 0,
             lowStockThreshold: v.lowStockThreshold || 10,
             barcode: v.barcode || "",
-            warehouseLocation: v.warehouseLocation || "",
             attributes: v.attributes || [],
             images: v.images || [],
           })) || [],
@@ -133,32 +134,29 @@ export const useProductDetail = () => {
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
       payload.append(
-        `variants[${index}][warehouseLocation]`,
-        variant.warehouseLocation || ""
-      );
-      payload.append(
         `variants[${index}][attributes]`,
         JSON.stringify(variant.attributes || [])
       );
 
-      const existingImages: string[] = [];
+      const orderedImages: string[] = [];
       const imageIndexes: number[] = [];
 
       if (variant.images && variant.images.length > 0) {
         variant.images.forEach((image) => {
           if (image instanceof File) {
             payload.append("images", image);
+            orderedImages.push(`${UPLOADED_IMAGE_TOKEN_PREFIX}${imageIndex}`);
             imageIndexes.push(imageIndex);
             imageIndex += 1;
           } else if (typeof image === "string" && image.trim()) {
-            existingImages.push(image);
+            orderedImages.push(image);
           }
         });
       }
 
       payload.append(
         `variants[${index}][images]`,
-        JSON.stringify(existingImages)
+        JSON.stringify(orderedImages)
       );
       payload.append(
         `variants[${index}][imageIndexes]`,

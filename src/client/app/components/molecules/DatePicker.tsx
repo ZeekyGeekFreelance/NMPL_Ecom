@@ -90,12 +90,15 @@ const DatePicker = ({
     }
   };
 
-  const handleMonthSelect = (selectedMonth: {
-    label: string;
-    value: string;
-  }) => {
-    if (selectedMonth !== null) {
-      const monthIndex = months.indexOf(selectedMonth);
+  const handleMonthSelect = (selectedMonth: string | null) => {
+    if (selectedMonth === null) {
+      return;
+    }
+
+    const monthIndex = months.findIndex(
+      (month) => month.value === selectedMonth
+    );
+    if (monthIndex >= 0) {
       setCurrentMonth(new Date(currentMonth.getFullYear(), monthIndex, 1));
     }
   };
@@ -156,8 +159,11 @@ const DatePicker = ({
                     render={({ field }) => (
                       <Dropdown
                         options={months}
-                        value={field.value}
-                        onChange={handleMonthSelect}
+                        value={months[currentMonth.getMonth()]?.value}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          handleMonthSelect(value);
+                        }}
                         className="text-xs font-medium"
                       />
                     )}

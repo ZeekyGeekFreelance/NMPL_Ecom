@@ -24,7 +24,7 @@ interface ChatProps {
 
 const ChatContainer: React.FC<ChatProps> = ({ chatId }) => {
   const { data: userData } = useGetMeQuery(undefined);
-  const user = userData?.user;
+  const user = userData?.user ?? null;
 
   const { data, isLoading, error } = useGetChatQuery(chatId);
   const chat = data?.chat;
@@ -62,6 +62,7 @@ const ChatContainer: React.FC<ChatProps> = ({ chatId }) => {
   }
 
   const canResolve =
+    !!user &&
     (user.role === "ADMIN" || user.role === "SUPERADMIN") &&
     chat?.status === "OPEN";
 
@@ -72,7 +73,7 @@ const ChatContainer: React.FC<ChatProps> = ({ chatId }) => {
         onResolve={handleResolveChat}
         canResolve={canResolve}
       />
-      <MessageList messages={messages} currentUserId={user.id} />
+      <MessageList messages={messages} currentUserId={user?.id ?? ""} />
       {isTyping && <ChatStatus isTyping={true} />}
       {/* {callStatus === "idle" && chat?.status === "OPEN" && (
         <button

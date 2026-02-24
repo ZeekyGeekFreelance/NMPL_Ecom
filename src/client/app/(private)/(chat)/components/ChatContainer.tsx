@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   useGetChatQuery,
   useSendMessageMutation,
-  useUpdateChatStatusMutation,
 } from "@/app/store/apis/ChatApi";
 import { useSocketConnection } from "../useSocketConnection";
 import { useChatMessages } from "../useChatMessages";
@@ -28,13 +27,12 @@ interface ChatContainerProps {
 
 const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
   const { data: userData } = useGetMeQuery(undefined);
-  const user = userData?.user;
+  const user = userData?.user ?? null;
 
   const { data, isLoading, error } = useGetChatQuery(chatId);
   const chat = data?.chat;
 
   const [sendMessage] = useSendMessageMutation();
-  const [updateChatStatus] = useUpdateChatStatusMutation();
 
   const socket = useSocketConnection(chatId);
 
@@ -42,14 +40,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
     useChatMessages(chatId, user, chat, socket, sendMessage);
 
   const { callStatus, endCall } = useWebRTCCall({ chatId, socket });
-
-  const handleResolveChat = async () => {
-    try {
-      await updateChatStatus({ chatId, status: "RESOLVED" }).unwrap();
-    } catch (err) {
-      console.error("Failed to resolve chat:", err);
-    }
-  };
 
   // Loading state
   if (isLoading) {
@@ -60,10 +50,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
   if (error) {
     return <ErrorDisplay error={error} />;
   }
-
-  const canResolve =
-    (user?.role === "ADMIN" || user?.role === "SUPERADMIN") &&
-    chat?.status === "OPEN";
 
   return (
     <ChatLayout chatId={chatId}>
@@ -128,7 +114,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
                 setMessage={setMessage}
                 onSendMessage={handleSendMessage}
                 disabled={callStatus !== "idle"}
-                isTyping={isTyping}
               />
             </motion.div>
           ) : (

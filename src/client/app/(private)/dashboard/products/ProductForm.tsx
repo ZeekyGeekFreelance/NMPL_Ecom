@@ -160,18 +160,20 @@ const ProductForm: React.FC<ProductFormProps> = ({
         </div>
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={isLoading}
-          className={`px-6 py-3 text-white rounded-lg shadow-md font-medium flex items-center justify-center min-w-24 ${
-            isLoading
-              ? "bg-blue-400 cursor-not-allowed"
-              : "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-          } transition-all duration-200`}
-        >
-          {isLoading ? "Saving..." : submitLabel}
-        </button>
+      <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white/95 backdrop-blur pt-4 pb-2">
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`px-6 py-3 text-white rounded-lg shadow-md font-medium flex items-center justify-center min-w-24 ${
+              isLoading
+                ? "bg-blue-400 cursor-not-allowed"
+                : "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+            } transition-all duration-200`}
+          >
+            {isLoading ? "Saving..." : submitLabel}
+          </button>
+        </div>
       </div>
     </form>
   );

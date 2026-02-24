@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useGetLogByIdQuery } from "@/app/store/apis/LogsApi";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 
@@ -20,14 +20,13 @@ const formatTimestamp = (timestamp: string): string => {
 const shortenId = (id: string): string =>
   id ? `${id.substring(0, 8)}...` : "";
 
-interface LogDetailsProps {
-  params: { logId: string };
-}
-
-const LogDetails: React.FC<LogDetailsProps> = ({ params }) => {
-  const { logId } = React.use(params);
+const LogDetails: React.FC = () => {
+  const params = useParams<{ logId: string }>();
+  const logId = params?.logId || "";
   const router = useRouter();
-  const { data, isLoading, error } = useGetLogByIdQuery(logId);
+  const { data, isLoading, error } = useGetLogByIdQuery(logId, {
+    skip: !logId,
+  });
 
   if (isLoading) {
     return (

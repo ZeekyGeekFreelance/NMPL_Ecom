@@ -6,8 +6,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const analytics_factory_1 = require("./analytics.factory");
 const protect_1 = __importDefault(require("@/shared/middlewares/protect"));
+const authorizeRole_1 = __importDefault(require("@/shared/middlewares/authorizeRole"));
 const router = (0, express_1.Router)();
 const controller = (0, analytics_factory_1.makeAnalyticsController)();
+const allowDashboardRoles = (0, authorizeRole_1.default)("ADMIN", "SUPERADMIN");
 /**
  * @swagger
  * /analytics/interactions:
@@ -37,7 +39,7 @@ const controller = (0, analytics_factory_1.makeAnalyticsController)();
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.post("/interactions", protect_1.default, controller.createInteraction);
+router.post("/interactions", protect_1.default, allowDashboardRoles, controller.createInteraction);
 /**
  * @swagger
  * /analytics/year-range:
@@ -52,7 +54,7 @@ router.post("/interactions", protect_1.default, controller.createInteraction);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/year-range", protect_1.default, controller.getYearRange);
+router.get("/year-range", protect_1.default, allowDashboardRoles, controller.getYearRange);
 /**
  * @swagger
  * /analytics/export:
@@ -67,5 +69,5 @@ router.get("/year-range", protect_1.default, controller.getYearRange);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/export", protect_1.default, controller.exportAnalytics);
+router.get("/export", protect_1.default, allowDashboardRoles, controller.exportAnalytics);
 exports.default = router;

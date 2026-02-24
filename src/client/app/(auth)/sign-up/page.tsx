@@ -16,6 +16,7 @@ import GoogleIcon from "@/app/assets/icons/google.png";
 import FacebookIcon from "@/app/assets/icons/facebook.png";
 import TwitterIcon from "@/app/assets/icons/twitter.png";
 import Image from "next/image";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 interface InputForm {
   name: string;
@@ -65,7 +66,7 @@ const Signup = () => {
       await signUp(formData).unwrap();
       router.push("/");
     } catch (error) {
-      console.log("error: ", error);
+      setOtpFeedback(getApiErrorMessage(error, "Signup failed. Please try again."));
     }
   };
 

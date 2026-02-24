@@ -88,7 +88,6 @@ export default function configurePassport() {
         profile: any,
         done: any
       ) => {
-        console.log("facebook profile: ", profile);
         try {
           let user = await prisma.user.findUnique({
             where: { email: profile.emails?.[0]?.value || "" },
@@ -150,9 +149,6 @@ export default function configurePassport() {
         profile: Profile,
         done: any
       ) => {
-        console.log("Twitter accessToken:", accessToken);
-        console.log("Twitter refreshToken:", refreshToken);
-        console.log("Twitter profile:", JSON.stringify(profile, null, 2));
         try {
           if (!profile || !profile.id) {
             console.error("Twitter profile is missing or invalid:", profile);

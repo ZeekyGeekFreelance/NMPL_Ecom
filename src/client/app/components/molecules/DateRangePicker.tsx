@@ -23,6 +23,7 @@ interface DateRangePickerProps {
   control: any;
   startName: string;
   endName: string;
+  className?: string;
 }
 
 const DateRangePicker: React.FC<DateRangePickerProps> = ({
@@ -30,6 +31,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
   control,
   startName,
   endName,
+  className = "",
 }) => {
   const { field: startField } = useController({ name: startName, control });
   const { field: endField } = useController({ name: endName, control });
@@ -150,7 +152,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
   };
 
   return (
-    <div className="relative min-w-[300px]" ref={pickerRef}>
+    <div className={`relative min-w-0 w-full ${className}`} ref={pickerRef}>
       <div
         className="flex justify-between items-center px-3 py-2 rounded-lg border border-gray-200 
                   bg-white cursor-pointer hover:border-gray-300 transition-all duration-200"

@@ -13,6 +13,11 @@ interface ProductSummaryProps {
     categoryId: string;
   };
   categories: { label: string; value: string }[];
+  selectedVariant?: unknown;
+  attributeGroups?: unknown[];
+  selectedAttributes?: Record<string, string>;
+  onVariantChange?: (attributeName: string, value: string) => void;
+  resetSelections?: () => void;
   isUpdating: boolean;
   onSave: () => void;
 }
@@ -134,9 +139,7 @@ const ProductSummary: React.FC<ProductSummaryProps> = ({
             <button
               type="button"
               className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              onClick={() =>
-                router.push(`/dashboard/products/inventory/${product.id}`)
-              }
+              onClick={() => router.push("/dashboard/inventory")}
             >
               <Archive size={16} />
               Manage Inventory

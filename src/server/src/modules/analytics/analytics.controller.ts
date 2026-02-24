@@ -14,6 +14,33 @@ export class AnalyticsController {
 
   constructor(private analyticsService: AnalyticsService) {}
 
+  private resolveFileExtension(extension: unknown): string {
+    if (typeof extension === "string" && extension.trim()) {
+      return extension.trim();
+    }
+
+    if (Array.isArray(extension)) {
+      const match = extension.find(
+        (item) => typeof item === "string" && item.trim()
+      ) as string | undefined;
+
+      if (match) {
+        return match.trim();
+      }
+    }
+
+    return "csv";
+  }
+
+  private buildExportFilename(
+    prefix: string,
+    extension: unknown
+  ): string {
+    const normalizedExtension = this.resolveFileExtension(extension);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    return `${prefix}-${timestamp}.${normalizedExtension}`;
+  }
+
   createInteraction = asyncHandler(async (req: Request, res: Response) => {
     const { productId, type } = req.body;
     const user = req.user;
@@ -130,15 +157,15 @@ export class AnalyticsController {
     switch (type) {
       case "overview":
         data = await this.analyticsService.getAnalyticsOverview(query);
-        filename = `analytics-overview-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("analytics-overview", format);
         break;
       case "products":
         data = await this.analyticsService.getProductPerformance(query);
-        filename = `product-performance-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("product-performance", format);
         break;
       case "users":
         data = await this.analyticsService.getUserAnalytics(query);
-        filename = `user-analytics-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("user-analytics", format);
         break;
       case "all":
         data = {
@@ -146,7 +173,7 @@ export class AnalyticsController {
           products: await this.analyticsService.getProductPerformance(query),
           users: await this.analyticsService.getUserAnalytics(query),
         };
-        filename = `all-analytics-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("all-analytics", format);
         break;
       default:
         throw new AppError(400, "Invalid analytics type");
@@ -175,7 +202,6 @@ export class AnalyticsController {
 
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    console.log("result => ", result);
     res.send(result);
 
     await this.logsService.info("Exported analytics", {

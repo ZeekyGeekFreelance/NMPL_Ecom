@@ -11,12 +11,27 @@ const getNestedValue = (obj: any, key: string): any => {
     .reduce((o, k) => (o && o[k] !== undefined ? o[k] : null), obj);
 };
 
+const getTextAlignClass = (align: "left" | "center" | "right" = "left") => {
+  if (align === "center") return "text-center";
+  if (align === "right") return "text-right";
+  return "text-left";
+};
+
+const getHeaderAlignmentClass = (
+  align: "left" | "center" | "right" = "left"
+) => {
+  if (align === "center") return "justify-center";
+  if (align === "right") return "justify-end";
+  return "justify-start";
+};
+
 interface Column {
   key: string;
   label: string;
-  Ascendantly;
   sortable?: boolean;
   render?: (row: any) => React.ReactNode;
+  sortAccessor?: (row: any) => unknown;
+  searchAccessor?: (row: any) => unknown;
   width?: string;
   align?: "left" | "center" | "right";
 }
@@ -45,9 +60,11 @@ const Checkbox = ({
   onChange: () => void;
 }) => {
   return (
-    <div
-      className="flex items-center justify-center cursor-pointer"
+    <button
+      type="button"
+      className="flex items-center justify-center"
       onClick={onChange}
+      aria-pressed={checked}
     >
       <div
         className={`w-5 h-5 flex items-center justify-center border rounded-md transition-all ${
@@ -64,7 +81,7 @@ const Checkbox = ({
           </motion.div>
         )}
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -115,20 +132,24 @@ const TableBody: React.FC<TableBodyProps> = ({
           {columns.map((column) => (
             <th
               key={column.key}
-              className={`px-4 sm:px-6 py-4 text-${
-                column.align || "left"
-              } text-blue-700 font-medium text-sm ${
-                column.width ? `w-${column.width}` : ""
-              }`}
+              className={`px-4 py-4 text-sm font-medium text-blue-700 sm:px-6 ${getTextAlignClass(
+                column.align
+              )}`}
+              style={column.width ? { width: column.width } : undefined}
             >
-              <div className="flex items-center gap-2">
-                {column.label}
+              <div
+                className={`flex items-center gap-1.5 ${getHeaderAlignmentClass(
+                  column.align
+                )}`}
+              >
+                <span className="whitespace-nowrap">{column.label}</span>
                 {column.sortable && (
                   <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
+                    type="button"
                     onClick={() => onSort(column.key)}
-                    className={`p-1 rounded hover:bg-blue-100 ${
+                    className={`rounded p-1 transition-colors hover:bg-blue-100 ${
                       sortKey === column.key ? "text-blue-600" : "text-blue-300"
                     }`}
                   >
@@ -196,23 +217,23 @@ const TableBody: React.FC<TableBodyProps> = ({
                       />
                     </td>
                     {columns.map((column) => (
-                      <td
-                        key={column.key}
-                        className={`px-4 sm:px-6 py-4 text-${
-                          column.align || "left"
-                        }`}
-                      >
-                        {column.render
+                    <td
+                      key={column.key}
+                      className={`px-4 py-4 sm:px-6 ${getTextAlignClass(
+                        column.align
+                      )}`}
+                    >
+                      {column.render
                           ? column.render(row)
                           : getNestedValue(row, column.key) ?? "-"}
-                      </td>
+                    </td>
                     ))}
                   </motion.tr>
                   {expandable && (
                     <AnimatePresence>
                       {expandedRowId === rowId && renderExpandedRow && (
                         <motion.tr
-                          key="expanded-row"
+                          key={`expanded-row-${rowId}`}
                           initial="hidden"
                           animate="visible"
                           exit="exit"
@@ -270,6 +291,7 @@ const TableBody: React.FC<TableBodyProps> = ({
                   <motion.button
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
+                    type="button"
                     className="px-3 py-1 bg-white border border-blue-200 rounded-md text-blue-600 text-sm hover:bg-blue-50"
                     onClick={onSelectAll}
                   >

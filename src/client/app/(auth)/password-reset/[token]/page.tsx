@@ -33,7 +33,7 @@ const PasswordResetWithToken = () => {
     try {
       await resetPassword({
         token: token as string,
-        newPassword: formData.password,
+        password: formData.password,
       }).unwrap();
       setMessage("Password reset successful! You can now log in.");
       setIsError(false);

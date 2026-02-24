@@ -91,7 +91,6 @@ export class VariantController {
         stock,
         lowStockThreshold,
         barcode,
-        warehouseLocation,
         attributes,
       } = req.body;
 
@@ -120,7 +119,6 @@ export class VariantController {
         throw new AppError(400, "Invalid attributes format");
       }
 
-      console.log("req.files: ", req.files);
       const files = req.files as Express.Multer.File[];
       let imageUrls: string[] = [];
       if (Array.isArray(files) && files.length > 0) {
@@ -137,7 +135,6 @@ export class VariantController {
           ? Number(lowStockThreshold)
           : undefined,
         barcode,
-        warehouseLocation,
         images: imageUrls,
         attributes: parsedAttributes,
       });
@@ -162,7 +159,6 @@ export class VariantController {
         stock,
         lowStockThreshold,
         barcode,
-        warehouseLocation,
         attributes,
       } = req.body;
 
@@ -210,7 +206,6 @@ export class VariantController {
           lowStockThreshold: Number(lowStockThreshold),
         }),
         ...(barcode !== undefined && { barcode }),
-        ...(warehouseLocation !== undefined && { warehouseLocation }),
         ...(imageUrls.length > 0 && { images: imageUrls }),
         ...(parsedAttributes && { attributes: parsedAttributes }),
       });
@@ -230,7 +225,6 @@ export class VariantController {
     async (req: Request, res: Response): Promise<void> => {
       const { id: variantId } = req.params;
       const { quantity, notes } = req.body;
-      console.log("req.body: ", req.body);
 
       const parsedQuantity = Number(quantity);
       if (!quantity || isNaN(parsedQuantity) || parsedQuantity <= 0) {

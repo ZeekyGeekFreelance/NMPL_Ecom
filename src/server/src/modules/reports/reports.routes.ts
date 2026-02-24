@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { makeReportsController } from "./reports.factory";
 import protect from "@/shared/middlewares/protect";
+import authorizeRole from "@/shared/middlewares/authorizeRole";
 
 const router = Router();
 const controller = makeReportsController();
+const allowDashboardRoles = authorizeRole("ADMIN", "SUPERADMIN");
 
 /**
  * @swagger
@@ -19,6 +21,6 @@ const controller = makeReportsController();
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/generate", protect, controller.generateReport);
+router.get("/generate", protect, allowDashboardRoles, controller.generateReport);
 
 export default router;

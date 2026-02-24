@@ -8,6 +8,7 @@ import OrderStatus from "../OrderStatus";
 import OrderItems from "../OrderItems";
 import { useGetOrderQuery } from "@/app/store/apis/OrderApi";
 import CustomLoader from "@/app/components/feedback/CustomLoader";
+import { withAuth } from "@/app/components/HOC/WithAuth";
 
 const OrderTrackingPage = () => {
   const { orderId } = useParams();
@@ -44,4 +45,4 @@ const OrderTrackingPage = () => {
   );
 };
 
-export default OrderTrackingPage;
+export default withAuth(OrderTrackingPage, { allowedRoles: ["USER"] });

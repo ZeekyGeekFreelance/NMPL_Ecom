@@ -3,11 +3,18 @@
 import React from "react";
 import { Download } from "lucide-react";
 import DropdownMultiSelect from "./DropdownMultiSelect";
+import {
+  buildCsv,
+  downloadCsv,
+  formatExportCell,
+  getNestedValue,
+} from "@/app/utils/export";
 
 interface Column {
   key: string;
   label: string;
   render?: (row: any) => React.ReactNode;
+  exportAccessor?: (row: any) => unknown;
 }
 
 interface TableActionsProps {
@@ -33,29 +40,71 @@ const TableActions: React.FC<TableActionsProps> = ({
   visibleColumns,
   onToggleColumn,
 }) => {
+  const extractTextFromReactNode = (node: React.ReactNode): string => {
+    if (node === null || node === undefined || typeof node === "boolean") {
+      return "";
+    }
+
+    if (typeof node === "string" || typeof node === "number") {
+      return String(node);
+    }
+
+    if (Array.isArray(node)) {
+      return node.map((child) => extractTextFromReactNode(child)).join(" ");
+    }
+
+    if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+      return extractTextFromReactNode(node.props?.children);
+    }
+
+    return "";
+  };
+
+  const getRowId = (row: any): string | null => {
+    const rawId = row?.id ?? row?._id;
+    if (typeof rawId === "string" && rawId.trim()) {
+      return rawId;
+    }
+    if (typeof rawId === "number") {
+      return String(rawId);
+    }
+    return null;
+  };
+
   const handleExport = () => {
     const rowsToExport =
       selectedRows.size > 0
-        ? data.filter((row) => selectedRows.has(row.id || row._id))
+        ? data.filter((row) => {
+            const rowId = getRowId(row);
+            return rowId ? selectedRows.has(rowId) : false;
+          })
         : data;
 
-    const csvContent = [
-      columns.map((col) => `"${col.label}"`).join(","),
-      ...rowsToExport.map((row) =>
-        columns
-          .map((col) => {
-            const value = col.render ? col.render(row) : row[col.key];
-            return `"${value?.toString().replace(/"/g, '""') || ""}"`;
-          })
-          .join(",")
-      ),
-    ].join("\n");
+    if (rowsToExport.length === 0) {
+      return;
+    }
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `table_export_${new Date().toISOString()}.csv`;
-    link.click();
+    const headers = columns.map((column) => column.label);
+
+    const rowRecords = rowsToExport.map((row) => {
+      const record: Record<string, unknown> = {};
+
+      columns.forEach((column) => {
+        const exportValue =
+          typeof column.exportAccessor === "function"
+            ? column.exportAccessor(row)
+            : column.render
+              ? extractTextFromReactNode(column.render(row))
+              : getNestedValue(row, column.key);
+
+        record[column.label] = formatExportCell(exportValue);
+      });
+
+      return record;
+    });
+
+    const csvContent = buildCsv(headers, rowRecords);
+    downloadCsv(csvContent, `table_export_${new Date().toISOString()}.csv`);
   };
 
   return (
@@ -64,7 +113,7 @@ const TableActions: React.FC<TableActionsProps> = ({
         {showSearchBar && (
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search records by keyword"
             value={searchValue}
             onChange={(e) => onSearch({ searchQuery: e.target.value })}
             className="px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto"
@@ -82,10 +131,13 @@ const TableActions: React.FC<TableActionsProps> = ({
       </div>
       <button
         onClick={handleExport}
-        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 w-full sm:w-auto"
+        className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 sm:w-auto"
+        type="button"
       >
-        <Download size={16} />
-        Export {selectedRows.size > 0 ? "Selected" : "All"}
+        <span className="flex items-center gap-2">
+          <Download size={16} />
+          Export {selectedRows.size > 0 ? "Selected" : "All"}
+        </span>
       </button>
     </div>
   );

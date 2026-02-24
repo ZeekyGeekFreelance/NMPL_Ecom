@@ -311,7 +311,6 @@ class ProductService {
                         stock: variant.stock,
                         lowStockThreshold: variant.lowStockThreshold || 10,
                         barcode: variant.barcode,
-                        warehouseLocation: variant.warehouseLocation,
                         attributes: variant.attributes,
                         images: variant.images || [],
                     }, tx);
@@ -450,7 +449,6 @@ class ProductService {
                                     stock: variant.stock,
                                     lowStockThreshold: variant.lowStockThreshold || 10,
                                     barcode: variant.barcode || null,
-                                    warehouseLocation: variant.warehouseLocation || null,
                                     images: variant.images || [],
                                 },
                             });
@@ -475,7 +473,6 @@ class ProductService {
                             stock: variant.stock,
                             lowStockThreshold: variant.lowStockThreshold || 10,
                             barcode: variant.barcode,
-                            warehouseLocation: variant.warehouseLocation,
                             attributes: variant.attributes,
                             images: variant.images || [],
                         }, tx);

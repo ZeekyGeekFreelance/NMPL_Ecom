@@ -7,13 +7,11 @@ import MessageItem from "./MessageItem";
 interface MessageGroupProps {
   messages: any[];
   isCurrentUser: boolean;
-  currentUserId: string;
 }
 
 const MessageGroup: React.FC<MessageGroupProps> = ({
   messages,
-  isCurrentUser,
-  currentUserId
+  isCurrentUser
 }) => {
   return (
     <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>

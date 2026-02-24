@@ -111,15 +111,15 @@ class AnalyticsController {
             switch (type) {
                 case "overview":
                     data = yield this.analyticsService.getAnalyticsOverview(query);
-                    filename = `analytics-overview-${new Date().toISOString()}.${format}`;
+                    filename = this.buildExportFilename("analytics-overview", format);
                     break;
                 case "products":
                     data = yield this.analyticsService.getProductPerformance(query);
-                    filename = `product-performance-${new Date().toISOString()}.${format}`;
+                    filename = this.buildExportFilename("product-performance", format);
                     break;
                 case "users":
                     data = yield this.analyticsService.getUserAnalytics(query);
-                    filename = `user-analytics-${new Date().toISOString()}.${format}`;
+                    filename = this.buildExportFilename("user-analytics", format);
                     break;
                 case "all":
                     data = {
@@ -127,7 +127,7 @@ class AnalyticsController {
                         products: yield this.analyticsService.getProductPerformance(query),
                         users: yield this.analyticsService.getUserAnalytics(query),
                     };
-                    filename = `all-analytics-${new Date().toISOString()}.${format}`;
+                    filename = this.buildExportFilename("all-analytics", format);
                     break;
                 default:
                     throw new AppError_1.default(400, "Invalid analytics type");
@@ -153,7 +153,6 @@ class AnalyticsController {
             }
             res.setHeader("Content-Type", contentType);
             res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-            console.log("result => ", result);
             res.send(result);
             yield this.logsService.info("Exported analytics", {
                 userId: (_a = req.user) === null || _a === void 0 ? void 0 : _a.id,
@@ -162,6 +161,23 @@ class AnalyticsController {
                 timePeriod,
             });
         }));
+    }
+    resolveFileExtension(extension) {
+        if (typeof extension === "string" && extension.trim()) {
+            return extension.trim();
+        }
+        if (Array.isArray(extension)) {
+            const match = extension.find((item) => typeof item === "string" && item.trim());
+            if (match) {
+                return match.trim();
+            }
+        }
+        return "csv";
+    }
+    buildExportFilename(prefix, extension) {
+        const normalizedExtension = this.resolveFileExtension(extension);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        return `${prefix}-${timestamp}.${normalizedExtension}`;
     }
 }
 exports.AnalyticsController = AnalyticsController;

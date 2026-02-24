@@ -1,24 +1,85 @@
-import { useRouter } from "next/navigation";
+"use client";
+
+import { useRouter, usePathname } from "next/navigation";
 import CustomLoader from "../feedback/CustomLoader";
 import { useAuth } from "@/app/hooks/useAuth";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-export function withAuth<P extends Record<string, unknown>>(
-  Component: React.ComponentType<P>
+type AppRole = "USER" | "ADMIN" | "SUPERADMIN";
+
+type WithAuthOptions = {
+  allowedRoles?: AppRole[];
+  redirectTo?: string;
+  unauthorizedRedirectTo?: string;
+};
+
+const getDefaultAllowedRoles = (pathname: string): AppRole[] | undefined => {
+  if (pathname.startsWith("/dashboard")) {
+    return ["ADMIN", "SUPERADMIN"];
+  }
+
+  return undefined;
+};
+
+export function withAuth<P extends object>(
+  Component: React.ComponentType<P>,
+  options?: WithAuthOptions
 ) {
   return function AuthWrapper(props: P) {
-    const { isAuthenticated, isLoading } = useAuth();
-    console.log("isAuthenticated: ", isAuthenticated);
-    console.log("isLoading: ", isLoading);
+    const { isAuthenticated, isLoading, user } = useAuth();
     const router = useRouter();
+    const pathname = usePathname();
+    const [isRedirecting, setIsRedirecting] = useState(false);
+
+    const allowedRoles = useMemo(
+      () => options?.allowedRoles || getDefaultAllowedRoles(pathname),
+      [options?.allowedRoles, pathname]
+    );
 
     useEffect(() => {
-      if (!isLoading && !isAuthenticated) {
-        router.push("/sign-in");
+      if (isLoading) {
+        return;
       }
-    }, [isLoading, isAuthenticated]);
 
-    if (isLoading) return <CustomLoader />;
+      if (!isAuthenticated) {
+        setIsRedirecting(true);
+        router.replace(options?.redirectTo || "/sign-in");
+        return;
+      }
+
+      if (allowedRoles?.length && user?.role && !allowedRoles.includes(user.role as AppRole)) {
+        setIsRedirecting(true);
+        const fallbackPath =
+          options?.unauthorizedRedirectTo ||
+          (user.role === "ADMIN" || user.role === "SUPERADMIN"
+            ? "/dashboard"
+            : "/");
+        router.replace(fallbackPath);
+        return;
+      }
+
+      setIsRedirecting(false);
+    }, [
+      allowedRoles,
+      isAuthenticated,
+      isLoading,
+      options?.redirectTo,
+      options?.unauthorizedRedirectTo,
+      router,
+      user?.role,
+    ]);
+
+    if (isLoading || isRedirecting) {
+      return <CustomLoader />;
+    }
+
+    if (!isAuthenticated) {
+      return null;
+    }
+
+    if (allowedRoles?.length && user?.role && !allowedRoles.includes(user.role as AppRole)) {
+      return null;
+    }
 
     return <Component {...props} />;
   };

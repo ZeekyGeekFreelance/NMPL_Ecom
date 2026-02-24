@@ -14,278 +14,94 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = generateXLSX;
 const exceljs_1 = __importDefault(require("exceljs"));
+const formatAnalyticsData_1 = __importDefault(require("./formatAnalyticsData"));
+const EXCEL_MAX_SHEET_NAME_LENGTH = 31;
+const toSheetName = (input, index) => {
+    const safe = input
+        .replace(/[\\/*?:[\]]/g, "")
+        .trim();
+    const fallback = `Sheet ${index + 1}`;
+    const withFallback = safe || fallback;
+    return withFallback.length > EXCEL_MAX_SHEET_NAME_LENGTH
+        ? withFallback.slice(0, EXCEL_MAX_SHEET_NAME_LENGTH)
+        : withFallback;
+};
+const toCellValue = (value) => {
+    if (value === null || value === undefined || value === "") {
+        return "";
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+        return value;
+    }
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => String(item !== null && item !== void 0 ? item : "")).join(" | ");
+    }
+    if (typeof value === "object") {
+        return Object.entries(value)
+            .map(([key, nestedValue]) => `${key}: ${String(nestedValue !== null && nestedValue !== void 0 ? nestedValue : "")}`)
+            .join("; ");
+    }
+    return String(value);
+};
+const getColumnWidth = (column, rows) => {
+    const headerWidth = column.length + 2;
+    const contentWidth = rows.reduce((maxWidth, row) => {
+        const cell = toCellValue(row[column]);
+        const text = typeof cell === "string" ? cell : String(cell !== null && cell !== void 0 ? cell : "");
+        return Math.max(maxWidth, text.length + 2);
+    }, 0);
+    return Math.min(Math.max(headerWidth, contentWidth, 14), 44);
+};
+const fillSheet = (sheet, section) => {
+    if (!section.columns.length) {
+        sheet.addRow(["No columns available"]);
+        return;
+    }
+    sheet.columns = section.columns.map((column) => ({
+        header: column,
+        key: column,
+        width: getColumnWidth(column, section.rows),
+    }));
+    if (!section.rows.length) {
+        const row = sheet.addRow(Object.fromEntries(section.columns.map((column) => [column, "No data available"])));
+        row.font = { italic: true, color: { argb: "FF6B7280" } };
+    }
+    else {
+        section.rows.forEach((row) => {
+            const normalizedRow = Object.fromEntries(section.columns.map((column) => [column, toCellValue(row[column])]));
+            sheet.addRow(normalizedRow);
+        });
+    }
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: "FF1F2937" } };
+    headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE5E7EB" },
+    };
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    sheet.eachRow((row, rowNumber) => {
+        row.alignment = {
+            vertical: "middle",
+            horizontal: rowNumber === 1 ? "center" : "left",
+            wrapText: true,
+        };
+    });
+};
 function generateXLSX(data) {
     return __awaiter(this, void 0, void 0, function* () {
         const workbook = new exceljs_1.default.Workbook();
-        if ("sales" in data && "userRetention" in data) {
-            // AllReports
-            const { sales, userRetention } = data;
-            // Sales Sheet
-            const salesSheet = workbook.addWorksheet("Sales");
-            salesSheet.columns = [
-                { header: "Metric", key: "metric", width: 30 },
-                { header: "Value", key: "value", width: 20 },
-            ];
-            salesSheet.addRows([
-                { metric: "Total Revenue ($)", value: sales.totalRevenue },
-                { metric: "Total Orders", value: sales.totalOrders },
-                { metric: "Total Sales", value: sales.totalSales },
-                { metric: "Average Order Value ($)", value: sales.averageOrderValue },
-            ]);
-            salesSheet.addRow([]); // Spacer
-            salesSheet.addRow(["By Category"]);
-            salesSheet.addRow(["Category ID", "Category Name", "Revenue ($)", "Sales"]);
-            sales.byCategory.forEach((cat) => {
-                salesSheet.addRow([
-                    cat.categoryId,
-                    cat.categoryName,
-                    cat.revenue,
-                    cat.sales,
-                ]);
-            });
-            salesSheet.addRow([]); // Spacer
-            salesSheet.addRow(["Top Products"]);
-            salesSheet.addRow([
-                "Product ID",
-                "Product Name",
-                "Quantity",
-                "Revenue ($)",
-            ]);
-            sales.topProducts.forEach((prod) => {
-                salesSheet.addRow([
-                    prod.productId,
-                    prod.productName,
-                    prod.quantity,
-                    prod.revenue,
-                ]);
-            });
-            // User Retention Sheet
-            const retentionSheet = workbook.addWorksheet("User Retention");
-            retentionSheet.columns = [
-                { header: "Metric", key: "metric", width: 30 },
-                { header: "Value", key: "value", width: 20 },
-            ];
-            retentionSheet.addRows([
-                { metric: "Total Users", value: userRetention.totalUsers },
-                { metric: "Retention Rate (%)", value: userRetention.retentionRate },
-                {
-                    metric: "Repeat Purchase Rate (%)",
-                    value: userRetention.repeatPurchaseRate,
-                },
-                { metric: "Lifetime Value ($)", value: userRetention.lifetimeValue },
-            ]);
-            retentionSheet.addRow([]); // Spacer
-            retentionSheet.addRow(["Top Users"]);
-            retentionSheet.addRow([
-                "Rank",
-                "User ID",
-                "Name",
-                "Email",
-                "Order Count",
-                "Total Spent ($)",
-            ]);
-            userRetention.topUsers.forEach((user, index) => {
-                retentionSheet.addRow([
-                    index + 1,
-                    user.userId,
-                    user.name,
-                    user.email,
-                    user.orderCount,
-                    user.totalSpent,
-                ]);
-            });
-        }
-        else if ("totalUsers" in data && "topUsers" in data) {
-            // UserRetentionReport
-            const { totalUsers, retentionRate, repeatPurchaseRate, lifetimeValue, topUsers, } = data;
-            const sheet = workbook.addWorksheet("User Retention");
-            sheet.columns = [
-                { header: "Metric", key: "metric", width: 30 },
-                { header: "Value", key: "value", width: 20 },
-            ];
-            sheet.addRows([
-                { metric: "Total Users", value: totalUsers },
-                { metric: "Retention Rate (%)", value: retentionRate },
-                { metric: "Repeat Purchase Rate (%)", value: repeatPurchaseRate },
-                { metric: "Lifetime Value ($)", value: lifetimeValue },
-            ]);
-            sheet.addRow([]); // Spacer
-            sheet.addRow(["Top Users"]);
-            sheet.addRow([
-                "Rank",
-                "User ID",
-                "Name",
-                "Email",
-                "Order Count",
-                "Total Spent ($)",
-            ]);
-            topUsers.forEach((user, index) => {
-                sheet.addRow([
-                    index + 1,
-                    user.userId,
-                    user.name,
-                    user.email,
-                    user.orderCount,
-                    user.totalSpent,
-                ]);
-            });
-        }
-        else if ("totalRevenue" in data && "byCategory" in data) {
-            // SalesReport
-            const { totalRevenue, totalOrders, totalSales, averageOrderValue, byCategory, topProducts, } = data;
-            const sheet = workbook.addWorksheet("Sales");
-            sheet.columns = [
-                { header: "Metric", key: "metric", width: 30 },
-                { header: "Value", key: "value", width: 20 },
-            ];
-            sheet.addRows([
-                { metric: "Total Revenue ($)", value: totalRevenue },
-                { metric: "Total Orders", value: totalOrders },
-                { metric: "Total Sales", value: totalSales },
-                { metric: "Average Order Value ($)", value: averageOrderValue },
-            ]);
-            sheet.addRow([]); // Spacer
-            sheet.addRow(["By Category"]);
-            sheet.addRow(["Category ID", "Category Name", "Revenue ($)", "Sales"]);
-            byCategory.forEach((cat) => {
-                sheet.addRow([cat.categoryId, cat.categoryName, cat.revenue, cat.sales]);
-            });
-            sheet.addRow([]); // Spacer
-            sheet.addRow(["Top Products"]);
-            sheet.addRow(["Product ID", "Product Name", "Quantity", "Revenue ($)"]);
-            topProducts.forEach((prod) => {
-                sheet.addRow([
-                    prod.productId,
-                    prod.productName,
-                    prod.quantity,
-                    prod.revenue,
-                ]);
-            });
-        }
-        else if ("overview" in data && "products" in data && "users" in data) {
-            // AllAnalytics
-            const { overview, products, users } = data;
-            const overviewSheet = workbook.addWorksheet("Overview");
-            overviewSheet.columns = [
-                { header: "Metric", key: "metric", width: 30 },
-                { header: "Value", key: "value", width: 20 },
-            ];
-            overviewSheet.addRows([
-                { metric: "Total Revenue ($)", value: overview.totalRevenue },
-                { metric: "Total Orders", value: overview.totalOrders },
-                { metric: "Total Sales", value: overview.totalSales },
-                { metric: "Total Users", value: overview.totalUsers },
-                {
-                    metric: "Average Order Value ($)",
-                    value: overview.averageOrderValue,
-                },
-            ]);
-            overviewSheet.addRow([]); // Spacer
-            overviewSheet.addRow(["Changes"]);
-            overviewSheet.addRows([
-                {
-                    metric: "Revenue Change (%)",
-                    value: overview.changes.revenue || "N/A",
-                },
-                {
-                    metric: "Orders Change (%)",
-                    value: overview.changes.orders || "N/A",
-                },
-                { metric: "Sales Change (%)", value: overview.changes.sales || "N/A" },
-                { metric: "Users Change (%)", value: overview.changes.users || "N/A" },
-                {
-                    metric: "AOV Change (%)",
-                    value: overview.changes.averageOrderValue || "N/A",
-                },
-            ]);
-            overviewSheet.addRow([]); // Spacer
-            overviewSheet.addRow(["Monthly Trends"]);
-            overviewSheet.addRow(["Month", "Revenue ($)", "Orders", "Sales", "Users"]);
-            overview.monthlyTrends.labels.forEach((label, index) => {
-                overviewSheet.addRow([
-                    label,
-                    overview.monthlyTrends.revenue[index],
-                    overview.monthlyTrends.orders[index],
-                    overview.monthlyTrends.sales[index],
-                    overview.monthlyTrends.users[index],
-                ]);
-            });
-            const productsSheet = workbook.addWorksheet("Products");
-            productsSheet.columns = [
-                { header: "ID", key: "id", width: 30 },
-                { header: "Product Name", key: "name", width: 30 },
-                { header: "Quantity Sold", key: "quantity", width: 15 },
-                { header: "Revenue ($)", key: "revenue", width: 15 },
-            ];
-            products.forEach((item) => {
-                productsSheet.addRow({
-                    id: item.id,
-                    name: item.name,
-                    quantity: item.quantity,
-                    revenue: item.revenue,
-                });
-            });
-            const usersSheet = workbook.addWorksheet("Users");
-            usersSheet.columns = [
-                { header: "Metric", key: "metric", width: 30 },
-                { header: "Value", key: "value", width: 20 },
-            ];
-            usersSheet.addRows([
-                { metric: "Total Users", value: users.totalUsers },
-                { metric: "Total Revenue ($)", value: users.totalRevenue },
-                { metric: "Retention Rate (%)", value: users.retentionRate },
-                { metric: "Average Lifetime Value ($)", value: users.lifetimeValue },
-                { metric: "Repeat Purchase Rate (%)", value: users.repeatPurchaseRate },
-                { metric: "Average Engagement Score", value: users.engagementScore },
-                {
-                    metric: "Users Change (%)",
-                    value: users.changes.users || "N/A",
-                },
-            ]);
-            usersSheet.addRow([]); // Spacer
-            usersSheet.addRow(["Top Users"]);
-            usersSheet.addRow([
-                "Rank",
-                "Name",
-                "Email",
-                "Order Count",
-                "Total Spent ($)",
-                "Engagement Score",
-            ]);
-            users.topUsers.forEach((user, index) => {
-                usersSheet.addRow([
-                    index + 1,
-                    user.name,
-                    user.email,
-                    user.orderCount,
-                    user.totalSpent,
-                    user.engagementScore,
-                ]);
-            });
-            const trendsSheet = workbook.addWorksheet("Interaction Trends");
-            trendsSheet.columns = [
-                { header: "Month", key: "month", width: 20 },
-                { header: "Views", key: "views", width: 15 },
-                { header: "Clicks", key: "clicks", width: 15 },
-                { header: "Others", key: "others", width: 15 },
-            ];
-            users.interactionTrends.labels.forEach((label, index) => {
-                trendsSheet.addRow({
-                    month: label,
-                    views: users.interactionTrends.views[index],
-                    clicks: users.interactionTrends.clicks[index],
-                    others: users.interactionTrends.others[index],
-                });
-            });
-        }
-        else {
-            throw new Error("Unsupported data format for XLSX export");
-        }
-        workbook.eachSheet((sheet) => {
-            sheet.getRow(1).font = { bold: true };
-            sheet.eachRow((row) => {
-                row.alignment = { vertical: "middle", horizontal: "left" };
-            });
+        const document = (0, formatAnalyticsData_1.default)(data);
+        workbook.creator = "Ecommerce Export Engine";
+        workbook.created = new Date();
+        workbook.modified = new Date();
+        document.sections.forEach((section, index) => {
+            const sheetName = toSheetName(section.title || section.key, index);
+            const sheet = workbook.addWorksheet(sheetName);
+            fillSheet(sheet, section);
         });
         return workbook.xlsx.writeBuffer();
     });

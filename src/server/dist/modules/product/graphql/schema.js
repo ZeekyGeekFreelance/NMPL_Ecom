@@ -35,7 +35,6 @@ const typeDefs = (0, graphql_tag_1.default) `
     stock: Int!
     lowStockThreshold: Int!
     barcode: String
-    warehouseLocation: String
     attributes: [ProductVariantAttribute!]!
   }
 

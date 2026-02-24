@@ -74,7 +74,6 @@ function configurePassport() {
         profileFields: ["id", "emails", "name"],
     }, (accessToken, refreshToken, profile, done) => __awaiter(this, void 0, void 0, function* () {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-        console.log("facebook profile: ", profile);
         try {
             let user = yield database_config_1.default.user.findUnique({
                 where: { email: ((_b = (_a = profile.emails) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value) || "" },
@@ -120,9 +119,6 @@ function configurePassport() {
         includeEmail: true,
     }, (accessToken, refreshToken, profile, done) => __awaiter(this, void 0, void 0, function* () {
         var _a, _b, _c, _d;
-        console.log("Twitter accessToken:", accessToken);
-        console.log("Twitter refreshToken:", refreshToken);
-        console.log("Twitter profile:", JSON.stringify(profile, null, 2));
         try {
             if (!profile || !profile.id) {
                 console.error("Twitter profile is missing or invalid:", profile);

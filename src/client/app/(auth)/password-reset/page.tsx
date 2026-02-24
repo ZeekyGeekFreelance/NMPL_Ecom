@@ -74,10 +74,8 @@ const PasswordReset = () => {
             type="submit"
             className="bg-primary mt-4 text-white w-full py-[12px] rounded"
             disabled={isLoading}
-            isLoading={isLoading}
-            loadingText="Sending..."
           >
-            Send reset link
+            {isLoading ? "Sending..." : "Send reset link"}
           </Button>
 
           <Link className="mt-4 hover:underline" href={"/sign-in"}>

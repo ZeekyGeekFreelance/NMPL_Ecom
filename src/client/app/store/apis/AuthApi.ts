@@ -75,14 +75,14 @@ export const authApi = apiSlice.injectEndpoints({
         dispatch(logout());
       },
     }),
-    forgotPassword: builder.mutation<void, { email: string }>({
+    forgotPassword: builder.mutation<{ message?: string }, { email: string }>({
       query: ({ email }) => ({
         url: "/auth/forgot-password",
         method: "POST",
         body: { email },
       }),
     }),
-    resetPassword: builder.mutation<void, { token: string; password: string }>({
+    resetPassword: builder.mutation<{ message?: string }, { token: string; password: string }>({
       query: ({ token, password }) => ({
         url: "/auth/reset-password",
         method: "POST",

@@ -2,7 +2,6 @@
 
 import React, { useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import MessageItem from "./MessageItem";
 import MessageGroup from "./MessageGroup";
 
 interface MessageListProps {
@@ -129,7 +128,6 @@ const MessageList: React.FC<MessageListProps> = ({
               <MessageGroup
                 messages={group.messages}
                 isCurrentUser={group.isCurrentUser}
-                currentUserId={currentUserId}
               />
             </motion.div>
           ))}

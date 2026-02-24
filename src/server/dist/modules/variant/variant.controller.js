@@ -68,7 +68,7 @@ class VariantController {
         }));
         this.createVariant = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
-            const { productId, sku, price, stock, lowStockThreshold, barcode, warehouseLocation, attributes, } = req.body;
+            const { productId, sku, price, stock, lowStockThreshold, barcode, attributes, } = req.body;
             let parsedAttributes;
             try {
                 parsedAttributes =
@@ -89,7 +89,6 @@ class VariantController {
             catch (error) {
                 throw new AppError_1.default(400, "Invalid attributes format");
             }
-            console.log("req.files: ", req.files);
             const files = req.files;
             let imageUrls = [];
             if (Array.isArray(files) && files.length > 0) {
@@ -105,7 +104,6 @@ class VariantController {
                     ? Number(lowStockThreshold)
                     : undefined,
                 barcode,
-                warehouseLocation,
                 images: imageUrls,
                 attributes: parsedAttributes,
             });
@@ -121,7 +119,7 @@ class VariantController {
         this.updateVariant = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const { id: variantId } = req.params;
-            const { sku, price, stock, lowStockThreshold, barcode, warehouseLocation, attributes, } = req.body;
+            const { sku, price, stock, lowStockThreshold, barcode, attributes, } = req.body;
             let parsedAttributes;
             if (attributes) {
                 try {
@@ -152,9 +150,9 @@ class VariantController {
                 const uploadedImages = yield (0, uploadToCloudinary_1.uploadToCloudinary)(files);
                 imageUrls = uploadedImages.map((img) => img.url).filter(Boolean);
             }
-            const variant = yield this.variantService.updateVariant(variantId, Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (sku && { sku })), (price !== undefined && { price: Number(price) })), (stock !== undefined && { stock: Number(stock) })), (lowStockThreshold !== undefined && {
+            const variant = yield this.variantService.updateVariant(variantId, Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (sku && { sku })), (price !== undefined && { price: Number(price) })), (stock !== undefined && { stock: Number(stock) })), (lowStockThreshold !== undefined && {
                 lowStockThreshold: Number(lowStockThreshold),
-            })), (barcode !== undefined && { barcode })), (warehouseLocation !== undefined && { warehouseLocation })), (imageUrls.length > 0 && { images: imageUrls })), (parsedAttributes && { attributes: parsedAttributes })));
+            })), (barcode !== undefined && { barcode })), (imageUrls.length > 0 && { images: imageUrls })), (parsedAttributes && { attributes: parsedAttributes })));
             (0, sendResponse_1.default)(res, 200, {
                 data: { variant },
                 message: "Variant updated successfully",
@@ -168,7 +166,6 @@ class VariantController {
             var _a, _b;
             const { id: variantId } = req.params;
             const { quantity, notes } = req.body;
-            console.log("req.body: ", req.body);
             const parsedQuantity = Number(quantity);
             if (!quantity || isNaN(parsedQuantity) || parsedQuantity <= 0) {
                 throw new AppError_1.default(400, "Valid positive quantity is required");

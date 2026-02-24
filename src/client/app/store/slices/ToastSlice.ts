@@ -4,6 +4,8 @@ export type Toast = {
   id: string;
   message: string | undefined;
   type: "success" | "error" | "warning" | "info";
+  title?: string;
+  duration?: number;
 };
 
 interface ToastState {
@@ -19,7 +21,6 @@ export const toastSlice = createSlice({
   initialState,
   reducers: {
     addToast: (state, action: PayloadAction<Omit<Toast, "id">>) => {
-      console.log("action.payload => ", action.payload);
       state.toasts.push({ id: crypto.randomUUID(), ...action.payload });
     },
     removeToast: (state, action: PayloadAction<string>) => {

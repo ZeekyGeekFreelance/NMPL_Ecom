@@ -203,7 +203,6 @@ export class ProductService {
       stock: number;
       lowStockThreshold?: number;
       barcode?: string;
-      warehouseLocation?: string;
       attributes: { attributeId: string; valueId: string }[];
     }[];
   }) {
@@ -363,7 +362,6 @@ export class ProductService {
           stock: variant.stock,
           lowStockThreshold: variant.lowStockThreshold || 10,
           barcode: variant.barcode,
-          warehouseLocation: variant.warehouseLocation,
           attributes: variant.attributes,
           images: variant.images || [],
         }, tx);
@@ -406,7 +404,6 @@ export class ProductService {
         stock: number;
         lowStockThreshold?: number;
         barcode?: string;
-        warehouseLocation?: string;
         attributes: { attributeId: string; valueId: string }[];
       }[];
     }>
@@ -587,7 +584,6 @@ export class ProductService {
                 stock: variant.stock,
                 lowStockThreshold: variant.lowStockThreshold || 10,
                 barcode: variant.barcode || null,
-                warehouseLocation: variant.warehouseLocation || null,
                 images: variant.images || [],
               },
             });
@@ -617,7 +613,6 @@ export class ProductService {
               stock: variant.stock,
               lowStockThreshold: variant.lowStockThreshold || 10,
               barcode: variant.barcode,
-              warehouseLocation: variant.warehouseLocation,
               attributes: variant.attributes,
               images: variant.images || [],
             },

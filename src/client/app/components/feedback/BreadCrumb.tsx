@@ -3,6 +3,45 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
+const TITLE_MAP: Record<string, string> = {
+  shop: "Shop",
+  product: "Products",
+  dashboard: "Dashboard",
+  transactions: "Transactions",
+  inventory: "Inventory",
+  analytics: "Analytics",
+  reports: "Reports",
+  users: "Users",
+  dealers: "Dealers",
+  products: "Products",
+  categories: "Categories",
+  profile: "Profile",
+  cart: "Cart",
+  orders: "Orders",
+  "sign-in": "Sign In",
+  "sign-up": "Sign Up",
+};
+
+const ROUTE_OVERRIDE_MAP: Record<string, string> = {
+  product: "/shop",
+};
+
+const UUID_LIKE_SEGMENT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const formatSegmentLabel = (segment: string) => {
+  const decoded = decodeURIComponent(segment).trim();
+  const mapped = TITLE_MAP[decoded.toLowerCase()];
+
+  if (mapped) {
+    return mapped;
+  }
+
+  return decoded
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
 const BreadCrumb: React.FC = () => {
   const pathname = usePathname();
   const pathSegments = pathname.split("/").filter(Boolean);
@@ -20,23 +59,27 @@ const BreadCrumb: React.FC = () => {
         </li>
 
         {pathSegments.map((segment, index) => {
-          const href = "/" + pathSegments.slice(0, index + 1).join("/");
+          const defaultHref = "/" + pathSegments.slice(0, index + 1).join("/");
+          const href = ROUTE_OVERRIDE_MAP[segment] || defaultHref;
           const isLast = index === pathSegments.length - 1;
+          const label = formatSegmentLabel(segment);
+          const isDynamicUuid = UUID_LIKE_SEGMENT.test(segment);
+          const shouldLink = !isLast && !isDynamicUuid;
 
           return (
             <React.Fragment key={href}>
               <span className="text-gray-400">/</span>
               <li>
-                {isLast ? (
+                {!shouldLink ? (
                   <span className="capitalize font-semibold">
-                    {decodeURIComponent(segment)}
+                    {label}
                   </span>
                 ) : (
                   <Link
                     href={href}
                     className="capitalize hover:text-indigo-600 font-medium transition"
                   >
-                    {decodeURIComponent(segment)}
+                    {label}
                   </Link>
                 )}
               </li>

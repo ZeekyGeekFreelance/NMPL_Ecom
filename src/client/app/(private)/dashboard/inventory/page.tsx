@@ -26,7 +26,6 @@ interface Variant {
   stock: number;
   lowStockThreshold?: number;
   barcode?: string;
-  warehouseLocation?: string;
   attributes: Array<{
     attributeId: string;
     valueId: string;
@@ -41,7 +40,7 @@ const InventoryDashboard = () => {
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
-  const { data, isLoading } = useGetAllVariantsQuery({});
+  const { data, isLoading, refetch } = useGetAllVariantsQuery({});
   debugLog("data: ", data);
   const [restockVariant, { isLoading: isRestocking }] =
     useRestockVariantMutation();
@@ -81,11 +80,11 @@ const InventoryDashboard = () => {
       label: "Attributes",
       sortable: false,
       render: (row: Variant) => (
-        <div>
+        <div className="flex flex-wrap gap-2">
           {row.attributes.map((attr) => (
             <span
               key={attr.attributeId}
-              className="inline-block mr-2 bg-gray-100 px-2 py-1 rounded"
+              className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700"
             >
               {attr.attribute.name}: {attr.value.value}
             </span>
@@ -116,12 +115,6 @@ const InventoryDashboard = () => {
       render: (row: Variant) => <span>{row.lowStockThreshold || 10}</span>,
     },
     {
-      key: "warehouseLocation",
-      label: "Warehouse Location",
-      sortable: true,
-      render: (row: Variant) => <span>{row.warehouseLocation || "N/A"}</span>,
-    },
-    {
       key: "status",
       label: "Status",
       sortable: false,
@@ -143,24 +136,26 @@ const InventoryDashboard = () => {
       key: "actions",
       label: "Actions",
       render: (row: Variant) => (
-        <div className="flex space-x-2">
+        <div className="flex flex-col items-start gap-2">
           <button
+            type="button"
             onClick={() => {
               setSelectedVariant(row);
               setIsRestockModalOpen(true);
             }}
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
             disabled={isRestocking}
           >
             <Plus size={16} />
-            Restock
+            + Restock
           </button>
           <button
+            type="button"
             onClick={() => {
               setSelectedVariant(row);
               setIsHistoryModalOpen(true);
             }}
-            className="text-gray-600 hover:text-gray-800 flex items-center gap-1"
+            className="flex items-center gap-1 text-gray-600 hover:text-gray-800"
           >
             <History size={16} />
             History
@@ -171,8 +166,8 @@ const InventoryDashboard = () => {
   ];
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Inventory Dashboard</h1>
           <p className="text-sm text-gray-500">
@@ -180,17 +175,6 @@ const InventoryDashboard = () => {
           </p>
         </div>
       </div>
-
-      <button
-        onClick={() => {
-          setSelectedVariant(null);
-          setIsHistoryModalOpen(true);
-        }}
-        className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium"
-      >
-        <Plus size={18} />
-        Restock History
-      </button>
 
       <Table
         data={variants}
@@ -201,6 +185,7 @@ const InventoryDashboard = () => {
         totalResults={data?.totalResults}
         resultsPerPage={data?.resultsPerPage}
         currentPage={data?.currentPage}
+        onRefresh={refetch}
       />
 
       <RestockModal
@@ -222,17 +207,6 @@ const InventoryDashboard = () => {
         }}
         variantId={selectedVariant?.id}
       />
-
-      <button
-        onClick={() => {
-          setSelectedVariant(null);
-          setIsHistoryModalOpen(true);
-        }}
-        className="mt-4 w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
-      >
-        <Plus size={18} />
-        Restock History
-      </button>
     </div>
   );
 };

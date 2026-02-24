@@ -1,3 +1,5 @@
-export function cn(...classes: string[]) {
-  return classes.filter(Boolean).join(" ");
+export function cn(...classes: Array<string | false | null | undefined>) {
+  return classes
+    .filter((value): value is string => typeof value === "string" && !!value)
+    .join(" ");
 }

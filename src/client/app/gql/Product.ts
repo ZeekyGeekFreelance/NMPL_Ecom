@@ -30,6 +30,7 @@ export const GET_PRODUCTS = gql`
       products {
         id
         name
+        description
         slug
         isNew
         isFeatured
@@ -45,7 +46,6 @@ export const GET_PRODUCTS = gql`
           stock
           lowStockThreshold
           barcode
-          warehouseLocation
         }
         category {
           id
@@ -85,7 +85,6 @@ export const GET_SINGLE_PRODUCT = gql`
         stock
         lowStockThreshold
         barcode
-        warehouseLocation
         attributes {
           id
           attribute {

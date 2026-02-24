@@ -4,7 +4,6 @@ import React from "react";
 import {
   X,
   User,
-  Clock,
   MessageCircle,
   Phone,
   Video,
@@ -13,8 +12,8 @@ import {
   Plus,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useGetMeQuery } from "@/app/store/apis/UserApi";
 import { useGetChatQuery } from "@/app/store/apis/ChatApi";
+import { useRouter } from "next/navigation";
 
 interface ChatSidebarProps {
   chatId: string;
@@ -27,9 +26,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onClose,
   isMobile,
 }) => {
-  const { data: userData } = useGetMeQuery(undefined);
+  const router = useRouter();
   const { data: chatData } = useGetChatQuery(chatId);
-  const user = userData?.user;
   const chat = chatData?.chat;
 
   const formatDate = (dateString: string) => {
@@ -81,7 +79,11 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
       {/* New Conversation Button */}
       <div className="p-4 border-b border-gray-200">
-        <button className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium">
+        <button
+          type="button"
+          onClick={() => router.push("/support")}
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+        >
           <Plus size={18} />
           New Conversation
         </button>

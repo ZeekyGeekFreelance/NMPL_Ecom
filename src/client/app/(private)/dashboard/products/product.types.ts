@@ -15,7 +15,6 @@ export interface ProductFormData {
     stock: number;
     lowStockThreshold?: number;
     barcode?: string;
-    warehouseLocation?: string;
     attributes: { attributeId: string; valueId: string }[];
   }[];
 }

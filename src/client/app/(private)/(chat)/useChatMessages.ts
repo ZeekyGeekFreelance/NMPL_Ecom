@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Socket } from "socket.io-client";
+
+type ChatUser = { id: string; name: string; role: string } | null;
 
 export const useChatMessages = (
   chatId: string,
-  user: { id: string; name: string; role: string },
+  user: ChatUser,
   chat: any,
   socket: Socket | null,
   sendMessage: any
@@ -11,9 +13,7 @@ export const useChatMessages = (
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [typingTimeout, setTypingTimeoutRef] = useState<NodeJS.Timeout | null>(
-    null
-  );
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Update messages when chat data is fetched
   useEffect(() => {
@@ -66,23 +66,27 @@ export const useChatMessages = (
     });
 
     socket.on("userTyping", (typingUser) => {
-      if (typingUser.id !== user.id) {
+      if (!user || typingUser.id !== user.id) {
         setIsTyping(true);
-        const timeout = setTimeout(() => setIsTyping(false), 3000);
-        setTypingTimeoutRef(timeout);
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000);
       }
     });
 
     return () => {
       socket.off("newMessage");
       socket.off("userTyping");
-      if (typingTimeout) clearTimeout(typingTimeout);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     };
-  }, [socket, user.id, typingTimeout]);
+  }, [socket, user]);
 
   // Emit typing event
   useEffect(() => {
-    if (message && socket) {
+    if (message && socket && user) {
       socket.emit("typing", { chatId, user });
     }
   }, [message, socket, chatId, user]);
@@ -97,7 +101,9 @@ export const useChatMessages = (
         content: message || undefined,
         file,
       }).unwrap();
-      console.log("result => ", result);
+      if (!result) {
+        return;
+      }
       setMessage("");
     } catch (err) {
       console.error("Failed to send message:", err);

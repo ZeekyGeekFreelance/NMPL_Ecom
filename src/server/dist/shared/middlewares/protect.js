@@ -15,16 +15,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const AppError_1 = __importDefault(require("../errors/AppError"));
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
-const protect = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+const protect = (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
         const accessToken = (_a = req === null || req === void 0 ? void 0 : req.cookies) === null || _a === void 0 ? void 0 : _a.accessToken;
-        console.log("accessToken: ", accessToken);
         if (!accessToken) {
             return next(new AppError_1.default(401, "Unauthorized, please log in"));
         }
+        if (!process.env.ACCESS_TOKEN_SECRET) {
+            return next(new AppError_1.default(500, "Authentication secret is not configured"));
+        }
         const decoded = jsonwebtoken_1.default.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
-        console.log("Decoded: ", decoded);
         const user = yield database_config_1.default.user.findUnique({
             where: { id: String(decoded.id) },
             select: { id: true, role: true },
@@ -36,7 +37,6 @@ const protect = (req, res, next) => __awaiter(void 0, void 0, void 0, function* 
         next();
     }
     catch (error) {
-        console.log(error);
         return next(new AppError_1.default(401, "Invalid access token, please log in"));
     }
 });

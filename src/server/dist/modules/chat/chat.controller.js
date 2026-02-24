@@ -38,9 +38,7 @@ class ChatController {
                 throw new Error("User not found");
             }
             const userId = req.user.id;
-            console.log("userId => ", userId);
             const chats = yield this.chatService.getUserChats(userId);
-            console.log("chats => ", chats);
             (0, sendResponse_1.default)(res, 200, {
                 data: { chats },
                 message: "Chats fetched successfully",
@@ -80,7 +78,6 @@ class ChatController {
             const { chatId, content } = req.body;
             const user = req.user;
             const file = req.file;
-            console.log("file => ", file);
             const message = yield this.chatService.sendMessage(chatId, content || null, user.id, file);
             (0, sendResponse_1.default)(res, 200, {
                 data: { message },

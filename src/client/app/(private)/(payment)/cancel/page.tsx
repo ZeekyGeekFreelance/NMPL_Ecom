@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { XCircle, ShoppingCart, Headphones } from "lucide-react";
+import { withAuth } from "@/app/components/HOC/WithAuth";
 
 const PaymentCancelled = () => {
   const router = useRouter();
@@ -41,6 +42,7 @@ const PaymentCancelled = () => {
       {/* Helpful Links */}
       <div className="flex space-x-6">
         <button
+          type="button"
           onClick={() => handleRedirect("/orders")}
           className="flex items-center space-x-2 text-sm font-medium text-blue-600 hover:text-blue-800"
         >
@@ -48,6 +50,7 @@ const PaymentCancelled = () => {
           <span>View Orders</span>
         </button>
         <button
+          type="button"
           onClick={() => handleRedirect("/support")}
           className="flex items-center space-x-2 text-sm font-medium text-blue-600 hover:text-blue-800"
         >
@@ -59,4 +62,4 @@ const PaymentCancelled = () => {
   );
 };
 
-export default PaymentCancelled;
+export default withAuth(PaymentCancelled, { allowedRoles: ["USER"] });

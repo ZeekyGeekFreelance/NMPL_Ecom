@@ -101,7 +101,7 @@ export class VariantRepository {
   }) {
     const { variantId, skip = 0, take = 10 } = params;
     return prisma.restock.findMany({
-      where: { variantId },
+      where: variantId === "all" ? {} : { variantId },
       orderBy: { createdAt: "desc" },
       skip,
       take,
@@ -113,7 +113,9 @@ export class VariantRepository {
   }
 
   async countRestocks(params: { variantId: string }) {
-    return prisma.restock.count({ where: { variantId: params.variantId } });
+    return prisma.restock.count({
+      where: params.variantId === "all" ? {} : { variantId: params.variantId },
+    });
   }
 
   async createVariant(data: {
@@ -124,7 +126,6 @@ export class VariantRepository {
     stock: number;
     lowStockThreshold?: number;
     barcode?: string;
-    warehouseLocation?: string;
     attributes: { attributeId: string; valueId: string }[];
   }, tx?: Prisma.TransactionClient) {
     const { attributes, ...variantData } = data;
@@ -161,7 +162,6 @@ export class VariantRepository {
       stock: number;
       lowStockThreshold?: number;
       barcode?: string;
-      warehouseLocation?: string;
       attributes: { attributeId: string; valueId: string }[];
     }>
   ) {

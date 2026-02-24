@@ -6,13 +6,29 @@ import { CheckCircle, Home, ShoppingBag, Mail, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+type SuccessAction = {
+  text: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+type SuccessConfig = {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  details?: string;
+  primaryAction: SuccessAction;
+  secondaryAction: SuccessAction;
+  nextSteps: string[];
+};
+
 const SuccessPage = () => {
   const searchParams = useSearchParams();
   const type = searchParams.get("type") || "order";
   const orderId = searchParams.get("orderId");
   const email = searchParams.get("email");
 
-  const successConfigs = {
+  const successConfigs: Record<string, SuccessConfig> = {
     order: {
       icon: CheckCircle,
       title: "Order Confirmed!",
