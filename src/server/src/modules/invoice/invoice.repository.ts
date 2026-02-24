@@ -1,0 +1,198 @@
+import prisma from "@/infra/database/database.config";
+import { Prisma } from "@prisma/client";
+
+const invoiceWithDetailsInclude = {
+  order: {
+    include: {
+      orderItems: {
+        include: {
+          variant: {
+            include: {
+              product: true,
+            },
+          },
+        },
+      },
+      payment: true,
+      address: true,
+      shipment: true,
+      transaction: true,
+    },
+  },
+  user: {
+    include: {
+      dealerProfile: true,
+    },
+  },
+} satisfies Prisma.InvoiceInclude;
+
+const orderInvoiceInclude = {
+  user: {
+    include: {
+      dealerProfile: true,
+    },
+  },
+  orderItems: {
+    include: {
+      variant: {
+        include: {
+          product: true,
+        },
+      },
+    },
+  },
+  address: true,
+  payment: true,
+  transaction: true,
+  invoice: true,
+} satisfies Prisma.OrderInclude;
+
+export type InvoiceWithDetails = Prisma.InvoiceGetPayload<{
+  include: typeof invoiceWithDetailsInclude;
+}>;
+
+export type OrderForInvoice = Prisma.OrderGetPayload<{
+  include: typeof orderInvoiceInclude;
+}>;
+
+export class InvoiceRepository {
+  async findAllInvoices() {
+    return prisma.invoice.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        order: {
+          select: {
+            id: true,
+            amount: true,
+            status: true,
+            orderDate: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            dealerProfile: {
+              select: {
+                status: true,
+                businessName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async findInvoicesByUserId(userId: string) {
+    return prisma.invoice.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        order: {
+          select: {
+            id: true,
+            amount: true,
+            status: true,
+            orderDate: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findInvoiceById(invoiceId: string): Promise<InvoiceWithDetails | null> {
+    return prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: invoiceWithDetailsInclude,
+    });
+  }
+
+  async findInvoiceByOrderId(
+    orderId: string
+  ): Promise<InvoiceWithDetails | null> {
+    return prisma.invoice.findUnique({
+      where: { orderId },
+      include: invoiceWithDetailsInclude,
+    });
+  }
+
+  async findOrderForInvoice(orderId: string): Promise<OrderForInvoice | null> {
+    return prisma.order.findUnique({
+      where: { id: orderId },
+      include: orderInvoiceInclude,
+    });
+  }
+
+  async ensureInvoiceRecord(data: {
+    orderId: string;
+    userId: string;
+    customerEmail: string;
+    year: number;
+  }): Promise<InvoiceWithDetails> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const existing = await tx.invoice.findUnique({
+            where: { orderId: data.orderId },
+            include: invoiceWithDetailsInclude,
+          });
+
+          if (existing) {
+            return existing;
+          }
+
+          const counter = await tx.invoiceCounter.upsert({
+            where: { year: data.year },
+            create: {
+              year: data.year,
+              sequence: 1,
+            },
+            update: {
+              sequence: { increment: 1 },
+            },
+          });
+
+          const sequence = String(counter.sequence).padStart(4, "0");
+          const invoiceNumber = `INV-${data.year}-${sequence}`;
+
+          return tx.invoice.create({
+            data: {
+              orderId: data.orderId,
+              userId: data.userId,
+              customerEmail: data.customerEmail,
+              invoiceNumber,
+            },
+            include: invoiceWithDetailsInclude,
+          });
+        });
+      } catch (error: unknown) {
+        const isUniqueConflict =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002";
+
+        if (!isUniqueConflict || attempt === 2) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Failed to generate invoice number after retries.");
+  }
+
+  async updateInvoiceEmailStatus(
+    invoiceId: string,
+    data: {
+      customerEmailSentAt?: Date | null;
+      internalEmailSentAt?: Date | null;
+      lastEmailError?: string | null;
+    }
+  ): Promise<void> {
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data,
+    });
+  }
+}

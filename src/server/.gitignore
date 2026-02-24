@@ -1,0 +1,4 @@
+node_modules
+.env
+src/infra/logs/*.log
+dist/infra/logs/*.log

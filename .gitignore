@@ -1,0 +1,12 @@
+node_modules/
+.recovery/
+assets/screenshots/
+.github/ISSUE_TEMPLATE/
+.husky/
+.idea/
+.vscode/
+src/client/.next/
+src/client/node_modules/
+src/server/node_modules/
+src/server/src/infra/logs/*.log
+src/server/dist/infra/logs/*.log
