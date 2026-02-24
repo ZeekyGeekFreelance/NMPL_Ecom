@@ -184,11 +184,59 @@ export class ProductController {
       }
       parsedVariants = parsedVariants.filter(Boolean);
 
+      if (parsedVariants.length === 0 && req.body.variants) {
+        try {
+          const variantsFromJson =
+            typeof req.body.variants === "string"
+              ? JSON.parse(req.body.variants)
+              : req.body.variants;
+
+          if (Array.isArray(variantsFromJson)) {
+            parsedVariants = variantsFromJson;
+          }
+        } catch (error) {
+          throw new AppError(400, "Invalid variants payload format");
+        }
+      }
+
       // Process files for each variant
       const files = (req.files as Express.Multer.File[]) || [];
       const processedVariants = parsedVariants.length
         ? await Promise.all(
             parsedVariants.map(async (variant: any, index: number) => {
+              const parsedPrice = Number(variant.price);
+              const parsedStock = Number.parseInt(String(variant.stock), 10);
+              const parsedLowStockThreshold =
+                variant.lowStockThreshold === undefined ||
+                variant.lowStockThreshold === null ||
+                variant.lowStockThreshold === ""
+                  ? 10
+                  : Number.parseInt(String(variant.lowStockThreshold), 10);
+
+              if (Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+                throw new AppError(
+                  400,
+                  `Variant at index ${index} must have a valid positive price`
+                );
+              }
+
+              if (Number.isNaN(parsedStock) || parsedStock < 0) {
+                throw new AppError(
+                  400,
+                  `Variant at index ${index} must have a valid non-negative stock number`
+                );
+              }
+
+              if (
+                Number.isNaN(parsedLowStockThreshold) ||
+                parsedLowStockThreshold < 0
+              ) {
+                throw new AppError(
+                  400,
+                  `Variant at index ${index} must have a valid non-negative low stock threshold`
+                );
+              }
+
               // Try to get files from imageIndexes or variants[${index}][images][${fileIndex}]
               let variantFiles: Express.Multer.File[] = [];
               let imageIndexes: number[] = [];
@@ -198,12 +246,7 @@ export class ProductController {
                   : [];
                 if (Array.isArray(imageIndexes)) {
                   variantFiles = imageIndexes
-                    .map((idx) =>
-                      files.find(
-                        (f) =>
-                          f.fieldname === `images` && files.indexOf(f) === idx
-                      )
-                    )
+                    .map((idx) => files[idx])
                     .filter(Boolean) as Express.Multer.File[];
                 }
               } catch {
@@ -253,18 +296,12 @@ export class ProductController {
               // Validate other fields
               if (
                 !variant.sku ||
-                typeof variant.price !== "number" ||
-                typeof variant.stock !== "number"
+                Number.isNaN(parsedPrice) ||
+                Number.isNaN(parsedStock)
               ) {
                 throw new AppError(
                   400,
                   `Variant at index ${index} must have sku, price, and stock`
-                );
-              }
-              if (variant.stock < 0) {
-                throw new AppError(
-                  400,
-                  `Variant at index ${index} must have a valid non-negative stock number`
                 );
               }
 
@@ -309,6 +346,9 @@ export class ProductController {
 
               return {
                 ...variant,
+                price: parsedPrice,
+                stock: parsedStock,
+                lowStockThreshold: parsedLowStockThreshold,
                 images: imageUrls,
                 attributes: parsedAttributes,
               };

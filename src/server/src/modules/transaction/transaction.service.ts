@@ -32,11 +32,6 @@ const userFacingStatusLabel: Record<TRANSACTION_STATUS, string> = {
   REFUNDED: "Refunded",
 };
 
-const notificationStatusSet = new Set<TRANSACTION_STATUS>([
-  TRANSACTION_STATUS.PROCESSING,
-  TRANSACTION_STATUS.DELIVERED,
-]);
-
 export class TransactionService {
   private logsService = makeLogsService();
   private invoiceService = makeInvoiceService();
@@ -158,11 +153,7 @@ export class TransactionService {
     const recipientName = transaction.order?.user?.name || "Customer";
     const recipientUserId = transaction.order?.user?.id;
 
-    if (
-      recipientEmail &&
-      recipientUserId &&
-      notificationStatusSet.has(nextStatus)
-    ) {
+    if (recipientEmail && recipientUserId) {
       await this.notifyOrderStatusChange({
         recipientEmail,
         recipientName,

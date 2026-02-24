@@ -38,13 +38,14 @@ const interactionAnalytics = {
       };
 
       const productViews: {
-        [productId: string]: { name: string; count: number };
+        [productId: string]: { name: string; slug: string | null; count: number };
       } = {};
       for (const interaction of interactions) {
         if (interaction.type.toLowerCase() === "view" && interaction.productId) {
           if (!productViews[interaction.productId]) {
             productViews[interaction.productId] = {
               name: interaction.product?.name || "Unknown",
+              slug: interaction.product?.slug || null,
               count: 0,
             };
           }
@@ -55,6 +56,7 @@ const interactionAnalytics = {
       const mostViewedProducts = Object.entries(productViews)
         .map(([productId, data]) => ({
           productId,
+          productSlug: data.slug,
           productName: data.name,
           viewCount: data.count,
         }))

@@ -95,7 +95,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.1 }}
-            className="absolute mt-1 bg-white border border-gray-100 rounded-lg shadow-lg z-10 overflow-hidden"
+            className="absolute mt-1 bg-white border border-gray-100 rounded-lg shadow-lg z-40 overflow-hidden"
             style={{ width: dropdownWidth || "auto" }}
           >
             <ul className="max-h-60 overflow-auto py-1">

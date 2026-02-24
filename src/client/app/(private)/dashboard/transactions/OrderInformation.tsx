@@ -6,6 +6,23 @@ import { ShoppingBag } from "lucide-react";
 
 const OrderInformation = ({ order, className = "" }) => {
   const format = useFormatPrice();
+
+  if (!order) {
+    return (
+      <div
+        className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md ${className}`}
+      >
+        <div className="flex items-center mb-4">
+          <ShoppingBag className="mr-2 text-blue-600" size={20} />
+          <h2 className="text-lg font-semibold">Order Information</h2>
+        </div>
+        <p className="text-sm text-gray-500">Order information is not available.</p>
+      </div>
+    );
+  }
+
+  const orderItems = Array.isArray(order.orderItems) ? order.orderItems : [];
+
   return (
     <div
       className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md ${className}`}
@@ -44,7 +61,10 @@ const OrderInformation = ({ order, className = "" }) => {
                   Item ID
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Product ID
+                  Product
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Variant
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Quantity
@@ -55,16 +75,19 @@ const OrderInformation = ({ order, className = "" }) => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {order.orderItems.map((item) => (
+              {orderItems.map((item) => (
                 <tr
                   key={item.id}
                   className="hover:bg-gray-50 transition-colors duration-150"
                 >
                   <td className="px-3 py-4 whitespace-nowrap text-sm font-mono">
-                    {item.id.substring(0, 8)}...
+                    {(item.id || "").substring(0, 8)}...
+                  </td>
+                  <td className="px-3 py-4 whitespace-nowrap text-sm">
+                    {item.variant?.product?.name || "Unknown Product"}
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-sm font-mono">
-                    {item.productId.substring(0, 8)}...
+                    {item.variant?.sku || item.variantId || "-"}
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                     {item.quantity}
@@ -74,6 +97,16 @@ const OrderInformation = ({ order, className = "" }) => {
                   </td>
                 </tr>
               ))}
+              {orderItems.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-3 py-4 text-sm text-gray-500 text-center"
+                  >
+                    No order items found.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

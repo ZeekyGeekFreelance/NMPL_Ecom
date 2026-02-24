@@ -56,6 +56,8 @@ const typeDefs = (0, graphql_tag_1.default) `
 
   type ProductPerformance {
     id: ID!
+    productId: ID!
+    productSlug: String
     name: String!
     quantity: Int!
     revenue: Float!
@@ -85,6 +87,7 @@ const typeDefs = (0, graphql_tag_1.default) `
 
   type MostViewedProduct {
     productId: ID!
+    productSlug: String
     productName: String!
     viewCount: Int!
   }

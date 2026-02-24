@@ -19,6 +19,9 @@ const TimelineEvent = ({ date, title, description, isActive }) => {
 };
 
 const TransactionTimeline = ({ transaction, payment }) => {
+  const currentStatus = transaction?.status || "PENDING";
+  const normalizedStatus = currentStatus === "SHIPPED" ? "IN_TRANSIT" : currentStatus;
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
       <div className="flex items-center mb-4">
@@ -27,24 +30,33 @@ const TransactionTimeline = ({ transaction, payment }) => {
       </div>
       <div className="border-l-2 border-gray-200 pl-4 ml-2">
         <TimelineEvent
-          date={formatDate(transaction.createdAt)}
+          date={formatDate(transaction.createdAt || transaction.transactionDate)}
           title="Transaction created"
-          description={`Initial status: ${transaction.status}`}
+          description={`Initial status: ${currentStatus}`}
           isActive={true}
         />
 
-        <TimelineEvent
-          date={formatDate(payment.createdAt)}
-          title="Payment processed"
-          description={`Status: ${payment.status}`}
-          isActive={false}
-        />
+        {payment ? (
+          <TimelineEvent
+            date={formatDate(payment.createdAt)}
+            title="Payment processed"
+            description={`Status: ${payment.status}`}
+            isActive={false}
+          />
+        ) : (
+          <TimelineEvent
+            date={formatDate(transaction.createdAt || transaction.transactionDate)}
+            title="Payment pending"
+            description="Payment record is not available yet."
+            isActive={false}
+          />
+        )}
 
-        {transaction.status !== "PENDING" && (
+        {normalizedStatus !== "PENDING" && (
           <TimelineEvent
             date={formatDate(transaction.updatedAt)}
             title="Status updated"
-            description={`Current status: ${transaction.status}`}
+            description={`Current status: ${normalizedStatus}`}
             isActive={false}
           />
         )}

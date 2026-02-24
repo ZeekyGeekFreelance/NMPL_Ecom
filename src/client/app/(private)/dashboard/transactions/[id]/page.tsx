@@ -19,6 +19,7 @@ import ShipmentInformation from "../ShipmentInformation";
 import ShippingAddress from "../ShippingAddress";
 import TransactionTimeline from "../TransactionTimeline";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
+import CustomLoader from "@/app/components/feedback/CustomLoader";
 
 const STATUS_OPTIONS = [
   { label: "Order Placed", value: "PENDING" },
@@ -46,7 +47,7 @@ const TransactionDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [newStatus, setNewStatus] = useState("");
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
   const [updateTransactionStatus, { isLoading: isUpdating }] =
@@ -61,6 +62,9 @@ const TransactionDetailsPage = () => {
     refetch,
   } = useGetTransactionQuery(id, {
     skip: !id || !isAdmin,
+    pollingInterval: 8000,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
   });
 
   const transaction = data?.transaction;
@@ -112,6 +116,10 @@ const TransactionDetailsPage = () => {
       setIsDownloadingInvoice(false);
     }
   }, [order?.id, showToast]);
+
+  if (isAuthLoading) {
+    return <CustomLoader />;
+  }
 
   if (!isAdmin) {
     return (

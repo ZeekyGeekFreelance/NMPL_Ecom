@@ -3,6 +3,18 @@
 import { MapPin } from "lucide-react";
 
 const ShippingAddress = ({ address }) => {
+  if (!address) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
+        <div className="flex items-center mb-4">
+          <MapPin className="mr-2 text-blue-600" size={20} />
+          <h2 className="text-lg font-semibold">Shipping Address</h2>
+        </div>
+        <p className="text-sm text-gray-500">Shipping address is not available.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
       <div className="flex items-center mb-4">
@@ -32,7 +44,7 @@ const ShippingAddress = ({ address }) => {
         </div>
         <div>
           <p className="text-sm text-gray-500">Address ID</p>
-          <p className="font-mono">{address.id.substring(0, 8)}...</p>
+          <p className="font-mono">{(address.id || "").substring(0, 8)}...</p>
         </div>
       </div>
     </div>

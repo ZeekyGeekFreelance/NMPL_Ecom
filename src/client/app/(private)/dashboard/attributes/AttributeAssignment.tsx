@@ -6,10 +6,8 @@ import { TagsIcon } from "lucide-react";
 import useToast from "@/app/hooks/ui/useToast";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
-import { useGetAllProductsQuery } from "@/app/store/apis/ProductApi";
 import {
   useAssignAttributeToCategoryMutation,
-  useAssignAttributeToProductMutation,
 } from "@/app/store/apis/AttributeApi";
 import CategoryAssignmentSection from "./CategoryAssignment";
 // import ProductAssignmentSection from "./ProductsAssignment";
@@ -48,13 +46,9 @@ const AttributeAssignment: React.FC<AttributeAssignmentProps> = ({
 
   // API queries
   const { data: categoriesData } = useGetAllCategoriesQuery(undefined);
-  const { data: productsData } = useGetAllProductsQuery(undefined);
-
   // Mutations
   const [assignAttributeToCategory, { isLoading: isAssigningToCategory }] =
     useAssignAttributeToCategoryMutation();
-  const [assignAttributeToProduct, { isLoading: isAssigningToProduct }] =
-    useAssignAttributeToProductMutation();
 
   // Dropdown options
   const attributeOptions =
@@ -69,12 +63,6 @@ const AttributeAssignment: React.FC<AttributeAssignmentProps> = ({
       value: cat.id,
     })) || [];
 
-  const productOptions =
-    productsData?.products?.map((prod: any) => ({
-      label: prod.name,
-      value: prod.id,
-    })) || [];
-
   // Handle category assignment
   const onAssignToCategory = async (data: AssignFormData) => {
     if (!data.attributeId || !data.categoryId) {
@@ -87,33 +75,13 @@ const AttributeAssignment: React.FC<AttributeAssignmentProps> = ({
         categoryId: data.categoryId,
         attributeId: data.attributeId,
         isRequired: data.isRequired,
-      });
+      }).unwrap();
       showToast("Attribute assigned to category successfully", "success");
       setValue("categoryId", "");
       setValue("isRequired", false);
     } catch (err) {
       console.error("Error assigning to category:", err);
       showToast("Failed to assign attribute to category", "error");
-    }
-  };
-
-  // Handle product assignment
-  const onAssignToProduct = async (data: AssignFormData) => {
-    if (!data.attributeId || !data.productId) {
-      showToast("Please select an attribute and product", "error");
-      return;
-    }
-
-    try {
-      await assignAttributeToProduct({
-        attributeId: data.attributeId,
-        productId: data.productId,
-      });
-      showToast("Attribute assigned to product successfully", "success");
-      setValue("productId", "");
-    } catch (err) {
-      console.error("Error assigning to product:", err);
-      showToast("Failed to assign attribute to product", "error");
     }
   };
 

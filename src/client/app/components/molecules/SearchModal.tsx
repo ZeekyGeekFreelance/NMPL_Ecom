@@ -33,10 +33,16 @@ interface SearchModalProps {
 
 // Centralized route configuration
 const ROUTES = {
-  transaction: (id: string) => `/transactions/${id}`,
+  transaction: (id: string) => `/dashboard/transactions/${id}`,
   product: (id: string) => `/dashboard/products/${id}`,
-  category: (id: string) => `/dashboard/categories/${id}`,
-  user: (id: string) => `/dashboard/users/${id}`,
+  category: (id: string) => {
+    void id;
+    return "/dashboard/categories";
+  },
+  user: (id: string) => {
+    void id;
+    return "/dashboard/users";
+  },
 };
 
 // Type icons mapping

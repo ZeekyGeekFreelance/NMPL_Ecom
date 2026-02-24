@@ -41,6 +41,9 @@ const TransactionsDashboard = () => {
 
   const { data, isLoading } = useGetAllTransactionsQuery(undefined, {
     skip: !shouldFetchTransactions,
+    pollingInterval: 8000,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
   });
   const [updateTransactionStatus, { error: updateError }] =
     useUpdateTransactionStatusMutation();
@@ -99,7 +102,7 @@ const TransactionsDashboard = () => {
       const res = await updateTransactionStatus({
         id: selectedTransaction.id,
         status: newStatus,
-      });
+      }).unwrap();
       debugLog("res => ", res);
       showToast("Status updated successfully", "success");
     } catch (err) {
@@ -268,11 +271,11 @@ const TransactionsDashboard = () => {
 
       {/* Update Status Modal */}
       <Modal open={isStatusModalOpen} onClose={cancelStatusUpdate}>
-        <div className="flex max-h-[70vh] flex-col">
+        <div className="flex max-h-[82vh] flex-col">
           <h2 className="text-lg font-semibold mb-4 pr-10">
             Update Transaction Status
           </h2>
-          <div className="space-y-4 overflow-y-auto pr-1">
+          <div className="space-y-4 overflow-y-auto pr-1 pb-40">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Transaction ID
@@ -284,7 +287,7 @@ const TransactionsDashboard = () => {
                 disabled
               />
             </div>
-            <div className="pb-2">
+            <div className="pb-2 relative z-30">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Status
               </label>
@@ -292,7 +295,7 @@ const TransactionsDashboard = () => {
                 options={TRANSACTION_STATUSES}
                 value={newStatus}
                 onChange={(value) => setNewStatus(value || "")}
-                className="w-full"
+                className="w-full min-h-[42px]"
               />
             </div>
           </div>

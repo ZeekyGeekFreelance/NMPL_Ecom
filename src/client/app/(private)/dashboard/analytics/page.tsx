@@ -130,27 +130,43 @@ const AnalyticsDashboard = () => {
 
   const topItems =
     data?.productPerformance?.slice(0, 10).map((p) => ({
-      id: p.id,
+      id: p.productId || p.id,
+      slug: p.productSlug || undefined,
       name: p.name,
+      subtitle: p.productSlug ? `/${p.productSlug}` : "Product",
+      primaryInfo: formatPrice(p.revenue),
+      secondaryInfo: `${p.quantity} sold`,
       quantity: p.quantity,
       revenue: formatPrice(p.revenue),
+      href: p.productSlug
+        ? `/product/${p.productSlug}`
+        : `/dashboard/products/${p.productId || p.id}`,
     })) || [];
 
   const topUsers =
     data?.userAnalytics?.topUsers?.slice(0, 10).map((u) => ({
       id: u.id,
       name: u.name,
+      subtitle: u.email,
+      primaryInfo: formatPrice(u.totalSpent),
+      secondaryInfo: `${u.orderCount} orders`,
       email: u.email,
       orderCount: u.orderCount,
       totalSpent: formatPrice(u.totalSpent),
       engagementScore: u.engagementScore,
+      href: "/dashboard/users",
     })) || [];
 
   const mostViewedProducts =
     data?.interactionAnalytics?.mostViewedProducts?.slice(0, 10).map((p) => ({
       id: p.productId,
+      slug: p.productSlug || undefined,
       name: p.productName,
+      subtitle: p.productSlug ? `/${p.productSlug}` : "Most viewed",
+      primaryInfo: p.viewCount,
+      secondaryInfo: `${p.viewCount} views`,
       viewCount: p.viewCount,
+      href: p.productSlug ? `/product/${p.productSlug}` : `/shop`,
     })) || [];
 
   const exportTypeOptions = [
@@ -345,7 +361,7 @@ const AnalyticsDashboard = () => {
       </div>
 
       {/* Lists */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2Gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-2">
         <ListCard
           title="Top Products"
           viewAllLink="/shop"

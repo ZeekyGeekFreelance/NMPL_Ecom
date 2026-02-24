@@ -40,10 +40,6 @@ const userFacingStatusLabel = {
     RETURNED: "Returned",
     REFUNDED: "Refunded",
 };
-const notificationStatusSet = new Set([
-    client_1.TRANSACTION_STATUS.PROCESSING,
-    client_1.TRANSACTION_STATUS.DELIVERED,
-]);
 class TransactionService {
     constructor(transactionRepository) {
         this.transactionRepository = transactionRepository;
@@ -135,9 +131,7 @@ class TransactionService {
             const recipientEmail = (_b = (_a = transaction.order) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.email;
             const recipientName = ((_d = (_c = transaction.order) === null || _c === void 0 ? void 0 : _c.user) === null || _d === void 0 ? void 0 : _d.name) || "Customer";
             const recipientUserId = (_f = (_e = transaction.order) === null || _e === void 0 ? void 0 : _e.user) === null || _f === void 0 ? void 0 : _f.id;
-            if (recipientEmail &&
-                recipientUserId &&
-                notificationStatusSet.has(nextStatus)) {
+            if (recipientEmail && recipientUserId) {
                 yield this.notifyOrderStatusChange({
                     recipientEmail,
                     recipientName,

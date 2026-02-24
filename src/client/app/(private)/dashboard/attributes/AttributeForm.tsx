@@ -21,7 +21,7 @@ const AttributeForm: React.FC<any> = () => {
     try {
       await createAttribute({
         name: newAttribute.name,
-      });
+      }).unwrap();
       showToast("Attribute created successfully", "success");
       setNewAttribute({ name: "" });
     } catch (err) {

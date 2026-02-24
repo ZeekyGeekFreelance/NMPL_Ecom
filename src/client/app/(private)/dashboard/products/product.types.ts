@@ -11,7 +11,7 @@ export interface ProductFormData {
     id: string;
     sku: string;
     price: number;
-    images: File[];
+    images: Array<File | string>;
     stock: number;
     lowStockThreshold?: number;
     barcode?: string;

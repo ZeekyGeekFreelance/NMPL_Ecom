@@ -13,7 +13,7 @@ const analytics_1 = require("@/shared/utils/analytics");
 const interactionAnalytics = {
     Query: {
         interactionAnalytics: (_1, _a, _b) => __awaiter(void 0, [_1, _a, _b], void 0, function* (_, { params }, { prisma }) {
-            var _c;
+            var _c, _d;
             const { timePeriod, year, startDate, endDate } = params;
             const { currentStartDate, yearStart, yearEnd } = (0, analytics_1.getDateRange)({
                 timePeriod,
@@ -39,6 +39,7 @@ const interactionAnalytics = {
                     if (!productViews[interaction.productId]) {
                         productViews[interaction.productId] = {
                             name: ((_c = interaction.product) === null || _c === void 0 ? void 0 : _c.name) || "Unknown",
+                            slug: ((_d = interaction.product) === null || _d === void 0 ? void 0 : _d.slug) || null,
                             count: 0,
                         };
                     }
@@ -48,6 +49,7 @@ const interactionAnalytics = {
             const mostViewedProducts = Object.entries(productViews)
                 .map(([productId, data]) => ({
                 productId,
+                productSlug: data.slug,
                 productName: data.name,
                 viewCount: data.count,
             }))

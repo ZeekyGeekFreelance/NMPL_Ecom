@@ -21,6 +21,9 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   showTitle = false,
 }) => {
   if (error) {
+    const friendlyErrorMessage =
+      "We couldn't load products right now. Please refresh and try again.";
+
     return (
       <section className="py-8 sm:py-12 lg:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -32,7 +35,10 @@ const ProductSection: React.FC<ProductSectionProps> = ({
               <h3 className="text-xl font-semibold text-red-700 mb-2">
                 Error loading {title.toLowerCase()}
               </h3>
-              <p className="text-red-600 text-sm">{error.message}</p>
+              <p className="text-red-600 text-sm">{friendlyErrorMessage}</p>
+              {process.env.NODE_ENV !== "production" && (
+                <p className="text-red-500 text-xs mt-2">{error.message}</p>
+              )}
             </div>
           </div>
         </div>

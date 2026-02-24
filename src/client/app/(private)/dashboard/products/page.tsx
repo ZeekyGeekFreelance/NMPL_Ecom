@@ -117,7 +117,49 @@ const ProductsDashboard = () => {
     payload.append("isBestSeller", data.isBestSeller.toString());
     payload.append("isFeatured", data.isFeatured.toString());
     payload.append("categoryId", data.categoryId || "");
-    payload.append("variants", JSON.stringify(data.variants));
+
+    let imageIndex = 0;
+    data.variants.forEach((variant, index) => {
+      payload.append(`variants[${index}][id]`, variant.id || "");
+      payload.append(`variants[${index}][sku]`, variant.sku || "");
+      payload.append(`variants[${index}][price]`, String(variant.price ?? 0));
+      payload.append(`variants[${index}][stock]`, String(variant.stock ?? 0));
+      payload.append(
+        `variants[${index}][lowStockThreshold]`,
+        String(variant.lowStockThreshold ?? 10)
+      );
+      payload.append(`variants[${index}][barcode]`, variant.barcode || "");
+      payload.append(
+        `variants[${index}][warehouseLocation]`,
+        variant.warehouseLocation || ""
+      );
+      payload.append(
+        `variants[${index}][attributes]`,
+        JSON.stringify(variant.attributes || [])
+      );
+
+      const existingImages: string[] = [];
+      const imageIndexes: number[] = [];
+
+      (variant.images || []).forEach((image) => {
+        if (image instanceof File) {
+          payload.append("images", image);
+          imageIndexes.push(imageIndex);
+          imageIndex += 1;
+        } else if (typeof image === "string" && image.trim()) {
+          existingImages.push(image);
+        }
+      });
+
+      payload.append(
+        `variants[${index}][images]`,
+        JSON.stringify(existingImages)
+      );
+      payload.append(
+        `variants[${index}][imageIndexes]`,
+        JSON.stringify(imageIndexes)
+      );
+    });
 
     try {
       await updateProduct({

@@ -13,6 +13,7 @@ const analytics_1 = require("@/shared/utils/analytics");
 const productPerformance = {
     Query: {
         productPerformance: (_1, _a, _b) => __awaiter(void 0, [_1, _a, _b], void 0, function* (_, { params }, { prisma }) {
+            var _c, _d, _e;
             const { timePeriod, year, startDate, endDate, category } = params;
             const { currentStartDate, yearStart, yearEnd } = (0, analytics_1.getDateRange)({
                 timePeriod,
@@ -25,15 +26,31 @@ const productPerformance = {
                     createdAt: Object.assign(Object.assign(Object.assign(Object.assign({}, (currentStartDate && { gte: currentStartDate })), (endDate && { lte: new Date(endDate) })), (yearStart && { gte: yearStart })), (yearEnd && { lte: yearEnd })),
                     // category filter commented out; adjust if needed
                 },
-                include: { variant: true },
+                include: {
+                    variant: {
+                        include: {
+                            product: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    slug: true,
+                                },
+                            },
+                        },
+                    },
+                },
             });
             const productSales = {};
             for (const item of orderItems) {
-                const productId = item.variantId;
+                const productId = ((_c = item.variant.product) === null || _c === void 0 ? void 0 : _c.id) || item.variantId;
+                const productName = ((_d = item.variant.product) === null || _d === void 0 ? void 0 : _d.name) || item.variant.sku || "Unknown";
+                const productSlug = ((_e = item.variant.product) === null || _e === void 0 ? void 0 : _e.slug) || null;
                 if (!productSales[productId]) {
                     productSales[productId] = {
                         id: productId,
-                        name: item.variant.sku || "Unknown",
+                        productId,
+                        productSlug,
+                        name: productName,
                         quantity: 0,
                         revenue: 0,
                     };

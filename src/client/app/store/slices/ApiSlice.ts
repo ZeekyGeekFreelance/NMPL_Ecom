@@ -4,6 +4,8 @@ import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const ENABLE_NATIVE_CONFIRMATION =
+  process.env.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM === "true";
 
 const CONFIRMATION_REQUIRED_PATHS = [
   /^\/users(\/|$)/,
@@ -131,6 +133,12 @@ const handleUnauthorizedState = (api: any) => {
 
 const shouldConfirmMutation = (args: any) => {
   if (typeof window === "undefined") {
+    return false;
+  }
+
+  // Dedicated modal confirmations are used throughout the dashboard.
+  // Keep native confirm opt-in to avoid duplicate prompts and false success flows.
+  if (!ENABLE_NATIVE_CONFIRMATION) {
     return false;
   }
 

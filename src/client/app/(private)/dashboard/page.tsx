@@ -58,10 +58,17 @@ const Dashboard = () => {
 
   const topItems =
     data?.productPerformance?.slice(0, 10).map((p) => ({
-      id: p.id,
+      id: p.productId || p.id,
+      slug: p.productSlug || undefined,
       name: p.name,
+      subtitle: p.productSlug ? `/${p.productSlug}` : "Product",
+      primaryInfo: formatPrice(p.revenue),
+      secondaryInfo: `${p.quantity} sold`,
       quantity: p.quantity,
       revenue: formatPrice(p.revenue),
+      href: p.productSlug
+        ? `/product/${p.productSlug}`
+        : `/dashboard/products/${p.productId || p.id}`,
     })) || [];
 
   const salesByProduct = {

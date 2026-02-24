@@ -38,7 +38,7 @@ const AttributesBoardView = ({ attributes = [] }) => {
     if (!value) return;
 
     try {
-      await createAttributeValue({ attributeId, value });
+      await createAttributeValue({ attributeId, value }).unwrap();
       showToast("Attribute value created successfully", "success");
       setNewValue((prev) => ({ ...prev, [attributeId]: "" }));
     } catch (err) {
@@ -52,10 +52,10 @@ const AttributesBoardView = ({ attributes = [] }) => {
     if (!deleteModal.id) return;
     try {
       if (deleteModal.type === "attribute") {
-        await deleteAttribute(deleteModal.id);
+        await deleteAttribute(deleteModal.id).unwrap();
         showToast("Attribute deleted successfully", "success");
       } else if (deleteModal.type === "value") {
-        await deleteAttributeValue(deleteModal.id);
+        await deleteAttributeValue(deleteModal.id).unwrap();
         showToast("Attribute value deleted successfully", "success");
       }
     } catch (err) {

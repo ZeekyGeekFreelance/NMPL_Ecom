@@ -42,6 +42,8 @@ export const GET_ANALYTICS_OVERVIEW = gql`
 
     productPerformance(params: $params) {
       id
+      productId
+      productSlug
       name
       quantity
       revenue
@@ -105,6 +107,8 @@ export const GET_ALL_ANALYTICS = gql`
     }
     productPerformance(params: $params) {
       id
+      productId
+      productSlug
       name
       quantity
       revenue
@@ -118,6 +122,7 @@ export const GET_ALL_ANALYTICS = gql`
       }
       mostViewedProducts {
         productId
+        productSlug
         productName
         viewCount
       }

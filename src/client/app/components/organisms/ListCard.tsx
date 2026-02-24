@@ -7,10 +7,18 @@ import Image from "next/image";
 export interface Item {
   id: number | string;
   name: string;
-  subtitle: string;
-  primaryInfo: string;
-  secondaryInfo: string;
-  image: string;
+  subtitle?: string;
+  primaryInfo?: string | number;
+  secondaryInfo?: string | number;
+  image?: string;
+  slug?: string;
+  href?: string;
+  quantity?: number;
+  revenue?: string;
+  orderCount?: number;
+  totalSpent?: string;
+  viewCount?: number;
+  email?: string;
 }
 
 interface ListCardProps {
@@ -26,7 +34,7 @@ const ListCard = ({
   items = [],
   itemType = "product",
 }: ListCardProps) => {
-  const defaultViewAllLink = itemType === "product" ? "/shop" : "/users";
+  const defaultViewAllLink = itemType === "product" ? "/shop" : "/dashboard/users";
   const finalViewAllLink = viewAllLink || defaultViewAllLink;
 
   return (
@@ -76,8 +84,32 @@ const ListItem = ({
 
   const detailUrl =
     itemType === "product"
-      ? `/shop/product/${item.id}`
-      : `/dashboard/users/${item.id}`;
+      ? item.href ||
+        (item.slug ? `/product/${item.slug}` : `/shop?searchQuery=${encodeURIComponent(item.name)}`)
+      : item.href || "/dashboard/users";
+
+  const subtitle =
+    item.subtitle ||
+    (itemType === "product" ? "Product details" : item.email || "User details");
+
+  const primaryInfo =
+    item.primaryInfo ??
+    item.revenue ??
+    item.totalSpent ??
+    item.quantity ??
+    item.orderCount ??
+    item.viewCount ??
+    "-";
+
+  const secondaryInfo =
+    item.secondaryInfo ??
+    (item.quantity !== undefined
+      ? `${item.quantity} sold`
+      : item.viewCount !== undefined
+      ? `${item.viewCount} views`
+      : item.orderCount !== undefined
+      ? `${item.orderCount} orders`
+      : "");
 
   return (
     <Link
@@ -113,16 +145,16 @@ const ListItem = ({
             <h4 className="text-sm font-medium text-gray-900 truncate">
               {item.name}
             </h4>
-            <p className="text-xs text-gray-500 truncate">{item.subtitle}</p>
+            <p className="text-xs text-gray-500 truncate">{subtitle}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-sm font-medium text-gray-900">
-              {item.primaryInfo}
-            </p>
-            <p className="text-xs text-gray-500">{item.secondaryInfo}</p>
+            <p className="text-sm font-medium text-gray-900">{primaryInfo}</p>
+            {secondaryInfo ? (
+              <p className="text-xs text-gray-500">{secondaryInfo}</p>
+            ) : null}
           </div>
           <ChevronRight
             className={`w-4 h-4 transition-colors ${

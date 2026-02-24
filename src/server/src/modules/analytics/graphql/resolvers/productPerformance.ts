@@ -26,12 +26,26 @@ const productPerformance = {
           },
           // category filter commented out; adjust if needed
         },
-        include: { variant: true },
+        include: {
+          variant: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       const productSales: {
         [key: string]: {
           id: string;
+          productId: string;
+          productSlug: string | null;
           name: string;
           quantity: number;
           revenue: number;
@@ -39,11 +53,16 @@ const productPerformance = {
       } = {};
 
       for (const item of orderItems) {
-        const productId = item.variantId;
+        const productId = item.variant.product?.id || item.variantId;
+        const productName = item.variant.product?.name || item.variant.sku || "Unknown";
+        const productSlug = item.variant.product?.slug || null;
+
         if (!productSales[productId]) {
           productSales[productId] = {
             id: productId,
-            name: item.variant.sku || "Unknown",
+            productId,
+            productSlug,
+            name: productName,
             quantity: 0,
             revenue: 0,
           };
