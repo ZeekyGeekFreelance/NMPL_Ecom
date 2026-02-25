@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@apollo/client";
 import { GET_PRODUCTS } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 type SearchFormValues = {
   searchQuery: string;
@@ -97,6 +98,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const searchQuery = watch("searchQuery");
   const router = useRouter();
+  const formatPrice = useFormatPrice();
 
   const normalizedSearchQuery = searchQuery.trim();
 
@@ -302,7 +304,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                             <p className="text-xs text-gray-500 truncate">
                               {product.category?.name || "Uncategorized"}{" "}
                               {Number.isFinite(minPrice)
-                                ? `- $${minPrice.toFixed(2)}`
+                                ? `- ${formatPrice(minPrice)}`
                                 : ""}
                             </p>
                           </button>

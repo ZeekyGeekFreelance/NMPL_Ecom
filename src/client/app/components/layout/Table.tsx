@@ -39,6 +39,8 @@ interface TableProps {
   expandedRowId?: string | null;
   renderExpandedRow?: (row: any) => React.ReactNode;
   className?: string;
+  initialSortKey?: string | null;
+  initialSortDirection?: "asc" | "desc";
 }
 
 const getNestedValue = (obj: any, key: string): any =>
@@ -160,10 +162,14 @@ const Table: React.FC<TableProps> = ({
   expandedRowId = null,
   renderExpandedRow,
   className = "",
+  initialSortKey = null,
+  initialSortDirection = "asc",
 }) => {
   const router = useRouter();
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<string | null>(initialSortKey);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+    initialSortDirection
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
@@ -197,11 +203,21 @@ const Table: React.FC<TableProps> = ({
     });
   }, [data]);
 
+  useEffect(() => {
+    setSortKey(initialSortKey);
+    setSortDirection(initialSortDirection);
+  }, [initialSortDirection, initialSortKey]);
+
   const handleSort = (key: string) => {
     setSortKey((previousSortKey) => {
-      setSortDirection((previousDirection) =>
-        previousSortKey === key && previousDirection === "asc" ? "desc" : "asc"
-      );
+      if (previousSortKey === key) {
+        setSortDirection((previousDirection) =>
+          previousDirection === "asc" ? "desc" : "asc"
+        );
+        return previousSortKey;
+      }
+
+      setSortDirection("asc");
       return key;
     });
   };
@@ -306,8 +322,8 @@ const Table: React.FC<TableProps> = ({
 
   const handleRefresh = useCallback(() => {
     setSearchQuery("");
-    setSortKey(null);
-    setSortDirection("asc");
+    setSortKey(initialSortKey);
+    setSortDirection(initialSortDirection);
     setSelectedRows(new Set());
 
     Promise.resolve(onRefresh?.())
@@ -319,7 +335,7 @@ const Table: React.FC<TableProps> = ({
       .finally(() => {
       router.refresh();
       });
-  }, [onRefresh, router]);
+  }, [initialSortDirection, initialSortKey, onRefresh, router]);
 
   const handleSelectRow = (rowId: string) => {
     setSelectedRows((previousSelectedRows) => {

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MainLayout from "@/app/components/templates/MainLayout";
 import BreadCrumb from "@/app/components/feedback/BreadCrumb";
 import { useParams } from "next/navigation";
@@ -20,6 +20,9 @@ const debugLog = (...args: unknown[]) => {
   }
 };
 
+const getDefaultVariant = (variants: Product["variants"]) =>
+  variants.find((variant) => variant.stock > 0) || variants[0] || null;
+
 const ProductDetailsPage = () => {
   const { slug } = useParams();
   const dealerCatalogPollInterval = useDealerCatalogPollInterval();
@@ -39,6 +42,30 @@ const ProductDetailsPage = () => {
   const [selectedAttributes, setSelectedAttributes] = useState<
     Record<string, string>
   >({});
+
+  useEffect(() => {
+    const firstVariant = data?.product?.variants
+      ? getDefaultVariant(data.product.variants)
+      : null;
+    if (!firstVariant) {
+      return;
+    }
+
+    setSelectedVariant((current) => current || firstVariant);
+    setSelectedAttributes((current) => {
+      if (Object.keys(current).length > 0) {
+        return current;
+      }
+
+      return firstVariant.attributes.reduce(
+        (acc, attribute) => {
+          acc[attribute.attribute.name] = attribute.value.value;
+          return acc;
+        },
+        {} as Record<string, string>
+      );
+    });
+  }, [data?.product?.id]);
 
   if (loading) return <ProductDetailSkeletonLoader />;
 
@@ -93,8 +120,23 @@ const ProductDetailsPage = () => {
   }, {} as Record<string, { values: Set<string> }>);
 
   const resetSelections = () => {
-    setSelectedAttributes({});
-    setSelectedVariant(null);
+    const firstVariant = getDefaultVariant(product.variants);
+    if (!firstVariant) {
+      setSelectedAttributes({});
+      setSelectedVariant(null);
+      return;
+    }
+
+    const defaultAttributes = firstVariant.attributes.reduce(
+      (acc, attribute) => {
+        acc[attribute.attribute.name] = attribute.value.value;
+        return acc;
+      },
+      {} as Record<string, string>
+    );
+
+    setSelectedAttributes(defaultAttributes);
+    setSelectedVariant(firstVariant);
   };
 
   const handleVariantChange = (attributeName: string, value: string) => {
@@ -106,11 +148,11 @@ const ProductDetailsPage = () => {
           attrName === "" ||
           v.attributes.some(
             (attr) =>
-              attr.attribute.name === attrName && attr.value.value === attrValue
+            attr.attribute.name === attrName && attr.value.value === attrValue
           )
       )
     );
-    setSelectedVariant(variant || null);
+    setSelectedVariant(variant || getDefaultVariant(product.variants));
   };
 
   return (

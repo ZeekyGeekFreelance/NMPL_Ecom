@@ -160,7 +160,7 @@ class WebhookService {
                 const transaction = yield tx.transaction.create({
                     data: {
                         orderId: order.id,
-                        status: client_1.TRANSACTION_STATUS.PENDING,
+                        status: client_1.TRANSACTION_STATUS.PLACED,
                         transactionDate: new Date(),
                     },
                 });

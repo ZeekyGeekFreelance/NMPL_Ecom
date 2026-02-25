@@ -13,6 +13,7 @@ import { useAuth } from "@/app/hooks/useAuth";
 import useClickOutside from "@/app/hooks/dom/useClickOutside";
 import { useGetDealersQuery } from "@/app/store/apis/UserApi";
 import { useGetAllTransactionsQuery } from "@/app/store/apis/TransactionApi";
+import { normalizeOrderStatus } from "@/app/lib/orderLifecycle";
 
 type ActionMessage = {
   id: string;
@@ -62,23 +63,20 @@ export default function DashboardLayout({
   const transactionStatuses = useMemo(
     () =>
       ((transactionsData?.transactions || []) as Array<{ status?: string }>).map(
-        (transaction) =>
-          transaction.status === "SHIPPED"
-            ? "IN_TRANSIT"
-            : transaction.status || "PENDING"
+        (transaction) => normalizeOrderStatus(transaction.status || "PLACED")
       ),
     [transactionsData?.transactions]
   );
 
   const pendingConfirmationCount = useMemo(
-    () => transactionStatuses.filter((status) => status === "PENDING").length,
+    () => transactionStatuses.filter((status) => status === "PLACED").length,
     [transactionStatuses]
   );
 
   const deliveryActionCount = useMemo(
     () =>
       transactionStatuses.filter(
-        (status) => status === "PROCESSING" || status === "IN_TRANSIT"
+        (status) => status === "CONFIRMED"
       ).length,
     [transactionStatuses]
   );

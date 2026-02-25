@@ -1,6 +1,7 @@
 "use client";
 import { Loader2, Package, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 interface ProductHeaderProps {
   product: {
@@ -18,13 +19,14 @@ const ProductHeader: React.FC<ProductHeaderProps> = ({
   isDeleting,
   onDelete,
 }) => {
+  const formatPrice = useFormatPrice();
   const formattedPrice =
     typeof product.price === "number"
-      ? `$${product.price.toFixed(2)}`
-      : "$0.00";
+      ? formatPrice(product.price)
+      : formatPrice(0);
   const hasDiscount = product.discount && product.discount > 0;
   //   const discountedPrice = hasDiscount
-  //     ? `$${(product.price * (1 - product.discount / 100)).toFixed(2)}`
+  //     ? formatPrice(product.price * (1 - product.discount / 100))
   //     : null;
 
   return (

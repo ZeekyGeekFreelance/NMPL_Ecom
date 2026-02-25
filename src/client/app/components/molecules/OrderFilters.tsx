@@ -16,14 +16,10 @@ const OrderFilters: React.FC<OrderFiltersProps> = ({
 }) => {
   const statusOptions = [
     { value: "", label: "All Orders" },
-    { value: "PENDING", label: "Pending" },
-    { value: "PROCESSING", label: "Processing" },
-    { value: "SHIPPED", label: "Shipped" },
-    { value: "IN_TRANSIT", label: "In Transit" },
+    { value: "PLACED", label: "Placed" },
+    { value: "CONFIRMED", label: "Confirmed" },
+    { value: "REJECTED", label: "Cancelled" },
     { value: "DELIVERED", label: "Delivered" },
-    { value: "CANCELED", label: "Canceled" },
-    { value: "RETURNED", label: "Returned" },
-    { value: "REFUNDED", label: "Refunded" },
   ];
 
   return (

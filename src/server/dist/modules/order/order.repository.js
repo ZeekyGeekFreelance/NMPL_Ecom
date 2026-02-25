@@ -92,7 +92,7 @@ class OrderRepository {
                     data: {
                         userId: data.userId,
                         amount: computedAmount,
-                        status: "PENDING",
+                        status: "PLACED",
                         orderItems: {
                             create: data.orderItems.map((item) => ({
                                 variantId: item.variantId,
@@ -110,7 +110,7 @@ class OrderRepository {
                         },
                         transaction: {
                             create: {
-                                status: client_1.TRANSACTION_STATUS.PENDING,
+                                status: client_1.TRANSACTION_STATUS.PLACED,
                             },
                         },
                     },

@@ -31,6 +31,7 @@ import PermissionGuard from "@/app/components/auth/PermissionGuard";
 import RoleHierarchyGuard from "@/app/components/auth/RoleHierarchyGuard";
 import AdminActionGuard from "@/app/components/auth/AdminActionGuard";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
+import formatDate from "@/app/utils/formatDate";
 
 const UsersDashboard = () => {
   const { showToast } = useToast();
@@ -159,11 +160,7 @@ const UsersDashboard = () => {
       sortable: true,
       render: (row: any) => (
         <span className="text-sm text-gray-600">
-          {new Date(row.createdAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
+          {formatDate(row.createdAt)}
         </span>
       ),
     },
@@ -173,11 +170,7 @@ const UsersDashboard = () => {
       sortable: true,
       render: (row: any) => (
         <span className="text-sm text-gray-600">
-          {new Date(row.updatedAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
+          {formatDate(row.updatedAt)}
         </span>
       ),
     },

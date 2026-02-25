@@ -19,6 +19,7 @@ import {
   removeGuestCartItem,
   updateGuestCartQuantity,
 } from "@/app/store/slices/GuestCartSlice";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 const isDevelopment = process.env.NODE_ENV !== "production";
 const debugLog = (...args: unknown[]) => {
@@ -39,6 +40,7 @@ const formatVariantName = (item: any) => {
 
 const Cart = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const formatPrice = useFormatPrice();
   const isCustomerUser = isAuthenticated && user?.role === "USER";
   const isAdminOrSuperAdmin = isAuthenticated && user?.role !== "USER";
 
@@ -211,7 +213,7 @@ const Cart = () => {
                     </p>
                     <p className="text-xs text-gray-500">SKU: {item.variant.sku}</p>
                     <p className="text-xs sm:text-sm text-gray-500">
-                      ${item.variant.price.toFixed(2)}
+                      {formatPrice(item.variant.price)}
                     </p>
                   </div>
 
@@ -243,7 +245,7 @@ const Cart = () => {
                   {/* Subtotal and Remove */}
                   <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 w-full sm:w-auto">
                     <p className="font-medium text-gray-800 text-sm sm:text-base">
-                      ${(item.variant.price * item.quantity).toFixed(2)}
+                      {formatPrice(item.variant.price * item.quantity)}
                     </p>
                     <button
                       onClick={() => handleRemoveFromCart(item)}
@@ -260,7 +262,6 @@ const Cart = () => {
             <CartSummary
               subtotal={subtotal}
               totalItems={totalItems}
-              cartId={isCustomerUser ? data?.cart?.id : undefined}
             />
           </div>
         )}

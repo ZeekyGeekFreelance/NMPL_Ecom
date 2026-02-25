@@ -37,7 +37,7 @@ const Topbar = ({
     shopText: "Shop Now",
     dispatchText: "Same Day Dispatch Before 2PM",
     giftCardText: "Gift Cards Available",
-    shippingText: "Free Shipping on Orders $50+",
+    shippingText: "Free Shipping on Orders ₹50+",
   };
 
   const { shopLink, shopText, dispatchText, giftCardText, shippingText } =

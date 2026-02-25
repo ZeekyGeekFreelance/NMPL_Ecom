@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/app/lib/constants/config";
+import { toOrderReference } from "./accountReference";
 
 const getFileNameFromDisposition = (
   contentDisposition: string | null,
@@ -36,7 +37,7 @@ export const downloadInvoiceByOrderId = async (orderId: string) => {
   }
 
   const blob = await response.blob();
-  const fallbackName = `invoice-${orderId}.pdf`;
+  const fallbackName = `invoice-${toOrderReference(orderId)}.pdf`;
   const fileName = getFileNameFromDisposition(
     response.headers.get("content-disposition"),
     fallbackName

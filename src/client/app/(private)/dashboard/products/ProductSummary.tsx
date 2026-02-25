@@ -3,6 +3,7 @@ import { Archive, Loader2, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { toProductReference } from "@/app/lib/utils/accountReference";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 interface ProductSummaryProps {
   product: {
@@ -29,13 +30,14 @@ const ProductSummary: React.FC<ProductSummaryProps> = ({
   onSave,
 }) => {
   const router = useRouter();
+  const formatPrice = useFormatPrice();
   const formattedPrice =
     typeof product.price === "number"
-      ? `$${product.price.toFixed(2)}`
-      : "$0.00";
+      ? formatPrice(product.price)
+      : formatPrice(0);
   const hasDiscount = product.discount && product.discount > 0;
   const discountedPrice = hasDiscount
-    ? `$${(product.price * (1 - product.discount / 100)).toFixed(2)}`
+    ? formatPrice(product.price * (1 - product.discount / 100))
     : null;
 
   return (

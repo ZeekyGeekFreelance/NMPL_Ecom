@@ -155,9 +155,21 @@ class InvoiceService {
             if (!order) {
                 throw new AppError_1.default(404, "Order not found");
             }
-            const transactionStatus = ((_a = order.transaction) === null || _a === void 0 ? void 0 : _a.status) || order.status;
-            if (transactionStatus === "PENDING") {
-                throw new AppError_1.default(409, "Invoice will be available after admin confirmation.");
+            const transactionStatus = (((_a = order.transaction) === null || _a === void 0 ? void 0 : _a.status) || order.status || "")
+                .toString()
+                .toUpperCase();
+            const normalizedStatusByLegacyValue = {
+                PENDING: "PLACED",
+                PROCESSING: "CONFIRMED",
+                SHIPPED: "CONFIRMED",
+                IN_TRANSIT: "CONFIRMED",
+                CANCELED: "REJECTED",
+                RETURNED: "REJECTED",
+                REFUNDED: "REJECTED",
+            };
+            const normalizedStatus = normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
+            if (!["CONFIRMED", "DELIVERED"].includes(normalizedStatus)) {
+                throw new AppError_1.default(409, "Invoice is available only after admin confirms the order.");
             }
             const invoice = (yield this.invoiceRepository.findInvoiceByOrderId(orderId)) ||
                 (yield this.invoiceRepository.ensureInvoiceRecord({

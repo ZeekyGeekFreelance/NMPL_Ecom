@@ -20,36 +20,29 @@ import ShippingAddress from "../ShippingAddress";
 import TransactionTimeline from "../TransactionTimeline";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
 import CustomLoader from "@/app/components/feedback/CustomLoader";
-
-const STATUS_OPTIONS = [
-  { label: "Order Placed", value: "PENDING" },
-  { label: "Confirm Order", value: "PROCESSING" },
-  { label: "Out for Delivery", value: "IN_TRANSIT" },
-  { label: "Delivered", value: "DELIVERED" },
-];
-
-const normalizeTransactionStatus = (status?: string) => {
-  if (!status) {
-    return "PENDING";
-  }
-  const normalizedStatus = status === "SHIPPED" ? "IN_TRANSIT" : status;
-  const supportedStatuses = new Set([
-    "PENDING",
-    "PROCESSING",
-    "IN_TRANSIT",
-    "DELIVERED",
-  ]);
-
-  return supportedStatuses.has(normalizedStatus) ? normalizedStatus : "PENDING";
-};
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
+import {
+  ORDER_STATUS_OPTIONS,
+  getAllowedNextOrderStatuses,
+  getOrderStatusLabel,
+  normalizeOrderStatus,
+  requiresConfirmedRejectionSafetyCheck,
+  type OrderLifecycleStatus,
+} from "@/app/lib/orderLifecycle";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import { toTransactionReference } from "@/app/lib/utils/accountReference";
 
 const TransactionDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { showToast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
-  const [newStatus, setNewStatus] = useState("");
+  const [newStatus, setNewStatus] = useState<OrderLifecycleStatus | "">("");
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
+  const [isStatusConfirmModalOpen, setIsStatusConfirmModalOpen] =
+    useState(false);
+  const [isConfirmedRejectionModalOpen, setIsConfirmedRejectionModalOpen] =
+    useState(false);
   const [updateTransactionStatus, { isLoading: isUpdating }] =
     useUpdateTransactionStatusMutation();
 
@@ -70,22 +63,74 @@ const TransactionDetailsPage = () => {
   const transaction = data?.transaction;
   const order = transaction?.order;
 
-  const selectedStatus = useMemo(
-    () => normalizeTransactionStatus(newStatus || transaction?.status),
-    [newStatus, transaction?.status]
+  const currentStatus = useMemo(
+    () => normalizeOrderStatus(transaction?.status),
+    [transaction?.status]
   );
+
+  const availableNextStatuses = useMemo(
+    () => getAllowedNextOrderStatuses(currentStatus),
+    [currentStatus]
+  );
+
+  const statusOptions = useMemo(
+    () => {
+      if (!availableNextStatuses.length) {
+        return [
+          {
+            label: getOrderStatusLabel(currentStatus),
+            value: currentStatus,
+          },
+        ];
+      }
+
+      return availableNextStatuses.map((status) => {
+        const existingOption = ORDER_STATUS_OPTIONS.find(
+          (option) => option.value === status
+        );
+
+        return (
+          existingOption || {
+            label: getOrderStatusLabel(status),
+            value: status,
+          }
+        );
+      });
+    },
+    [availableNextStatuses, currentStatus]
+  );
+
+  const selectedStatus = useMemo(
+    () =>
+      normalizeOrderStatus(
+        newStatus || availableNextStatuses[0] || transaction?.status
+      ),
+    [newStatus, availableNextStatuses, transaction?.status]
+  );
+
+  const canUpdateStatus =
+    availableNextStatuses.length > 0 &&
+    availableNextStatuses.includes(selectedStatus);
 
   const handleBack = () => {
     router.push("/dashboard/transactions");
   };
 
-  const handleUpdateStatus = async () => {
-    if (!id || !selectedStatus) return;
-
+  const executeStatusUpdate = async (params: {
+    id: string;
+    status: OrderLifecycleStatus;
+    forceConfirmedRejection?: boolean;
+  }) => {
     try {
       await updateTransactionStatus({
-        id,
-        status: selectedStatus,
+        id: params.id,
+        status: params.status,
+        ...(params.forceConfirmedRejection
+          ? {
+              forceConfirmedRejection: true,
+              confirmationToken: "CONFIRMED_ORDER_REJECTION",
+            }
+          : {}),
       }).unwrap();
 
       showToast("Transaction status updated successfully", "success");
@@ -93,10 +138,60 @@ const TransactionDetailsPage = () => {
       refetch();
     } catch (updateError: any) {
       showToast(
-        updateError?.data?.message || "Failed to update transaction status",
+        getApiErrorMessage(updateError, "Failed to update transaction status"),
         "error"
       );
     }
+  };
+
+  const handleUpdateStatus = async () => {
+    if (!id || !selectedStatus || !canUpdateStatus) return;
+    setIsStatusConfirmModalOpen(true);
+  };
+
+  const handleConfirmStatusUpdate = async () => {
+    if (!id || !selectedStatus || !canUpdateStatus) {
+      setIsStatusConfirmModalOpen(false);
+      return;
+    }
+
+    setIsStatusConfirmModalOpen(false);
+    if (
+      requiresConfirmedRejectionSafetyCheck({
+        currentStatus,
+        nextStatus: selectedStatus,
+      })
+    ) {
+      setIsConfirmedRejectionModalOpen(true);
+      return;
+    }
+
+    await executeStatusUpdate({
+      id,
+      status: selectedStatus,
+    });
+  };
+
+  const handleConfirmForcedRejection = async () => {
+    if (!id || !selectedStatus) {
+      setIsConfirmedRejectionModalOpen(false);
+      return;
+    }
+
+    setIsConfirmedRejectionModalOpen(false);
+    await executeStatusUpdate({
+      id,
+      status: selectedStatus,
+      forceConfirmedRejection: true,
+    });
+  };
+
+  const handleCancelForcedRejection = () => {
+    setIsConfirmedRejectionModalOpen(false);
+  };
+
+  const handleCancelStatusUpdate = () => {
+    setIsStatusConfirmModalOpen(false);
   };
 
   const handleDownloadInvoice = useCallback(async () => {
@@ -159,15 +254,15 @@ const TransactionDetailsPage = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <PageHeader
-        transaction={transaction}
         onBack={handleBack}
         onUpdateStatus={handleUpdateStatus}
         onDownloadInvoice={handleDownloadInvoice}
         isDownloadingInvoice={isDownloadingInvoice}
         isUpdating={isUpdating}
+        canUpdateStatus={canUpdateStatus}
         newStatus={selectedStatus}
         setNewStatus={setNewStatus}
-        statusOptions={STATUS_OPTIONS}
+        statusOptions={statusOptions}
       />
 
       <TransactionOverview transaction={transaction} />
@@ -185,6 +280,28 @@ const TransactionDetailsPage = () => {
       <ShippingAddress address={order?.address} />
 
       <TransactionTimeline transaction={transaction} payment={order?.payment} />
+
+      <ConfirmModal
+        isOpen={isStatusConfirmModalOpen}
+        title="Confirm Status Update"
+        type="warning"
+        message={`Are you sure you want to update ${toTransactionReference(
+          id
+        )} from ${getOrderStatusLabel(currentStatus)} to ${getOrderStatusLabel(
+          selectedStatus
+        )}?`}
+        onConfirm={handleConfirmStatusUpdate}
+        onCancel={handleCancelStatusUpdate}
+      />
+
+      <ConfirmModal
+        isOpen={isConfirmedRejectionModalOpen}
+        title="Reject Confirmed Order?"
+        type="danger"
+        message="This order has already been confirmed. Rejecting now will restore stock and override the prior confirmation. Continue only if this is intentional."
+        onConfirm={handleConfirmForcedRejection}
+        onCancel={handleCancelForcedRejection}
+      />
     </div>
   );
 };

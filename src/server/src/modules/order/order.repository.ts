@@ -96,7 +96,7 @@ export class OrderRepository {
         data: {
           userId: data.userId,
           amount: computedAmount,
-          status: "PENDING",
+          status: "PLACED",
           orderItems: {
             create: data.orderItems.map((item) => ({
               variantId: item.variantId,
@@ -114,7 +114,7 @@ export class OrderRepository {
           },
           transaction: {
             create: {
-              status: TRANSACTION_STATUS.PENDING,
+              status: TRANSACTION_STATUS.PLACED,
             },
           },
         },

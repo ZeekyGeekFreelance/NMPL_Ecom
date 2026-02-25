@@ -14,14 +14,10 @@ enum ROLE {
 }
 
 enum TRANSACTION_STATUS {
-  PENDING
-  PROCESSING
-  SHIPPED
-  IN_TRANSIT
+  PLACED
+  CONFIRMED
+  REJECTED
   DELIVERED
-  CANCELED
-  RETURNED
-  REFUNDED
 }
 
 enum PAYMENT_STATUS {
@@ -269,7 +265,7 @@ model Order {
   userId      String
   amount      Float
   orderDate   DateTime     @default(now())
-  status      String       @default("PENDING")
+  status      String       @default("PLACED")
   user        User         @relation(fields: [userId], references: [id])
   orderItems  OrderItem[]
   payment     Payment?     @relation("OrderPayment")
@@ -347,7 +343,7 @@ model Transaction {
   id              String             @id @default(uuid())
   order           Order              @relation("OrderTransaction", fields: [orderId], references: [id], onDelete: Cascade)
   orderId         String             @unique
-  status          TRANSACTION_STATUS @default(PENDING)
+  status          TRANSACTION_STATUS @default(PLACED)
   transactionDate DateTime           @default(now())
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

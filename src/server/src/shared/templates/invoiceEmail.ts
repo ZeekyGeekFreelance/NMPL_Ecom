@@ -1,4 +1,5 @@
 import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
+import { formatDateTimeInIST } from "@/shared/utils/dateTime";
 
 interface InvoiceEmailTemplateInput {
   recipientName: string;
@@ -11,17 +12,10 @@ interface InvoiceEmailTemplateInput {
 }
 
 const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-US", {
+  new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
   }).format(amount);
-
-const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(date);
 
 export const buildInvoiceEmailTemplate = ({
   recipientName,
@@ -34,7 +28,8 @@ export const buildInvoiceEmailTemplate = ({
 }: InvoiceEmailTemplateInput): { html: string; text: string } => {
   const normalizedName = recipientName?.trim() || "Customer";
   const amount = formatCurrency(totalAmount);
-  const placedOn = formatDate(orderDate);
+  const placedOn = formatDateTimeInIST(orderDate);
+  const generatedAt = formatDateTimeInIST(new Date());
   const platformName = getPlatformName();
   const supportEmail = getSupportEmail();
   const billingTeamLabel = `${platformName} Billing Team`;
@@ -48,6 +43,7 @@ export const buildInvoiceEmailTemplate = ({
       `Invoice Number: ${invoiceNumber}`,
       `Order ID: ${orderId}`,
       `Order Date: ${placedOn}`,
+      `Generated At: ${generatedAt}`,
       `Total Amount: ${amount}`,
       `Support: ${supportEmail}`,
       "",
@@ -67,6 +63,7 @@ export const buildInvoiceEmailTemplate = ({
           <strong>Invoice Number:</strong> ${invoiceNumber}<br />
           <strong>Order ID:</strong> ${orderId}<br />
           <strong>Order Date:</strong> ${placedOn}<br />
+          <strong>Generated At:</strong> ${generatedAt}<br />
           <strong>Total Amount:</strong> ${amount}
         </p>
         <p>

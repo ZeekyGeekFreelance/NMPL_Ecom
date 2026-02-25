@@ -109,10 +109,6 @@ const shouldAttemptTokenRefresh = (
     return false;
   }
 
-  if (normalizedUrl === "/users/me") {
-    return false;
-  }
-
   return true;
 };
 
@@ -178,6 +174,24 @@ const baseQuery = fetchBaseQuery({
   credentials: "include",
 });
 
+let refreshRequestPromise: Promise<any> | null = null;
+
+const refreshAuthToken = (api: any, extraOptions: any) => {
+  if (!refreshRequestPromise) {
+    refreshRequestPromise = Promise.resolve(
+      baseQuery(
+        { url: "/auth/refresh-token", method: "POST" },
+        api,
+        extraOptions
+      )
+    ).finally(() => {
+      refreshRequestPromise = null;
+    });
+  }
+
+  return refreshRequestPromise;
+};
+
 const baseQueryWithReauth = async (args, api, extraOptions) => {
   if (shouldConfirmMutation(args)) {
     const isConfirmed = window.confirm(getConfirmationMessage(args));
@@ -206,11 +220,7 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
     }
 
     // Try refresh the token
-    const refreshResult = await baseQuery(
-      { url: "/auth/refresh-token", method: "POST" },
-      api,
-      extraOptions
-    );
+    const refreshResult = await refreshAuthToken(api, extraOptions);
 
     if (refreshResult.data) {
       // If there's data, retry the original req with the new token

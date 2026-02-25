@@ -4,12 +4,12 @@ import Dropdown from "@/app/components/molecules/Dropdown";
 import { ArrowLeft, Download } from "lucide-react";
 
 const PageHeader = ({
-  transaction,
   onBack,
   onUpdateStatus,
   onDownloadInvoice,
   isDownloadingInvoice,
   isUpdating,
+  canUpdateStatus,
   newStatus,
   setNewStatus,
   statusOptions,
@@ -42,14 +42,16 @@ const PageHeader = ({
         {!isUpdating ? (
           <>
             <Dropdown
-              value={newStatus || transaction.status}
+              value={newStatus || null}
               onChange={(value) => setNewStatus(value || "")}
               options={statusOptions}
               className="w-40"
+              disabled={!canUpdateStatus}
             />
             <button
               onClick={onUpdateStatus}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200"
+              disabled={!canUpdateStatus}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
               Update Status
             </button>

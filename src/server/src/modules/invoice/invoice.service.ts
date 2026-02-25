@@ -4,7 +4,10 @@ import { makeLogsService } from "@/modules/logs/logs.factory";
 import { buildInvoiceEmailTemplate } from "@/shared/templates/invoiceEmail";
 import generateInvoicePdf from "@/shared/utils/invoice/generateInvoicePdf";
 import { getPlatformName } from "@/shared/utils/branding";
-import { toAccountReference } from "@/shared/utils/accountReference";
+import {
+  toAccountReference,
+  toOrderReference,
+} from "@/shared/utils/accountReference";
 import { InvoiceRepository, InvoiceWithDetails } from "./invoice.repository";
 
 interface RequesterContext {
@@ -96,6 +99,8 @@ export class InvoiceService {
     const copyLabel = this.getCustomerCopyLabel(invoice);
     const platformName = getPlatformName();
     const accountReference = toAccountReference(invoice.user.id);
+    const orderReference = toOrderReference(invoice.orderId);
+    const invoiceAttachmentName = `${invoice.invoiceNumber}_${orderReference}.pdf`;
 
     let customerEmailSent = !shouldSendCustomerCopy;
     let internalEmailSent = !shouldSendInternalCopy;
@@ -107,7 +112,7 @@ export class InvoiceService {
         accountReference,
         copyLabel,
         invoiceNumber: invoice.invoiceNumber,
-        orderId: invoice.orderId,
+        orderId: orderReference,
         orderDate: invoice.order.orderDate,
         totalAmount: invoice.order.amount,
       });
@@ -119,7 +124,7 @@ export class InvoiceService {
         html: customerTemplate.html,
         attachments: [
           {
-            filename: `${invoice.invoiceNumber}.pdf`,
+            filename: invoiceAttachmentName,
             content: pdfBuffer,
             contentType: "application/pdf",
           },
@@ -137,7 +142,7 @@ export class InvoiceService {
         accountReference,
         copyLabel: "Billing Copy",
         invoiceNumber: invoice.invoiceNumber,
-        orderId: invoice.orderId,
+        orderId: orderReference,
         orderDate: invoice.order.orderDate,
         totalAmount: invoice.order.amount,
       });
@@ -151,7 +156,7 @@ export class InvoiceService {
             html: internalTemplate.html,
             attachments: [
               {
-                filename: `${invoice.invoiceNumber}.pdf`,
+                filename: invoiceAttachmentName,
                 content: pdfBuffer,
                 contentType: "application/pdf",
               },
@@ -188,11 +193,27 @@ export class InvoiceService {
       throw new AppError(404, "Order not found");
     }
 
-    const transactionStatus = order.transaction?.status || order.status;
-    if (transactionStatus === "PENDING") {
+    const transactionStatus = (order.transaction?.status || order.status || "")
+      .toString()
+      .toUpperCase();
+
+    const normalizedStatusByLegacyValue: Record<string, string> = {
+      PENDING: "PLACED",
+      PROCESSING: "CONFIRMED",
+      SHIPPED: "CONFIRMED",
+      IN_TRANSIT: "CONFIRMED",
+      CANCELED: "REJECTED",
+      RETURNED: "REJECTED",
+      REFUNDED: "REJECTED",
+    };
+
+    const normalizedStatus =
+      normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
+
+    if (!["CONFIRMED", "DELIVERED"].includes(normalizedStatus)) {
       throw new AppError(
         409,
-        "Invoice will be available after admin confirmation."
+        "Invoice is available only after admin confirms the order."
       );
     }
 
@@ -226,7 +247,7 @@ export class InvoiceService {
 
     return generateInvoicePdf({
       invoiceNumber: invoice.invoiceNumber,
-      orderId: invoice.orderId,
+      orderId: toOrderReference(invoice.orderId),
       orderDate: invoice.order.orderDate,
       customerName: invoice.user.name,
       accountReference: toAccountReference(invoice.user.id),
@@ -284,10 +305,11 @@ export class InvoiceService {
   async downloadInvoiceByOrder(orderId: string, requester?: RequesterContext) {
     const invoice = await this.getInvoiceByOrder(orderId, requester);
     const content = await this.buildInvoicePdf(invoice);
+    const orderReference = toOrderReference(invoice.orderId);
 
     return {
       invoiceNumber: invoice.invoiceNumber,
-      filename: `${invoice.invoiceNumber}.pdf`,
+      filename: `${invoice.invoiceNumber}_${orderReference}.pdf`,
       content,
     };
   }
@@ -303,10 +325,11 @@ export class InvoiceService {
     this.assertOrderAccess(invoice.userId, requester);
 
     const content = await this.buildInvoicePdf(invoice);
+    const orderReference = toOrderReference(invoice.orderId);
 
     return {
       invoiceNumber: invoice.invoiceNumber,
-      filename: `${invoice.invoiceNumber}.pdf`,
+      filename: `${invoice.invoiceNumber}_${orderReference}.pdf`,
       content,
     };
   }

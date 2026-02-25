@@ -9,13 +9,8 @@ import { Product } from "@/app/types/productTypes";
 import { Palette, Ruler, Info, Package, Check, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
-
-const isDevelopment = process.env.NODE_ENV !== "production";
-const debugLog = (...args: unknown[]) => {
-  if (isDevelopment) {
-    console.log(...args);
-  }
-};
+import { useRouter } from "next/navigation";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 interface ProductInfoProps {
   id: string;
@@ -46,15 +41,21 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const { showToast } = useToast();
   const dispatch = useAppDispatch();
   const { isAuthenticated, user } = useAuth();
+  const router = useRouter();
+  const formatPrice = useFormatPrice();
   const [addToCart, { isLoading }] = useAddToCartMutation();
   const isCustomerUser = isAuthenticated && user?.role === "USER";
   const isGuest = !isAuthenticated;
 
-  const handleAddToCart = async (e: React.MouseEvent) => {
-    e.preventDefault();
+  const addSelectedVariantToCart = async (): Promise<boolean> => {
     if (!selectedVariant) {
       showToast("Please select a valid variant", "error");
-      return;
+      return false;
+    }
+
+    if (selectedVariant.stock <= 0) {
+      showToast("Selected variant is out of stock", "error");
+      return false;
     }
 
     if (isGuest) {
@@ -69,26 +70,53 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
           stock: selectedVariant.stock,
         })
       );
-      showToast("Added to temporary cart. Sign in to place order.", "success");
-      return;
+      return true;
     }
 
     if (!isCustomerUser) {
       showToast("Cart is available only for customer accounts.", "error");
-      return;
+      return false;
     }
 
     try {
-      const res = await addToCart({
+      await addToCart({
         variantId: selectedVariant.id,
         quantity: 1,
-      });
-      debugLog(res);
-      showToast("Product added to cart", "success");
+      }).unwrap();
+      return true;
     } catch (error: any) {
       showToast(error.data?.message || "Failed to add to cart", "error");
       console.error("Error adding to cart:", error);
+      return false;
     }
+  };
+
+  const handleAddToCart = async (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    const isAdded = await addSelectedVariantToCart();
+    if (!isAdded) {
+      return;
+    }
+
+    showToast(
+      isGuest
+        ? "Added to temporary cart. Sign in to place order."
+        : "Product added to cart",
+      "success"
+    );
+  };
+
+  const handleBuyNow = async (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    const isAdded = await addSelectedVariantToCart();
+    if (!isAdded) {
+      return;
+    }
+
+    showToast("Item added to cart. Review and place your order.", "success");
+    router.push("/cart");
   };
 
   const price = selectedVariant
@@ -182,7 +210,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
 
       {/* Price */}
       <div className="text-2xl sm:text-3xl font-bold text-gray-900">
-        ${price.toFixed(2)}
+        {formatPrice(price)}
       </div>
       <div className="text-sm text-gray-600">SKU: {selectedSku}</div>
 
@@ -421,9 +449,11 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
           )}
         </button>
         <button
-          disabled={!stock || !selectedVariant}
+          type="button"
+          disabled={!canUseCart || isLoading}
+          onClick={handleBuyNow}
           className={`w-full py-3 sm:py-4 text-sm sm:text-base font-semibold border-2 rounded-xl transition-all duration-300 ${
-            stock && selectedVariant
+            canUseCart && !isLoading
               ? "border-indigo-600 text-indigo-600 hover:bg-indigo-50 hover:shadow-lg transform hover:scale-[1.02]"
               : "border-gray-300 text-gray-400 cursor-not-allowed"
           }`}

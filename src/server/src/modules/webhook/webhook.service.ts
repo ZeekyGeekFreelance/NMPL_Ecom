@@ -128,7 +128,7 @@ export class WebhookService {
       const transaction = await tx.transaction.create({
         data: {
           orderId: order.id,
-          status: TRANSACTION_STATUS.PENDING,
+          status: TRANSACTION_STATUS.PLACED,
           transactionDate: new Date(),
         },
       });

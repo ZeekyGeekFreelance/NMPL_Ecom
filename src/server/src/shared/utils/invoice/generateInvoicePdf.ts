@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { getPlatformName } from "../branding";
+import { formatDateTimeInIST } from "../dateTime";
 
 interface InvoicePdfItem {
   productName: string;
@@ -31,17 +32,10 @@ interface InvoicePdfInput {
 }
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", {
+  new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
   }).format(value);
-
-const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(date);
 
 const drawSectionTitle = (doc: PDFKit.PDFDocument, label: string) => {
   doc.moveDown(0.5);
@@ -103,7 +97,8 @@ export default function generateInvoicePdf(
       doc.font("Helvetica").fontSize(10);
       doc.text(`Invoice #: ${invoice.invoiceNumber}`);
       doc.text(`Order ID: ${invoice.orderId}`);
-      doc.text(`Date: ${formatDate(invoice.orderDate)}`);
+      doc.text(`Date (IST): ${formatDateTimeInIST(invoice.orderDate)}`);
+      doc.text(`Generated At (IST): ${formatDateTimeInIST(new Date())}`);
       doc.text(`Customer Type: ${invoice.customerType}`);
 
       drawSectionTitle(doc, "Bill To");

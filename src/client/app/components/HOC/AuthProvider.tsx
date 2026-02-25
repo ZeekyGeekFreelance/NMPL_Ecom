@@ -127,11 +127,6 @@ export default function AuthProvider({
           dispatch(logout());
           return;
         }
-
-        if (currentUserRef.current === undefined) {
-          dispatch(logout());
-        }
-
         debugLog(`[AuthProvider] Auth revalidation failed (${reason})`, error);
       } finally {
         isRevalidatingRef.current = false;

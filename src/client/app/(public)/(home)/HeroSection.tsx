@@ -43,7 +43,7 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
     {
       image: SliderImg3,
       title: "Fast & Free Shipping",
-      subtitle: "On orders over $50",
+      subtitle: "On orders over ₹50",
       ctaText: "Learn More",
       ctaLink: "/shop",
       badge: "Limited Time",
@@ -51,7 +51,7 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
     {
       image: SliderImg4,
       title: "Fast & Free Shipping",
-      subtitle: "On orders over $50",
+      subtitle: "On orders over ₹50",
       ctaText: "Learn More",
       ctaLink: "/shop",
       badge: "Limited Time",

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { CheckCircle, Home, ShoppingBag, Mail, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { toOrderReference } from "@/app/lib/utils/accountReference";
 
 type SuccessAction = {
   text: string;
@@ -27,6 +28,11 @@ const SuccessPage = () => {
   const type = searchParams.get("type") || "order";
   const orderId = searchParams.get("orderId");
   const email = searchParams.get("email");
+  const orderReference = orderId
+    ? orderId.startsWith("ORD-")
+      ? orderId
+      : toOrderReference(orderId)
+    : null;
 
   const successConfigs: Record<string, SuccessConfig> = {
     order: {
@@ -34,7 +40,7 @@ const SuccessPage = () => {
       title: "Order Confirmed!",
       description:
         "Thank you for your purchase. Your order has been successfully placed and is being processed.",
-      details: orderId ? `Order #${orderId}` : undefined,
+      details: orderReference ? `Order #${orderReference}` : undefined,
       primaryAction: { text: "View Order", href: "/orders", icon: ShoppingBag },
       secondaryAction: {
         text: "Continue Shopping",

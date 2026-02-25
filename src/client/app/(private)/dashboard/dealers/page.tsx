@@ -19,6 +19,7 @@ import useToast from "@/app/hooks/ui/useToast";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import { Loader2, Search, Trash2, X } from "lucide-react";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
 type DealerFilter = "ALL" | DealerStatus;
@@ -33,6 +34,7 @@ type ConfirmationState = {
 
 const DealersDashboard = () => {
   const { showToast } = useToast();
+  const formatPrice = useFormatPrice();
   const { user } = useAuth();
   const { data: meData, isFetching: isFetchingMe } = useGetMeQuery();
   const effectiveRole = meData?.user?.role || user?.role;
@@ -846,7 +848,7 @@ const DealersDashboard = () => {
                                   {variant.sku}
                                 </td>
                                 <td className="px-3 py-2 text-gray-700">
-                                  ${variant.price.toFixed(2)}
+                                  {formatPrice(variant.price)}
                                 </td>
                                 <td className="px-3 py-2">
                                   <input
@@ -870,8 +872,8 @@ const DealersDashboard = () => {
                                 </td>
                                 <td className="px-3 py-2 text-gray-700">
                                   {hasCustomPrice && !isInvalidCustomPrice
-                                    ? `$${parsedCustomPrice.toFixed(2)}`
-                                    : `$${variant.price.toFixed(2)}`}
+                                    ? formatPrice(parsedCustomPrice)
+                                    : formatPrice(variant.price)}
                                 </td>
                                 <td className="px-3 py-2 text-gray-700">
                                   {variant.stock}

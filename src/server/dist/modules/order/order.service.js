@@ -16,7 +16,6 @@ exports.OrderService = void 0;
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
 const client_1 = require("@prisma/client");
-const client_2 = require("@prisma/client");
 const sendEmail_1 = __importDefault(require("@/shared/utils/sendEmail"));
 const branding_1 = require("@/shared/utils/branding");
 const accountReference_1 = require("@/shared/utils/accountReference");
@@ -39,7 +38,7 @@ class OrderService {
                 return new Map();
             }
             try {
-                const dealerProfileRows = yield database_config_1.default.$queryRaw(client_2.Prisma.sql `
+                const dealerProfileRows = yield database_config_1.default.$queryRaw(client_1.Prisma.sql `
           SELECT "status"
           FROM "DealerProfile"
           WHERE "userId" = ${userId}
@@ -48,11 +47,11 @@ class OrderService {
                 if (!dealerProfileRows.length || dealerProfileRows[0].status !== "APPROVED") {
                     return new Map();
                 }
-                const priceRows = yield database_config_1.default.$queryRaw(client_2.Prisma.sql `
+                const priceRows = yield database_config_1.default.$queryRaw(client_1.Prisma.sql `
           SELECT "variantId", "customPrice"
           FROM "DealerPriceMapping"
           WHERE "dealerId" = ${userId}
-            AND "variantId" IN (${client_2.Prisma.join(variantIds)})
+            AND "variantId" IN (${client_1.Prisma.join(variantIds)})
         `);
                 return new Map(priceRows.map((row) => [row.variantId, row.customPrice]));
             }
@@ -122,9 +121,9 @@ class OrderService {
                 cartId,
                 orderItems,
             });
-            yield this.sendOrderPlacedNotification(userId, order.id).catch((error) => __awaiter(this, void 0, void 0, function* () {
+            yield this.sendOrderPlacedNotifications(userId, order.id).catch((error) => __awaiter(this, void 0, void 0, function* () {
                 const errorMessage = error instanceof Error ? error.message : "Unknown notification error";
-                yield this.logsService.warn("Order placed email notification failed", {
+                yield this.logsService.warn("Order placed notifications failed", {
                     userId,
                     orderId: order.id,
                     error: errorMessage,
@@ -133,7 +132,27 @@ class OrderService {
             return order;
         });
     }
-    sendOrderPlacedNotification(userId, orderId) {
+    getAdminNotificationRecipients(excludeEmail) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const admins = yield database_config_1.default.user.findMany({
+                where: {
+                    role: {
+                        in: [client_1.ROLE.ADMIN, client_1.ROLE.SUPERADMIN],
+                    },
+                },
+                select: {
+                    email: true,
+                },
+            });
+            const normalizedExclude = excludeEmail === null || excludeEmail === void 0 ? void 0 : excludeEmail.trim().toLowerCase();
+            const emails = admins
+                .map((admin) => { var _a; return (_a = admin.email) === null || _a === void 0 ? void 0 : _a.trim(); })
+                .filter((email) => !!email)
+                .filter((email) => email.toLowerCase() !== normalizedExclude);
+            return Array.from(new Set(emails));
+        });
+    }
+    sendOrderPlacedNotifications(userId, orderId) {
         return __awaiter(this, void 0, void 0, function* () {
             const user = yield database_config_1.default.user.findUnique({
                 where: { id: userId },
@@ -143,45 +162,85 @@ class OrderService {
                     email: true,
                 },
             });
-            if (!(user === null || user === void 0 ? void 0 : user.email)) {
+            if (!user) {
                 return;
             }
             const platformName = (0, branding_1.getPlatformName)();
             const supportEmail = (0, branding_1.getSupportEmail)();
             const accountReference = (0, accountReference_1.toAccountReference)(user.id);
-            const isSent = yield (0, sendEmail_1.default)({
-                to: user.email,
-                subject: `${platformName} | Order Placed`,
-                text: [
-                    `Hello ${user.name},`,
-                    "",
-                    `Your order has been placed on ${platformName}.`,
-                    `Order ID: ${orderId}`,
-                    `Account Reference: ${accountReference}`,
-                    `Current status: Order Placed`,
-                    "",
-                    `We will confirm your order after stock verification.`,
-                    `Need help? Contact ${supportEmail}.`,
-                ].join("\n"),
-                html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
-          <p>Hello <strong>${user.name}</strong>,</p>
-          <p>Your order has been placed on <strong>${platformName}</strong>.</p>
-          <p>
-            <strong>Order ID:</strong> ${orderId}<br />
-            <strong>Account Reference:</strong> ${accountReference}<br />
-            <strong>Current status:</strong> Order Placed
-          </p>
-          <p>We will confirm your order after stock verification.</p>
-          <p>
-            Need help? Contact
-            <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
-          </p>
-        </div>
-      `,
-            });
-            if (!isSent) {
-                throw new Error("Failed to send order placed notification email.");
+            const notificationPromises = [];
+            if (user.email) {
+                notificationPromises.push((0, sendEmail_1.default)({
+                    to: user.email,
+                    subject: `${platformName} | Your Order Has Been Placed`,
+                    text: [
+                        `Hello ${user.name},`,
+                        "",
+                        `Your order has been placed on ${platformName}.`,
+                        `Order ID: ${orderId}`,
+                        `Account Reference: ${accountReference}`,
+                        `Current status: PLACED`,
+                        "",
+                        "We will confirm your order after stock verification.",
+                        `Need help? Contact ${supportEmail}.`,
+                    ].join("\n"),
+                    html: `
+            <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+              <p>Hello <strong>${user.name}</strong>,</p>
+              <p>Your order has been placed on <strong>${platformName}</strong>.</p>
+              <p>
+                <strong>Order ID:</strong> ${orderId}<br />
+                <strong>Account Reference:</strong> ${accountReference}<br />
+                <strong>Current status:</strong> PLACED
+              </p>
+              <p>We will confirm your order after stock verification.</p>
+              <p>
+                Need help? Contact
+                <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
+              </p>
+            </div>
+          `,
+                }));
+            }
+            const adminRecipients = yield this.getAdminNotificationRecipients(user.email);
+            for (const adminEmail of adminRecipients) {
+                notificationPromises.push((0, sendEmail_1.default)({
+                    to: adminEmail,
+                    subject: `${platformName} | New Order Arrived`,
+                    text: [
+                        "New order received.",
+                        "",
+                        `Order ID: ${orderId}`,
+                        `Customer Name: ${user.name}`,
+                        `Customer Email: ${user.email || "Not available"}`,
+                        `Account Reference: ${accountReference}`,
+                        "Current status: PLACED",
+                        "",
+                        `Please review and update status from the admin panel.`,
+                    ].join("\n"),
+                    html: `
+            <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+              <p><strong>New order received.</strong></p>
+              <p>
+                <strong>Order ID:</strong> ${orderId}<br />
+                <strong>Customer Name:</strong> ${user.name}<br />
+                <strong>Customer Email:</strong> ${user.email || "Not available"}<br />
+                <strong>Account Reference:</strong> ${accountReference}<br />
+                <strong>Current status:</strong> PLACED
+              </p>
+              <p>Please review and update status from the admin panel.</p>
+            </div>
+          `,
+                }));
+            }
+            if (!notificationPromises.length) {
+                return;
+            }
+            const results = yield Promise.allSettled(notificationPromises);
+            const hasFailure = results.some((result) => result.status === "rejected" ||
+                (result.status === "fulfilled" && result.value === false));
+            if (hasFailure) {
+                throw new Error("One or more order placement notifications failed.");
             }
         });
     }

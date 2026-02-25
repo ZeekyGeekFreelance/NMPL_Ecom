@@ -2,6 +2,7 @@
 
 import formatDate from "@/app/utils/formatDate";
 import { Clock } from "lucide-react";
+import { normalizeOrderStatus } from "@/app/lib/orderLifecycle";
 
 const TimelineEvent = ({ date, title, description, isActive }) => {
   return (
@@ -19,8 +20,8 @@ const TimelineEvent = ({ date, title, description, isActive }) => {
 };
 
 const TransactionTimeline = ({ transaction, payment }) => {
-  const currentStatus = transaction?.status || "PENDING";
-  const normalizedStatus = currentStatus === "SHIPPED" ? "IN_TRANSIT" : currentStatus;
+  const currentStatus = normalizeOrderStatus(transaction?.status || "PLACED");
+  const isPlaced = currentStatus === "PLACED";
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
@@ -52,11 +53,11 @@ const TransactionTimeline = ({ transaction, payment }) => {
           />
         )}
 
-        {normalizedStatus !== "PENDING" && (
+        {!isPlaced && (
           <TimelineEvent
             date={formatDate(transaction.updatedAt)}
             title="Status updated"
-            description={`Current status: ${normalizedStatus}`}
+            description={`Current status: ${currentStatus}`}
             isActive={false}
           />
         )}

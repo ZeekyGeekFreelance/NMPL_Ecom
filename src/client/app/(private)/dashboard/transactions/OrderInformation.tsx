@@ -3,6 +3,7 @@
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import formatDate from "@/app/utils/formatDate";
 import { ShoppingBag } from "lucide-react";
+import { toOrderReference } from "@/app/lib/utils/accountReference";
 
 const OrderInformation = ({ order, className = "" }) => {
   const format = useFormatPrice();
@@ -33,6 +34,10 @@ const OrderInformation = ({ order, className = "" }) => {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6">
         <div>
+          <p className="text-sm text-gray-500">Order ID</p>
+          <p className="font-mono">{toOrderReference(order.id)}</p>
+        </div>
+        <div>
           <p className="text-sm text-gray-500">Order Amount</p>
           <p className="font-medium">{format(order.amount)}</p>
         </div>
@@ -58,9 +63,6 @@ const OrderInformation = ({ order, className = "" }) => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Item ID
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Product
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -70,7 +72,10 @@ const OrderInformation = ({ order, className = "" }) => {
                   Quantity
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Price
+                  Unit Price
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Line Total
                 </th>
               </tr>
             </thead>
@@ -80,9 +85,6 @@ const OrderInformation = ({ order, className = "" }) => {
                   key={item.id}
                   className="hover:bg-gray-50 transition-colors duration-150"
                 >
-                  <td className="px-3 py-4 whitespace-nowrap text-sm font-mono">
-                    {(item.id || "").substring(0, 8)}...
-                  </td>
                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                     {item.variant?.product?.name || "Unknown Product"}
                   </td>
@@ -94,6 +96,9 @@ const OrderInformation = ({ order, className = "" }) => {
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                     {format(item.price)}
+                  </td>
+                  <td className="px-3 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">
+                    {format(item.price * item.quantity)}
                   </td>
                 </tr>
               ))}

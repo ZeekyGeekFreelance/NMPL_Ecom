@@ -56,9 +56,13 @@ const Dropdown: React.FC<DropdownProps> = ({
         ref={buttonRef}
         className={`flex items-center justify-between px-3 py-2 
           rounded-lg bg-white border border-gray-200
-          transition-all duration-200 cursor-pointer 
-          hover:border-gray-300 focus:ring-2 focus:ring-blue-100 ${className}`}
-        onClick={() => setIsOpen((prev) => !prev)}
+          transition-all duration-200
+          ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-gray-300 focus:ring-2 focus:ring-blue-100"} ${className}`}
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen((prev) => !prev);
+          }
+        }}
         aria-disabled={disabled}
       >
         <span className="text-sm font-medium text-gray-700 truncate">
@@ -68,7 +72,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         <div className="flex items-center">
           {isLoading ? (
             <Loader2 size={16} className="animate-spin text-gray-400 ml-2" />
-          ) : value ? (
+          ) : value && !disabled ? (
             <X
               size={16}
               className="text-gray-400 hover:text-gray-600 transition-colors duration-200 ml-2"

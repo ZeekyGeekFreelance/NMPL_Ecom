@@ -16,35 +16,62 @@ exports.TransactionService = void 0;
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const invoice_factory_1 = require("../invoice/invoice.factory");
 const logs_factory_1 = require("../logs/logs.factory");
-const client_1 = require("@prisma/client");
 const accountReference_1 = require("@/shared/utils/accountReference");
 const sendEmail_1 = __importDefault(require("@/shared/utils/sendEmail"));
 const branding_1 = require("@/shared/utils/branding");
 const allowedStatusTransitions = {
-    PENDING: ["PROCESSING"],
-    PROCESSING: ["IN_TRANSIT", "DELIVERED"],
-    SHIPPED: ["IN_TRANSIT", "DELIVERED"],
-    IN_TRANSIT: ["DELIVERED"],
+    PLACED: ["CONFIRMED", "REJECTED"],
+    CONFIRMED: ["DELIVERED", "REJECTED"],
+    REJECTED: [],
     DELIVERED: [],
-    CANCELED: [],
-    RETURNED: [],
-    REFUNDED: [],
 };
 const userFacingStatusLabel = {
-    PENDING: "Order Placed",
-    PROCESSING: "Confirmed",
-    SHIPPED: "Out for Delivery",
-    IN_TRANSIT: "Out for Delivery",
+    PLACED: "Placed",
+    CONFIRMED: "Confirmed",
+    REJECTED: "Rejected",
     DELIVERED: "Delivered",
-    CANCELED: "Canceled",
-    RETURNED: "Returned",
-    REFUNDED: "Refunded",
+};
+const statusEmailSubjectLine = {
+    PLACED: "Your Order Has Been Placed",
+    CONFIRMED: "Your Order Has Been Confirmed",
+    REJECTED: "Your Order Has Been Rejected",
+    DELIVERED: "Your Order Has Been Delivered",
 };
 class TransactionService {
     constructor(transactionRepository) {
         this.transactionRepository = transactionRepository;
         this.logsService = (0, logs_factory_1.makeLogsService)();
         this.invoiceService = (0, invoice_factory_1.makeInvoiceService)();
+    }
+    parseStatus(value) {
+        const normalized = value.trim().toUpperCase();
+        const compact = normalized.replace(/[^A-Z]/g, "");
+        const statusAliasMap = {
+            PLACED: "PLACED",
+            PLACE: "PLACED",
+            ORDERPLACED: "PLACED",
+            PENDING: "PLACED",
+            CONFIRMED: "CONFIRMED",
+            CONFIRM: "CONFIRMED",
+            CONFIRMORDER: "CONFIRMED",
+            PROCESSING: "CONFIRMED",
+            SHIPPED: "CONFIRMED",
+            INTRANSIT: "CONFIRMED",
+            REJECTED: "REJECTED",
+            REJECT: "REJECTED",
+            REJECTORDER: "REJECTED",
+            CANCELED: "REJECTED",
+            CANCELLED: "REJECTED",
+            RETURNED: "REJECTED",
+            REFUNDED: "REJECTED",
+            DELIVERED: "DELIVERED",
+            DELIVER: "DELIVERED",
+        };
+        const mapped = statusAliasMap[compact] || statusAliasMap[normalized];
+        if (mapped) {
+            return mapped;
+        }
+        throw new AppError_1.default(400, `Invalid status value: ${value}`);
     }
     assertValidStatusTransition(currentStatus, nextStatus) {
         if (currentStatus === nextStatus) {
@@ -61,29 +88,30 @@ class TransactionService {
             const supportEmail = (0, branding_1.getSupportEmail)();
             const currentLabel = userFacingStatusLabel[params.nextStatus];
             const previousLabel = userFacingStatusLabel[params.previousStatus];
-            yield (0, sendEmail_1.default)({
+            const subjectLine = statusEmailSubjectLine[params.nextStatus];
+            const isSent = yield (0, sendEmail_1.default)({
                 to: params.recipientEmail,
-                subject: `${platformName} | Order Status Updated (${currentLabel})`,
+                subject: `${platformName} | ${subjectLine}`,
                 text: [
                     `Hello ${params.recipientName},`,
                     "",
-                    `Your order status has been updated on ${platformName}.`,
+                    `Your order has been updated on ${platformName}.`,
                     `Order ID: ${params.orderId}`,
                     `Account Reference: ${params.accountReference}`,
-                    `Previous status: ${previousLabel}`,
-                    `Current status: ${currentLabel}`,
+                    `Previous status: ${previousLabel.toUpperCase()}`,
+                    `Current status: ${currentLabel.toUpperCase()}`,
                     "",
                     `For support, contact ${supportEmail}.`,
                 ].join("\n"),
                 html: `
         <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
           <p>Hello <strong>${params.recipientName}</strong>,</p>
-          <p>Your order status has been updated on <strong>${platformName}</strong>.</p>
+          <p>Your order has been updated on <strong>${platformName}</strong>.</p>
           <p>
             <strong>Order ID:</strong> ${params.orderId}<br />
             <strong>Account Reference:</strong> ${params.accountReference}<br />
-            <strong>Previous status:</strong> ${previousLabel}<br />
-            <strong>Current status:</strong> ${currentLabel}
+            <strong>Previous status:</strong> ${previousLabel.toUpperCase()}<br />
+            <strong>Current status:</strong> ${currentLabel.toUpperCase()}
           </p>
           <p>
             For support, contact
@@ -92,6 +120,9 @@ class TransactionService {
         </div>
       `,
             });
+            if (!isSent) {
+                throw new Error("Order status notification email failed to send.");
+            }
         });
     }
     getAllTransactions() {
@@ -121,13 +152,21 @@ class TransactionService {
             if (!existingTransaction) {
                 throw new AppError_1.default(404, "Transaction not found");
             }
-            const previousStatus = existingTransaction.status;
-            const nextStatus = data.status;
+            const previousStatus = this.parseStatus(String(existingTransaction.status));
+            const nextStatus = this.parseStatus(String(data.status));
+            const requiresConfirmedRejectionSafeguard = previousStatus === "CONFIRMED" && nextStatus === "REJECTED";
+            if (requiresConfirmedRejectionSafeguard &&
+                (!data.forceConfirmedRejection ||
+                    data.confirmationToken !== "CONFIRMED_ORDER_REJECTION")) {
+                throw new AppError_1.default(409, "This order has already been confirmed. Rejection requires additional confirmation.");
+            }
             this.assertValidStatusTransition(previousStatus, nextStatus);
             if (previousStatus === nextStatus) {
                 return existingTransaction;
             }
-            const transaction = yield this.transactionRepository.updateTransaction(id, data);
+            const transaction = yield this.transactionRepository.updateTransaction(id, {
+                status: nextStatus,
+            });
             const recipientEmail = (_b = (_a = transaction.order) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.email;
             const recipientName = ((_d = (_c = transaction.order) === null || _c === void 0 ? void 0 : _c.user) === null || _d === void 0 ? void 0 : _d.name) || "Customer";
             const recipientUserId = (_f = (_e = transaction.order) === null || _e === void 0 ? void 0 : _e.user) === null || _f === void 0 ? void 0 : _f.id;
@@ -148,8 +187,8 @@ class TransactionService {
                     });
                 }));
             }
-            if (previousStatus === client_1.TRANSACTION_STATUS.PENDING &&
-                nextStatus === client_1.TRANSACTION_STATUS.PROCESSING) {
+            if (previousStatus === "PLACED" &&
+                nextStatus === "CONFIRMED") {
                 this.invoiceService
                     .generateAndSendInvoiceForOrder(transaction.orderId)
                     .catch((error) => __awaiter(this, void 0, void 0, function* () {

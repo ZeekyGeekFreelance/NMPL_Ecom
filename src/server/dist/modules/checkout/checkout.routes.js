@@ -12,39 +12,19 @@ const checkoutController = (0, checkout_factory_1.makeCheckoutController)();
  * @swagger
  * /checkout:
  *   post:
- *     summary: Initiate checkout
- *     description: Initiates the checkout process for the authenticated user.
+ *     summary: Place order from cart
+ *     description: Validates active cart stock and places an order without payment gateway dependency.
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               cartId:
- *                 type: string
- *               paymentMethod:
- *                 type: string
- *               shippingAddress:
- *                 type: object
- *                 properties:
- *                   addressLine1:
- *                     type: string
- *                   addressLine2:
- *                     type: string
- *                   city:
- *                     type: string
- *                   postalCode:
- *                     type: string
  *     responses:
- *       200:
- *         description: Checkout successfully initiated.
+ *       201:
+ *         description: Order placed successfully.
  *       400:
- *         description: Invalid input data or missing required fields.
+ *         description: Invalid cart state (empty/stock/cart ownership issue).
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
+ *       403:
+ *         description: Forbidden. Only customer (`USER`) accounts can place orders.
  */
 router.post("/", protect_1.default, checkoutController.initiateCheckout);
 exports.default = router;

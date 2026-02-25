@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Trash2, PenLine, ExternalLink } from "lucide-react";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import useToast from "@/app/hooks/ui/useToast";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   useDeleteTransactionMutation,
   useGetAllTransactionsQuery,
@@ -17,6 +17,17 @@ import {
   toOrderReference,
   toTransactionReference,
 } from "@/app/lib/utils/accountReference";
+import {
+  ORDER_STATUS_OPTIONS,
+  getAllowedNextOrderStatuses,
+  getOrderStatusColor,
+  getOrderStatusLabel,
+  normalizeOrderStatus,
+  requiresConfirmedRejectionSafetyCheck,
+  type OrderLifecycleStatus,
+} from "@/app/lib/orderLifecycle";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import formatDate from "@/app/utils/formatDate";
 
 const isDevelopment = process.env.NODE_ENV !== "production";
 const debugLog = (...args: unknown[]) => {
@@ -30,17 +41,29 @@ const TransactionsDashboard = () => {
   const router = useRouter();
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
-  const [selectedTransaction, setSelectedTransaction] = useState({
+  const [isStatusConfirmModalOpen, setIsStatusConfirmModalOpen] =
+    useState(false);
+  const [isConfirmedRejectionModalOpen, setIsConfirmedRejectionModalOpen] =
+    useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<{
+    id: string;
+    status: OrderLifecycleStatus | "";
+  }>({
     id: "",
     status: "",
   });
-  const [newStatus, setNewStatus] = useState("");
-
-  const pathname = usePathname();
-  const shouldFetchTransactions = pathname === "/dashboard/transactions";
+  const [newStatus, setNewStatus] = useState<OrderLifecycleStatus | "">("");
+  const [pendingForcedStatusUpdate, setPendingForcedStatusUpdate] = useState<{
+    id: string;
+    status: OrderLifecycleStatus;
+  } | null>(null);
+  const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{
+    id: string;
+    currentStatus: OrderLifecycleStatus;
+    nextStatus: OrderLifecycleStatus;
+  } | null>(null);
 
   const { data, isLoading, refetch } = useGetAllTransactionsQuery(undefined, {
-    skip: !shouldFetchTransactions,
     pollingInterval: 8000,
     refetchOnFocus: true,
     refetchOnReconnect: true,
@@ -62,24 +85,44 @@ const TransactionsDashboard = () => {
   };
 
   const handleUpdateStatus = (transaction: any) => {
-    const normalizedStatus =
-      transaction.status === "SHIPPED" ? "IN_TRANSIT" : transaction.status;
-    const supportedStatuses = new Set([
-      "PENDING",
-      "PROCESSING",
-      "IN_TRANSIT",
-      "DELIVERED",
-    ]);
+    const normalizedStatus = normalizeOrderStatus(transaction.status);
+    const nextStatuses = getAllowedNextOrderStatuses(normalizedStatus);
 
-    setSelectedTransaction(transaction);
-    setNewStatus(
-      supportedStatuses.has(normalizedStatus) ? normalizedStatus : "PENDING"
-    );
+    setSelectedTransaction({
+      id: transaction.id,
+      status: normalizedStatus,
+    });
+    setNewStatus(nextStatuses[0] || normalizedStatus);
     setIsStatusModalOpen(true);
   };
 
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/transactions/${id}`);
+  };
+
+  const executeStatusUpdate = async (params: {
+    id: string;
+    status: OrderLifecycleStatus;
+    forceConfirmedRejection?: boolean;
+  }) => {
+    try {
+      await updateTransactionStatus({
+        id: params.id,
+        status: params.status,
+        ...(params.forceConfirmedRejection
+          ? {
+              forceConfirmedRejection: true,
+              confirmationToken: "CONFIRMED_ORDER_REJECTION",
+            }
+          : {}),
+      }).unwrap();
+      showToast("Status updated successfully", "success");
+      refetch();
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Failed to update status");
+      debugLog("Status update failed:", message, err);
+      showToast(message, "error");
+    }
   };
 
   const confirmDelete = async () => {
@@ -98,54 +141,90 @@ const TransactionsDashboard = () => {
   const confirmStatusUpdate = async () => {
     if (!selectedTransaction || !newStatus) return;
     setIsStatusModalOpen(false);
-    try {
-      const res = await updateTransactionStatus({
-        id: selectedTransaction.id,
-        status: newStatus,
-      }).unwrap();
-      debugLog("res => ", res);
-      showToast("Status updated successfully", "success");
-    } catch (err) {
-      console.error("Failed to update status:", err);
-      showToast("Failed to update status", "error");
+    setPendingStatusUpdate({
+      id: selectedTransaction.id,
+      currentStatus: selectedTransaction.status as OrderLifecycleStatus,
+      nextStatus: newStatus,
+    });
+    setIsStatusConfirmModalOpen(true);
+  };
+
+  const confirmStatusUpdateAfterSafetyPrompt = async () => {
+    if (!pendingStatusUpdate) {
+      setIsStatusConfirmModalOpen(false);
+      return;
     }
-  };
 
-  const TRANSACTION_STATUSES = [
-    { label: "Order Placed", value: "PENDING" },
-    { label: "Confirm Order", value: "PROCESSING" },
-    { label: "Out for Delivery", value: "IN_TRANSIT" },
-    { label: "Delivered", value: "DELIVERED" },
-  ];
-
-  const getStatusLabel = (status: string) => {
-    const normalizedStatus = status === "SHIPPED" ? "IN_TRANSIT" : status;
-
-    const labels: Record<string, string> = {
-      PENDING: "Order Placed",
-      PROCESSING: "Confirmed",
-      IN_TRANSIT: "Out for Delivery",
-      DELIVERED: "Delivered",
-    };
-
-    return labels[normalizedStatus] || normalizedStatus;
-  };
-
-  const getStatusColor = (status) => {
-    const normalizedStatus = status === "SHIPPED" ? "IN_TRANSIT" : status;
-    switch (normalizedStatus) {
-      case "PENDING":
-        return "bg-yellow-100 text-yellow-800";
-      case "PROCESSING":
-        return "bg-blue-100 text-blue-800";
-      case "IN_TRANSIT":
-        return "bg-indigo-100 text-indigo-800";
-      case "DELIVERED":
-        return "bg-green-100 text-green-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+    setIsStatusConfirmModalOpen(false);
+    if (
+      requiresConfirmedRejectionSafetyCheck({
+        currentStatus: pendingStatusUpdate.currentStatus,
+        nextStatus: pendingStatusUpdate.nextStatus,
+      })
+    ) {
+      setPendingForcedStatusUpdate({
+        id: pendingStatusUpdate.id,
+        status: pendingStatusUpdate.nextStatus,
+      });
+      setIsConfirmedRejectionModalOpen(true);
+      setPendingStatusUpdate(null);
+      return;
     }
+
+    await executeStatusUpdate({
+      id: pendingStatusUpdate.id,
+      status: pendingStatusUpdate.nextStatus,
+    });
+    setPendingStatusUpdate(null);
   };
+
+  const confirmForcedRejection = async () => {
+    if (!pendingForcedStatusUpdate) {
+      setIsConfirmedRejectionModalOpen(false);
+      return;
+    }
+
+    setIsConfirmedRejectionModalOpen(false);
+    await executeStatusUpdate({
+      id: pendingForcedStatusUpdate.id,
+      status: pendingForcedStatusUpdate.status,
+      forceConfirmedRejection: true,
+    });
+    setPendingForcedStatusUpdate(null);
+  };
+
+  const cancelForcedRejection = () => {
+    setIsConfirmedRejectionModalOpen(false);
+    setPendingForcedStatusUpdate(null);
+  };
+
+  const cancelStatusUpdateConfirmation = () => {
+    setIsStatusConfirmModalOpen(false);
+    setPendingStatusUpdate(null);
+  };
+
+  const statusLabelByValue = new Map(
+    ORDER_STATUS_OPTIONS.map((option) => [option.value, option.label])
+  );
+
+  const availableNextStatuses = selectedTransaction.status
+    ? getAllowedNextOrderStatuses(selectedTransaction.status)
+    : [];
+
+  const statusOptionsForModal =
+    availableNextStatuses.length > 0
+      ? availableNextStatuses.map((status) => ({
+          value: status,
+          label: statusLabelByValue.get(status) || getOrderStatusLabel(status),
+        }))
+      : selectedTransaction.status
+      ? [
+          {
+            value: selectedTransaction.status,
+            label: getOrderStatusLabel(selectedTransaction.status),
+          },
+        ]
+      : [];
 
   const columns = [
     {
@@ -176,11 +255,11 @@ const TransactionsDashboard = () => {
       sortable: true,
       render: (row: any) => (
         <span
-          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+          className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(
             row.status
           )}`}
         >
-          {getStatusLabel(row.status)}
+          {getOrderStatusLabel(row.status)}
         </span>
       ),
     },
@@ -188,19 +267,23 @@ const TransactionsDashboard = () => {
       key: "transactionDate",
       label: "Date",
       sortable: true,
+      sortAccessor: (row: any) => {
+        const parsedDate = Date.parse(String(row.transactionDate || ""));
+        return Number.isNaN(parsedDate) ? 0 : parsedDate;
+      },
       render: (row: any) => (
-        <span>{new Date(row.transactionDate).toLocaleDateString()}</span>
+        <span>{formatDate(row.transactionDate)}</span>
       ),
     },
     {
       key: "actions",
       label: "Actions",
       render: (row: any) => (
-        <div className="flex space-x-2">
+        <div className="flex items-center gap-3 sm:gap-4">
           <button
             type="button"
             onClick={() => handleViewDetails(row.id)}
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            className="text-blue-600 hover:text-blue-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-blue-50"
           >
             <ExternalLink size={16} />
             View
@@ -208,7 +291,7 @@ const TransactionsDashboard = () => {
           <button
             type="button"
             onClick={() => handleUpdateStatus(row)}
-            className="text-green-600 hover:text-green-800 flex items-center gap-1"
+            className="text-green-600 hover:text-green-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-green-50"
           >
             <PenLine size={16} />
             Update
@@ -216,7 +299,7 @@ const TransactionsDashboard = () => {
           <button
             type="button"
             onClick={() => handleDeleteTransaction(row.id)}
-            className="text-red-600 hover:text-red-800 flex items-center gap-1"
+            className="text-red-600 hover:text-red-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-red-50"
           >
             <Trash2 size={16} />
             Delete
@@ -234,16 +317,10 @@ const TransactionsDashboard = () => {
     setIsStatusModalOpen(false);
   };
 
-  const normalizedSelectedStatus = selectedTransaction?.status
-    ? selectedTransaction.status === "SHIPPED"
-      ? "IN_TRANSIT"
-      : selectedTransaction.status
-    : "";
-
   const canUpdateStatus =
     !!selectedTransaction?.id &&
     !!newStatus &&
-    newStatus !== normalizedSelectedStatus;
+    availableNextStatuses.includes(newStatus as OrderLifecycleStatus);
 
   return (
     <div className="p-6">
@@ -255,10 +332,12 @@ const TransactionsDashboard = () => {
       </div>
 
       <Table
-        data={data?.transactions}
+        data={data?.transactions || []}
         columns={columns}
         isLoading={isLoading}
         emptyMessage="No transactions available"
+        initialSortKey="transactionDate"
+        initialSortDirection="desc"
         onRefresh={refetch}
         totalPages={data?.totalPages}
         totalResults={data?.totalResults}
@@ -272,6 +351,32 @@ const TransactionsDashboard = () => {
         message="Are you sure you want to delete this transaction? This action cannot be undone."
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+      />
+
+      <ConfirmModal
+        isOpen={isConfirmedRejectionModalOpen}
+        title="Reject Confirmed Order?"
+        type="danger"
+        message="This order has already been confirmed. Rejecting now will restore stock and override the prior confirmation. Continue only if this is intentional."
+        onConfirm={confirmForcedRejection}
+        onCancel={cancelForcedRejection}
+      />
+
+      <ConfirmModal
+        isOpen={isStatusConfirmModalOpen}
+        title="Confirm Status Update"
+        type="warning"
+        message={
+          pendingStatusUpdate
+            ? `Are you sure you want to update ${toTransactionReference(
+                pendingStatusUpdate.id
+              )} from ${getOrderStatusLabel(
+                pendingStatusUpdate.currentStatus
+              )} to ${getOrderStatusLabel(pendingStatusUpdate.nextStatus)}?`
+            : "Are you sure you want to update this order status?"
+        }
+        onConfirm={confirmStatusUpdateAfterSafetyPrompt}
+        onCancel={cancelStatusUpdateConfirmation}
       />
 
       {/* Update Status Modal */}
@@ -297,9 +402,11 @@ const TransactionsDashboard = () => {
                 Status
               </label>
               <Dropdown
-                options={TRANSACTION_STATUSES}
+                options={statusOptionsForModal}
                 value={newStatus}
-                onChange={(value) => setNewStatus(value || "")}
+                onChange={(value) =>
+                  setNewStatus((value as OrderLifecycleStatus) || "")
+                }
                 className="w-full min-h-[42px]"
               />
             </div>

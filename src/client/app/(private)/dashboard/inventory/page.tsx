@@ -147,7 +147,7 @@ const InventoryDashboard = () => {
             disabled={isRestocking}
           >
             <Plus size={16} />
-            + Restock
+            Restock
           </button>
           <button
             type="button"

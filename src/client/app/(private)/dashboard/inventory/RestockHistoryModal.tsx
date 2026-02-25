@@ -3,6 +3,7 @@ import { useGetRestockHistoryQuery } from "@/app/store/apis/VariantApi";
 import Table from "@/app/components/layout/Table";
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import formatDate from "@/app/utils/formatDate";
 
 interface RestockHistoryModalProps {
   isOpen: boolean;
@@ -44,9 +45,7 @@ const RestockHistoryModal: React.FC<RestockHistoryModalProps> = ({
       key: "createdAt",
       label: "Date",
       sortable: true,
-      render: (row: any) => (
-        <span>{new Date(row.createdAt).toLocaleDateString()}</span>
-      ),
+      render: (row: any) => <span>{formatDate(row.createdAt)}</span>,
     },
   ];
 

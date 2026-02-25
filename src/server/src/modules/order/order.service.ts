@@ -1,11 +1,14 @@
 import AppError from "@/shared/errors/AppError";
 import { OrderRepository } from "./order.repository";
 import prisma from "@/infra/database/database.config";
-import { CART_STATUS } from "@prisma/client";
-import { Prisma } from "@prisma/client";
+import { CART_STATUS, Prisma, ROLE } from "@prisma/client";
 import sendEmail from "@/shared/utils/sendEmail";
 import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
-import { toAccountReference } from "@/shared/utils/accountReference";
+import {
+  toAccountReference,
+  toOrderReference,
+} from "@/shared/utils/accountReference";
+import { formatDateTimeInIST } from "@/shared/utils/dateTime";
 import { makeLogsService } from "../logs/logs.factory";
 
 export class OrderService {
@@ -128,12 +131,12 @@ export class OrderService {
       orderItems,
     });
 
-    await this.sendOrderPlacedNotification(userId, order.id).catch(
+    await this.sendOrderPlacedNotifications(userId, order.id).catch(
       async (error: unknown) => {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown notification error";
 
-        await this.logsService.warn("Order placed email notification failed", {
+        await this.logsService.warn("Order placed notifications failed", {
           userId,
           orderId: order.id,
           error: errorMessage,
@@ -144,7 +147,30 @@ export class OrderService {
     return order;
   }
 
-  private async sendOrderPlacedNotification(
+  private async getAdminNotificationRecipients(
+    excludeEmail?: string
+  ): Promise<string[]> {
+    const admins = await prisma.user.findMany({
+      where: {
+        role: {
+          in: [ROLE.ADMIN, ROLE.SUPERADMIN],
+        },
+      },
+      select: {
+        email: true,
+      },
+    });
+
+    const normalizedExclude = excludeEmail?.trim().toLowerCase();
+    const emails = admins
+      .map((admin) => admin.email?.trim())
+      .filter((email): email is string => !!email)
+      .filter((email) => email.toLowerCase() !== normalizedExclude);
+
+    return Array.from(new Set(emails));
+  }
+
+  private async sendOrderPlacedNotifications(
     userId: string,
     orderId: string
   ): Promise<void> {
@@ -157,48 +183,106 @@ export class OrderService {
       },
     });
 
-    if (!user?.email) {
+    if (!user) {
       return;
     }
 
     const platformName = getPlatformName();
     const supportEmail = getSupportEmail();
     const accountReference = toAccountReference(user.id);
+    const orderReference = toOrderReference(orderId);
+    const actionTime = formatDateTimeInIST(new Date());
+    const notificationPromises: Promise<boolean>[] = [];
 
-    const isSent = await sendEmail({
-      to: user.email,
-      subject: `${platformName} | Order Placed`,
-      text: [
-        `Hello ${user.name},`,
-        "",
-        `Your order has been placed on ${platformName}.`,
-        `Order ID: ${orderId}`,
-        `Account Reference: ${accountReference}`,
-        `Current status: Order Placed`,
-        "",
-        `We will confirm your order after stock verification.`,
-        `Need help? Contact ${supportEmail}.`,
-      ].join("\n"),
-      html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
-          <p>Hello <strong>${user.name}</strong>,</p>
-          <p>Your order has been placed on <strong>${platformName}</strong>.</p>
-          <p>
-            <strong>Order ID:</strong> ${orderId}<br />
-            <strong>Account Reference:</strong> ${accountReference}<br />
-            <strong>Current status:</strong> Order Placed
-          </p>
-          <p>We will confirm your order after stock verification.</p>
-          <p>
-            Need help? Contact
-            <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
-          </p>
-        </div>
-      `,
-    });
+    if (user.email) {
+      notificationPromises.push(
+        sendEmail({
+          to: user.email,
+          subject: `${platformName} | Your Order Has Been Placed`,
+          text: [
+            `Hello ${user.name},`,
+            "",
+            `Your order has been placed on ${platformName}.`,
+            `Order ID: ${orderReference}`,
+            `Account Reference: ${accountReference}`,
+            `Current status: PLACED`,
+            `Action Time (IST): ${actionTime}`,
+            "",
+            "We will confirm your order after stock verification.",
+            `Need help? Contact ${supportEmail}.`,
+          ].join("\n"),
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+              <p>Hello <strong>${user.name}</strong>,</p>
+              <p>Your order has been placed on <strong>${platformName}</strong>.</p>
+              <p>
+                <strong>Order ID:</strong> ${orderReference}<br />
+                <strong>Account Reference:</strong> ${accountReference}<br />
+                <strong>Current status:</strong> PLACED<br />
+                <strong>Action Time (IST):</strong> ${actionTime}
+              </p>
+              <p>We will confirm your order after stock verification.</p>
+              <p>
+                Need help? Contact
+                <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
+              </p>
+            </div>
+          `,
+        })
+      );
+    }
 
-    if (!isSent) {
-      throw new Error("Failed to send order placed notification email.");
+    const adminRecipients = await this.getAdminNotificationRecipients(user.email);
+    for (const adminEmail of adminRecipients) {
+      notificationPromises.push(
+        sendEmail({
+          to: adminEmail,
+          subject: `${platformName} | New Order Arrived`,
+          text: [
+            "New order received.",
+            "",
+            `Order ID: ${orderReference}`,
+            `Customer Name: ${user.name}`,
+            `Customer Email: ${user.email || "Not available"}`,
+            `Account Reference: ${accountReference}`,
+            "Current status: PLACED",
+            `Action Time (IST): ${actionTime}`,
+            "",
+            `Please review and update status from the admin panel.`,
+          ].join("\n"),
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+              <p><strong>New order received.</strong></p>
+              <p>
+                <strong>Order ID:</strong> ${orderReference}<br />
+                <strong>Customer Name:</strong> ${user.name}<br />
+                <strong>Customer Email:</strong> ${
+                  user.email || "Not available"
+                }<br />
+                <strong>Account Reference:</strong> ${accountReference}<br />
+                <strong>Current status:</strong> PLACED<br />
+                <strong>Action Time (IST):</strong> ${actionTime}
+              </p>
+              <p>Please review and update status from the admin panel.</p>
+            </div>
+          `,
+        })
+      );
+    }
+
+    if (!notificationPromises.length) {
+      return;
+    }
+
+    const results = await Promise.allSettled(notificationPromises);
+    const hasFailure = results.some(
+      (result) =>
+        result.status === "rejected" ||
+        (result.status === "fulfilled" && result.value === false)
+    );
+
+    if (hasFailure) {
+      throw new Error("One or more order placement notifications failed.");
     }
   }
 }

@@ -10,18 +10,16 @@ const mapTransactionStatus = (searchQuery: string): string[] => {
 
   // These are all the possible enum values for the `status` field
   const validStatuses = [
-    "PENDING",
-    "PROCESSING",
-    "SHIPPED",
-    "IN_TRANSIT",
+    "PLACED",
+    "CONFIRMED",
+    "REJECTED",
     "DELIVERED",
-    "CANCELED",
-    "RETURNED",
-    "REFUNDED",
   ];
 
   // Filter enums that match the search query (case-insensitive)
-  return validStatuses.filter((status) => status.includes(query));
+  return validStatuses.filter((status) =>
+    status.toLowerCase().includes(query)
+  );
 };
 
 export default mapTransactionStatus;

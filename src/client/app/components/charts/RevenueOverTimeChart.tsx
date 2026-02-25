@@ -3,6 +3,7 @@ import React from "react";
 import Chart from "react-apexcharts";
 import { useQuery } from "@apollo/client";
 import { GET_ALL_ANALYTICS } from "@/app/gql/Dashboard";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 interface RevenueOverTimeChartProps {
   startDate: string;
@@ -34,6 +35,7 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
   startDate,
   endDate,
 }) => {
+  const formatPrice = useFormatPrice();
   const { data, loading, error } = useQuery<
     GetAllAnalyticsData,
     GetAllAnalyticsVars
@@ -42,6 +44,16 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
       params: { startDate, endDate },
     },
   });
+  const compactCurrencyFormatter = React.useMemo(
+    () =>
+      new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }),
+    []
+  );
 
   if (loading) {
     return <div>Loading chart...</div>;
@@ -101,20 +113,14 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
     },
     yaxis: {
       labels: {
-        formatter: (value: number) => {
-          if (value >= 1000) {
-            return `$${(value / 1000).toFixed(0)}K`;
-          }
-          return `$${value.toFixed(0)}`;
-        },
+        formatter: (value: number) => compactCurrencyFormatter.format(value),
       },
     },
     tooltip: {
       shared: true,
       intersect: false,
       y: {
-        formatter: (value: number) =>
-          `$${value.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+        formatter: (value: number) => formatPrice(value),
       },
     },
     markers: {
@@ -139,20 +145,14 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
           <div className="flex items-center">
             <span className="w-4 h-4 rounded-full bg-indigo-500 mr-2"></span>
             <span className="text-sm font-medium text-gray-700">
-              Total Revenue: $
-              {totalRevenue.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-              })}{" "}
+              Total Revenue: {formatPrice(totalRevenue)}{" "}
               {revenuePercentage.toFixed(0)}%
             </span>
           </div>
           <div className="flex items-center">
             <span className="w-4 h-4 rounded-full bg-[#FBBF24] mr-2"></span>
             <span className="text-sm font-medium text-gray-700">
-              Total Target: $
-              {totalTarget.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-              })}{" "}
+              Total Target: {formatPrice(totalTarget)}{" "}
               {targetPercentage.toFixed(0)}%
             </span>
           </div>

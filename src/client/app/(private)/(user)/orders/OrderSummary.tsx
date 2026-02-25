@@ -9,12 +9,17 @@ import ToggleableText from "@/app/components/atoms/ToggleableText";
 import useToast from "@/app/hooks/ui/useToast";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
 import { toOrderReference } from "@/app/lib/utils/accountReference";
+import {
+  canDownloadInvoiceForStatus,
+  normalizeOrderStatus,
+} from "@/app/lib/orderLifecycle";
 
 const OrderSummary = ({ order }) => {
   const formatPrice = useFormatPrice();
   const { showToast } = useToast();
-  const orderStatus = order?.transaction?.status || order?.status || "PENDING";
-  const canDownloadInvoice = orderStatus !== "PENDING";
+  const orderStatus = order?.transaction?.status || order?.status || "PLACED";
+  const normalizedOrderStatus = normalizeOrderStatus(orderStatus);
+  const canDownloadInvoice = canDownloadInvoiceForStatus(orderStatus);
   const shippingCost = 75.0;
   const platformFees = 94.0;
   const subtotal = order.amount;
@@ -24,6 +29,13 @@ const OrderSummary = ({ order }) => {
 
   const handleDownloadInvoice = useCallback(async () => {
     if (!canDownloadInvoice) {
+      if (normalizedOrderStatus === "REJECTED") {
+        showToast(
+          "This order was cancelled, so invoice download is unavailable.",
+          "info"
+        );
+        return;
+      }
       showToast(
         "Invoice will be available after admin confirms your order.",
         "info"
@@ -39,7 +51,7 @@ const OrderSummary = ({ order }) => {
         error instanceof Error ? error.message : "Failed to download invoice";
       showToast(message, "error");
     }
-  }, [canDownloadInvoice, order.id, showToast]);
+  }, [canDownloadInvoice, normalizedOrderStatus, order.id, showToast]);
 
   return (
     <motion.div
@@ -61,8 +73,16 @@ const OrderSummary = ({ order }) => {
         </button>
       </div>
       {!canDownloadInvoice && (
-        <p className="mb-4 text-xs text-amber-700">
-          Invoice is generated only after admin confirmation.
+        <p
+          className={`mb-4 text-xs ${
+            normalizedOrderStatus === "REJECTED"
+              ? "text-red-700"
+              : "text-amber-700"
+          }`}
+        >
+          {normalizedOrderStatus === "REJECTED"
+            ? "This order was cancelled after review. Invoice is not available."
+            : "Invoice is generated only after admin confirmation."}
         </p>
       )}
 

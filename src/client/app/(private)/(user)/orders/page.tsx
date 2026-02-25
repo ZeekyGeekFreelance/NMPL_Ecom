@@ -22,50 +22,29 @@ import OrderCardSkeleton from "@/app/components/feedback/OrderCardSkeleton";
 import OrderFilters from "@/app/components/molecules/OrderFilters";
 import useToast from "@/app/hooks/ui/useToast";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
-
-const normalizeOrderStatus = (status: string) => {
-  if (status === "SHIPPED") {
-    return "IN_TRANSIT";
-  }
-  return status || "PENDING";
-};
-
-const getOrderStatusLabel = (status: string) => {
-  const normalizedStatus = normalizeOrderStatus(status);
-  const statusLabels: Record<string, string> = {
-    PENDING: "Order Placed",
-    PROCESSING: "Confirmed",
-    IN_TRANSIT: "Out for Delivery",
-    DELIVERED: "Delivered",
-    CANCELED: "Canceled",
-    RETURNED: "Returned",
-    REFUNDED: "Refunded",
-  };
-
-  return statusLabels[normalizedStatus] || "Order Placed";
-};
-
-const canDownloadInvoiceForStatus = (status: string) => {
-  return normalizeOrderStatus(status) !== "PENDING";
-};
+import {
+  canDownloadInvoiceForStatus,
+  getCustomerOrderStatusLabel,
+  normalizeOrderStatus,
+} from "@/app/lib/orderLifecycle";
+import { toOrderReference } from "@/app/lib/utils/accountReference";
+import formatDate from "@/app/utils/formatDate";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 // Status badge component
 const StatusBadge = ({ status }: { status: string }) => {
   const getStatusConfig = (status: string) => {
     const normalizedStatus = normalizeOrderStatus(status);
     const configs = {
-      PENDING: { color: "bg-yellow-100 text-yellow-800", icon: Clock },
-      PROCESSING: { color: "bg-blue-100 text-blue-800", icon: Clock },
-      IN_TRANSIT: { color: "bg-indigo-100 text-indigo-800", icon: Truck },
+      PLACED: { color: "bg-yellow-100 text-yellow-800", icon: Clock },
+      CONFIRMED: { color: "bg-blue-100 text-blue-800", icon: Truck },
+      REJECTED: { color: "bg-red-100 text-red-800", icon: XCircle },
       DELIVERED: { color: "bg-green-100 text-green-800", icon: CheckCircle },
-      CANCELED: { color: "bg-red-100 text-red-800", icon: XCircle },
-      RETURNED: { color: "bg-orange-100 text-orange-800", icon: XCircle },
-      REFUNDED: { color: "bg-gray-100 text-gray-800", icon: XCircle },
     };
-    return configs[normalizedStatus as keyof typeof configs] || configs.PENDING;
+    return configs[normalizedStatus as keyof typeof configs] || configs.PLACED;
   };
 
-  const statusLabel = getOrderStatusLabel(status);
+  const statusLabel = getCustomerOrderStatusLabel(status);
   const config = getStatusConfig(status);
   const IconComponent = config.icon;
 
@@ -90,22 +69,7 @@ const OrderCard = ({
   order: any;
   onDownloadInvoice: (orderId: string) => void;
 }) => {
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
-  };
+  const formatPrice = useFormatPrice();
 
   const getItemCount = (orderItems: any[]) => {
     return (
@@ -116,9 +80,7 @@ const OrderCard = ({
     );
   };
 
-  const truncateId = (id: string) => {
-    return id.length > 8 ? `${id.substring(0, 8)}...` : id;
-  };
+  const orderReference = toOrderReference(order.id);
   const canDownloadInvoice = canDownloadInvoiceForStatus(order.status);
 
   return (
@@ -138,7 +100,7 @@ const OrderCard = ({
                 className="sm:w-4 sm:h-4 text-gray-500 flex-shrink-0"
               />
               <span className="text-xs sm:text-sm text-gray-600 font-medium truncate">
-                Order #{truncateId(order.id)}
+                Order #{orderReference}
               </span>
             </div>
             <div className="flex items-center space-x-1 sm:space-x-2">
@@ -166,7 +128,7 @@ const OrderCard = ({
             <div className="min-w-0">
               <p className="text-xs text-gray-500">Total Amount</p>
               <p className="text-sm sm:text-lg font-semibold text-gray-900 truncate">
-                {formatCurrency(order.amount)}
+                {formatPrice(order.amount)}
               </p>
             </div>
           </div>
@@ -199,7 +161,7 @@ const OrderCard = ({
                     {item.quantity > 1 && ` (x${item.quantity})`}
                   </span>
                   <span className="text-gray-500 font-medium text-xs sm:text-sm flex-shrink-0">
-                    {formatCurrency(item.price * item.quantity)}
+                    {formatPrice(item.price * item.quantity)}
                   </span>
                 </div>
               ))}
@@ -266,9 +228,11 @@ const UserOrders = () => {
       const previousStatus = previousOrderStatusById.current[order.id];
 
       if (previousStatus && previousStatus !== currentStatus) {
-        const shortOrderId = order.id?.slice(0, 8) || order.id;
+        const orderReference = toOrderReference(order.id);
         showToast(
-          `Order #${shortOrderId} is now ${getOrderStatusLabel(currentStatus)}.`,
+          `Order #${orderReference} is now ${getCustomerOrderStatusLabel(
+            currentStatus
+          )}.`,
           "info"
         );
       }
@@ -305,7 +269,7 @@ const UserOrders = () => {
   const handleDownloadInvoice = React.useCallback(
     async (orderId: string) => {
       const order = orders.find((item: any) => item.id === orderId);
-      if (!canDownloadInvoiceForStatus(order?.status || "PENDING")) {
+      if (!canDownloadInvoiceForStatus(order?.status || "PLACED")) {
         showToast(
           "Invoice will be available after admin confirms your order.",
           "info"

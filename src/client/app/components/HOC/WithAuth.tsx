@@ -13,7 +13,13 @@ type WithAuthOptions = {
   unauthorizedRedirectTo?: string;
 };
 
-const getDefaultAllowedRoles = (pathname: string): AppRole[] | undefined => {
+const getDefaultAllowedRoles = (
+  pathname?: string | null
+): AppRole[] | undefined => {
+  if (typeof pathname !== "string") {
+    return undefined;
+  }
+
   if (pathname.startsWith("/dashboard")) {
     return ["ADMIN", "SUPERADMIN"];
   }

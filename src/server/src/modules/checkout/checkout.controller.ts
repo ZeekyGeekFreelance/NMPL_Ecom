@@ -5,6 +5,7 @@ import { CheckoutService } from "./checkout.service";
 import AppError from "@/shared/errors/AppError";
 import { CartService } from "../cart/cart.service";
 import { makeLogsService } from "../logs/logs.factory";
+import { toOrderReference } from "@/shared/utils/accountReference";
 
 export class CheckoutController {
   private logsService = makeLogsService();
@@ -16,9 +17,14 @@ export class CheckoutController {
 
   initiateCheckout = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
+    const userRole = req.user?.role;
 
     if (!userId) {
       throw new AppError(400, "User not found");
+    }
+
+    if (userRole !== "USER") {
+      throw new AppError(403, "Only customer accounts can place orders");
     }
 
     const cart = await this.cartService.getOrCreateCart(userId);
@@ -26,17 +32,22 @@ export class CheckoutController {
       throw new AppError(400, "Cart is empty");
     }
 
-    const session = await this.checkoutService.createStripeSession(cart, userId);
-    sendResponse(res, 200, {
-      data: { sessionId: session.id },
-      message: "Checkout initiated successfully",
+    await this.cartService.logCartEvent(cart.id, "CHECKOUT_STARTED", userId);
+    const order = await this.checkoutService.placeOrder(userId, cart.id);
+    await this.cartService.logCartEvent(cart.id, "CHECKOUT_COMPLETED", userId);
+
+    sendResponse(res, 201, {
+      data: {
+        orderId: order.id,
+        orderReference: toOrderReference(order.id),
+        status: order.status,
+      },
+      message: "Order has been placed successfully",
     });
 
-    this.cartService.logCartEvent(cart.id, "CHECKOUT_STARTED", userId);
-
-    this.logsService.info("Checkout initiated", {
+    this.logsService.info("Order placed from checkout", {
       userId,
-      sessionId: session.id,
+      orderId: order.id,
       timePeriod: 0,
     });
   });
