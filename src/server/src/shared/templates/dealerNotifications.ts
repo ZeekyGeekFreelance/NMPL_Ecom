@@ -1,4 +1,5 @@
 import { getPlatformName } from "@/shared/utils/branding";
+import { formatINRCurrency } from "@/shared/utils/currency";
 
 export type DealerStatusEmail = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -9,12 +10,7 @@ export interface DealerPricingChangeRow {
   nextPrice: number | null;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
+const formatCurrency = (value: number) => formatINRCurrency(value);
 
 const formatOptionalCurrency = (value: number | null) => {
   if (value === null) {

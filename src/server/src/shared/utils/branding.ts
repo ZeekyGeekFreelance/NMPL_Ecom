@@ -1,5 +1,5 @@
-const DEFAULT_PLATFORM_NAME = "W-PDMS";
-const DEFAULT_SUPPORT_EMAIL = "support@example.com";
+const DEFAULT_PLATFORM_NAME = "NMPL";
+const DEFAULT_SUPPORT_EMAIL = "support@nmpl.local";
 
 const firstNonEmpty = (values: Array<string | undefined | null>): string | null => {
   for (const value of values) {

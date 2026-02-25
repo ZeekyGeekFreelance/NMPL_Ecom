@@ -17,6 +17,7 @@ const asyncHandler_1 = __importDefault(require("@/shared/utils/asyncHandler"));
 const sendResponse_1 = __importDefault(require("@/shared/utils/sendResponse"));
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const logs_factory_1 = require("../logs/logs.factory");
+const accountReference_1 = require("@/shared/utils/accountReference");
 class CheckoutController {
     constructor(checkoutService, cartService) {
         this.checkoutService = checkoutService;
@@ -42,6 +43,7 @@ class CheckoutController {
             (0, sendResponse_1.default)(res, 201, {
                 data: {
                     orderId: order.id,
+                    orderReference: (0, accountReference_1.toOrderReference)(order.id),
                     status: order.status,
                 },
                 message: "Order has been placed successfully",

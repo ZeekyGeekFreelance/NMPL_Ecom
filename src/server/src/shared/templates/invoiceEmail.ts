@@ -1,5 +1,6 @@
 import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
 import { formatDateTimeInIST } from "@/shared/utils/dateTime";
+import { formatINRCurrency } from "@/shared/utils/currency";
 
 interface InvoiceEmailTemplateInput {
   recipientName: string;
@@ -7,15 +8,10 @@ interface InvoiceEmailTemplateInput {
   copyLabel: string;
   invoiceNumber: string;
   orderId: string;
+  customerType?: "USER" | "DEALER";
   orderDate: Date;
   totalAmount: number;
 }
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-  }).format(amount);
 
 export const buildInvoiceEmailTemplate = ({
   recipientName,
@@ -23,11 +19,12 @@ export const buildInvoiceEmailTemplate = ({
   copyLabel,
   invoiceNumber,
   orderId,
+  customerType,
   orderDate,
   totalAmount,
 }: InvoiceEmailTemplateInput): { html: string; text: string } => {
   const normalizedName = recipientName?.trim() || "Customer";
-  const amount = formatCurrency(totalAmount);
+  const amount = formatINRCurrency(totalAmount);
   const placedOn = formatDateTimeInIST(orderDate);
   const generatedAt = formatDateTimeInIST(new Date());
   const platformName = getPlatformName();
@@ -42,6 +39,7 @@ export const buildInvoiceEmailTemplate = ({
       accountReference ? `Account Reference: ${accountReference}` : null,
       `Invoice Number: ${invoiceNumber}`,
       `Order ID: ${orderId}`,
+      customerType ? `Customer Type: ${customerType}` : null,
       `Order Date: ${placedOn}`,
       `Generated At: ${generatedAt}`,
       `Total Amount: ${amount}`,
@@ -62,6 +60,7 @@ export const buildInvoiceEmailTemplate = ({
           }
           <strong>Invoice Number:</strong> ${invoiceNumber}<br />
           <strong>Order ID:</strong> ${orderId}<br />
+          ${customerType ? `<strong>Customer Type:</strong> ${customerType}<br />` : ""}
           <strong>Order Date:</strong> ${placedOn}<br />
           <strong>Generated At:</strong> ${generatedAt}<br />
           <strong>Total Amount:</strong> ${amount}

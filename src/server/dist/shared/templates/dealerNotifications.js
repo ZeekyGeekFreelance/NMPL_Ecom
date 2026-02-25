@@ -2,11 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildDealerRemovedEmail = exports.buildDealerAccountCreatedEmail = exports.buildDealerPricingUpdatedEmail = exports.buildDealerStatusUpdatedEmail = exports.buildDealerApplicationSubmittedEmail = void 0;
 const branding_1 = require("@/shared/utils/branding");
-const formatCurrency = (value) => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-}).format(value);
+const currency_1 = require("@/shared/utils/currency");
+const formatCurrency = (value) => (0, currency_1.formatINRCurrency)(value);
 const formatOptionalCurrency = (value) => {
     if (value === null) {
         return "Base price";

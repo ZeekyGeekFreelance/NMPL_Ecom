@@ -63,6 +63,9 @@ const OrderInformation = ({ order, className = "" }) => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  SN No.
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Product
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -80,11 +83,14 @@ const OrderInformation = ({ order, className = "" }) => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {orderItems.map((item) => (
+              {orderItems.map((item, index) => (
                 <tr
                   key={item.id}
                   className="hover:bg-gray-50 transition-colors duration-150"
                 >
+                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {index + 1}
+                  </td>
                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                     {item.variant?.product?.name || "Unknown Product"}
                   </td>
@@ -105,7 +111,7 @@ const OrderInformation = ({ order, className = "" }) => {
               {orderItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-3 py-4 text-sm text-gray-500 text-center"
                   >
                     No order items found.

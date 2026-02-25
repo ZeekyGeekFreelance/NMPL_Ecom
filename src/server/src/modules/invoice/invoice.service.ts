@@ -82,7 +82,11 @@ export class InvoiceService {
 
   private getCustomerCopyLabel(invoice: InvoiceWithDetails): string {
     const isDealer = invoice.user.dealerProfile?.status === "APPROVED";
-    return isDealer ? "Dealer Copy" : "Client Copy";
+    return isDealer ? "Dealer Copy" : "User Copy";
+  }
+
+  private resolveCustomerType(invoice: InvoiceWithDetails): "DEALER" | "USER" {
+    return invoice.user.dealerProfile?.status === "APPROVED" ? "DEALER" : "USER";
   }
 
   private async sendInvoiceEmails(invoice: InvoiceWithDetails): Promise<void> {
@@ -97,6 +101,7 @@ export class InvoiceService {
 
     const pdfBuffer = await this.buildInvoicePdf(invoice);
     const copyLabel = this.getCustomerCopyLabel(invoice);
+    const customerType = this.resolveCustomerType(invoice);
     const platformName = getPlatformName();
     const accountReference = toAccountReference(invoice.user.id);
     const orderReference = toOrderReference(invoice.orderId);
@@ -113,6 +118,7 @@ export class InvoiceService {
         copyLabel,
         invoiceNumber: invoice.invoiceNumber,
         orderId: orderReference,
+        customerType,
         orderDate: invoice.order.orderDate,
         totalAmount: invoice.order.amount,
       });
@@ -143,6 +149,7 @@ export class InvoiceService {
         copyLabel: "Billing Copy",
         invoiceNumber: invoice.invoiceNumber,
         orderId: orderReference,
+        customerType,
         orderDate: invoice.order.orderDate,
         totalAmount: invoice.order.amount,
       });
@@ -242,8 +249,7 @@ export class InvoiceService {
       subtotal: item.price * item.quantity,
     }));
 
-    const customerType =
-      invoice.user.dealerProfile?.status === "APPROVED" ? "DEALER" : "CLIENT";
+    const customerType = this.resolveCustomerType(invoice);
 
     return generateInvoicePdf({
       invoiceNumber: invoice.invoiceNumber,

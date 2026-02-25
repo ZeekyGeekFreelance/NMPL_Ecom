@@ -5,12 +5,14 @@ import { useAdminSocketEvents } from "../../(chat)/useAdminSocketEvents";
 import ChatContainer from "../../(chat)";
 import useToast from "@/app/hooks/ui/useToast";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { toPrefixedReference } from "@/app/lib/utils/accountReference";
 
 const AdminChatsPage = () => {
   const { showToast } = useToast();
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const { data: chats, isLoading, refetch } = useGetAllChatsQuery("OPEN");
   console.log("chats => ", chats);
+  const formatChatReference = (id: string) => toPrefixedReference("CHT", id);
 
   // Listen for admin socket events
   useAdminSocketEvents(
@@ -49,7 +51,7 @@ const AdminChatsPage = () => {
                 }`}
               >
                 <div className="font-medium">
-                  Chat #{chat.id.substring(0, 8)}
+                  Chat #{formatChatReference(chat.id)}
                 </div>
                 <div className="text-sm text-gray-500 flex items-center">
                   <span

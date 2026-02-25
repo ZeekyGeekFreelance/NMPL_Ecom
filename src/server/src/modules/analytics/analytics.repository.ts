@@ -49,14 +49,26 @@ export class AnalyticsRepository {
           lte: end || yearEnd,
         },
         ...(category && {
-          product: {
-            category: {
-              name: category,
+          variant: {
+            product: {
+              category: {
+                name: category,
+              },
             },
           },
         }),
       },
-      include: { variant: true },
+      include: {
+        variant: {
+          include: {
+            product: {
+              include: {
+                category: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 

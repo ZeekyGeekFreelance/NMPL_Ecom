@@ -35,6 +35,21 @@ class UserService {
     normalizeEmail(email) {
         return email.trim().toLowerCase();
     }
+    normalizeDisplayName(name, label = "name") {
+        const normalized = String(name !== null && name !== void 0 ? name : "")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!normalized) {
+            throw new AppError_1.default(400, `${label} is required`);
+        }
+        if (normalized.length < 2) {
+            throw new AppError_1.default(400, `${label} must be at least 2 characters long`);
+        }
+        if (normalized.length > 80) {
+            throw new AppError_1.default(400, `${label} must be at most 80 characters long`);
+        }
+        return normalized;
+    }
     assertUuid(value, label) {
         const normalized = value === null || value === void 0 ? void 0 : value.trim();
         if (!normalized || !UserService.UUID_PATTERN.test(normalized)) {
@@ -117,7 +132,24 @@ class UserService {
             if (!user) {
                 throw new AppError_1.default(404, "User not found");
             }
-            const updatedUser = yield this.userRepository.updateUser(userId, data);
+            const payload = Object.assign({}, data);
+            if (data.name !== undefined) {
+                payload.name = this.normalizeDisplayName(data.name, "Name");
+            }
+            const updatedUser = yield this.userRepository.updateUser(userId, payload);
+            return this.withAccountReference(updatedUser);
+        });
+    }
+    updateCurrentUserProfile(id, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const userId = this.assertUuid(id, "user id");
+            const user = yield this.userRepository.findUserById(userId);
+            if (!user) {
+                throw new AppError_1.default(404, "User not found");
+            }
+            const updatedUser = yield this.userRepository.updateUser(userId, {
+                name: this.normalizeDisplayName(data.name, "Name"),
+            });
             return this.withAccountReference(updatedUser);
         });
     }

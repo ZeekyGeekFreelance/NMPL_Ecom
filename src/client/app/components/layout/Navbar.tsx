@@ -24,6 +24,7 @@ import { useAppSelector } from "@/app/store/hooks";
 import { useSignOutMutation } from "@/app/store/apis/AuthApi";
 import { generateUserAvatar } from "@/app/utils/placeholderImage";
 import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
+import { PLATFORM_NAME } from "@/app/lib/constants/config";
 
 type NavLink = {
   href: string;
@@ -181,7 +182,7 @@ const Navbar = () => {
             <span className="rounded-lg bg-teal-700 text-white p-1.5">
               <Store size={18} />
             </span>
-            <span>Ecommerce</span>
+            <span>{PLATFORM_NAME}</span>
           </Link>
 
           <div className="hidden lg:flex flex-1 max-w-xl mx-4">

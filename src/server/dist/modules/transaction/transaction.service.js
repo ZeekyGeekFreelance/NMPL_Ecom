@@ -19,6 +19,9 @@ const logs_factory_1 = require("../logs/logs.factory");
 const accountReference_1 = require("@/shared/utils/accountReference");
 const sendEmail_1 = __importDefault(require("@/shared/utils/sendEmail"));
 const branding_1 = require("@/shared/utils/branding");
+const database_config_1 = __importDefault(require("@/infra/database/database.config"));
+const client_1 = require("@prisma/client");
+const dateTime_1 = require("@/shared/utils/dateTime");
 const allowedStatusTransitions = {
     PLACED: ["CONFIRMED", "REJECTED"],
     CONFIRMED: ["DELIVERED", "REJECTED"],
@@ -28,13 +31,13 @@ const allowedStatusTransitions = {
 const userFacingStatusLabel = {
     PLACED: "Placed",
     CONFIRMED: "Confirmed",
-    REJECTED: "Rejected",
+    REJECTED: "Cancelled",
     DELIVERED: "Delivered",
 };
 const statusEmailSubjectLine = {
     PLACED: "Your Order Has Been Placed",
     CONFIRMED: "Your Order Has Been Confirmed",
-    REJECTED: "Your Order Has Been Rejected",
+    REJECTED: "Your Order Has Been Cancelled",
     DELIVERED: "Your Order Has Been Delivered",
 };
 class TransactionService {
@@ -82,46 +85,141 @@ class TransactionService {
             throw new AppError_1.default(400, `Invalid status transition from ${currentStatus} to ${nextStatus}`);
         }
     }
+    getAdminStatusCopyRecipients(excludeEmail) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const admins = yield database_config_1.default.user.findMany({
+                where: {
+                    role: {
+                        in: [client_1.ROLE.ADMIN, client_1.ROLE.SUPERADMIN],
+                    },
+                },
+                select: {
+                    email: true,
+                    name: true,
+                    role: true,
+                },
+            });
+            const normalizedExcludeEmail = excludeEmail === null || excludeEmail === void 0 ? void 0 : excludeEmail.trim().toLowerCase();
+            const dedupe = new Set();
+            const recipients = [];
+            for (const admin of admins) {
+                const normalizedEmail = (_a = admin.email) === null || _a === void 0 ? void 0 : _a.trim().toLowerCase();
+                if (!normalizedEmail) {
+                    continue;
+                }
+                if (normalizedExcludeEmail &&
+                    normalizedEmail === normalizedExcludeEmail) {
+                    continue;
+                }
+                if (dedupe.has(normalizedEmail)) {
+                    continue;
+                }
+                dedupe.add(normalizedEmail);
+                recipients.push({
+                    email: admin.email.trim(),
+                    name: admin.name || "Admin",
+                    role: admin.role,
+                });
+            }
+            return recipients;
+        });
+    }
     notifyOrderStatusChange(params) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
             const platformName = (0, branding_1.getPlatformName)();
             const supportEmail = (0, branding_1.getSupportEmail)();
             const currentLabel = userFacingStatusLabel[params.nextStatus];
             const previousLabel = userFacingStatusLabel[params.previousStatus];
             const subjectLine = statusEmailSubjectLine[params.nextStatus];
-            const isSent = yield (0, sendEmail_1.default)({
-                to: params.recipientEmail,
-                subject: `${platformName} | ${subjectLine}`,
-                text: [
-                    `Hello ${params.recipientName},`,
-                    "",
-                    `Your order has been updated on ${platformName}.`,
-                    `Order ID: ${params.orderId}`,
-                    `Account Reference: ${params.accountReference}`,
-                    `Previous status: ${previousLabel.toUpperCase()}`,
-                    `Current status: ${currentLabel.toUpperCase()}`,
-                    "",
-                    `For support, contact ${supportEmail}.`,
-                ].join("\n"),
-                html: `
-        <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
-          <p>Hello <strong>${params.recipientName}</strong>,</p>
-          <p>Your order has been updated on <strong>${platformName}</strong>.</p>
-          <p>
-            <strong>Order ID:</strong> ${params.orderId}<br />
-            <strong>Account Reference:</strong> ${params.accountReference}<br />
-            <strong>Previous status:</strong> ${previousLabel.toUpperCase()}<br />
-            <strong>Current status:</strong> ${currentLabel.toUpperCase()}
-          </p>
-          <p>
-            For support, contact
-            <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
-          </p>
-        </div>
-      `,
-            });
-            if (!isSent) {
-                throw new Error("Order status notification email failed to send.");
+            const customerName = ((_a = params.recipientName) === null || _a === void 0 ? void 0 : _a.trim()) || "Customer";
+            const notificationPromises = [];
+            const customerEmail = ((_b = params.recipientEmail) === null || _b === void 0 ? void 0 : _b.trim()) || null;
+            const orderReference = (0, accountReference_1.toOrderReference)(params.orderId);
+            const actionTime = (0, dateTime_1.formatDateTimeInIST)(new Date());
+            if (customerEmail) {
+                notificationPromises.push((0, sendEmail_1.default)({
+                    to: customerEmail,
+                    subject: `${platformName} | ${subjectLine}`,
+                    text: [
+                        `Hello ${customerName},`,
+                        "",
+                        `Your order has been updated on ${platformName}.`,
+                        `Order ID: ${orderReference}`,
+                        `Account Reference: ${params.accountReference}`,
+                        `Previous status: ${previousLabel.toUpperCase()}`,
+                        `Current status: ${currentLabel.toUpperCase()}`,
+                        `Action Time (IST): ${actionTime}`,
+                        "",
+                        `For support, contact ${supportEmail}.`,
+                    ].join("\n"),
+                    html: `
+            <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+              <p>Hello <strong>${customerName}</strong>,</p>
+              <p>Your order has been updated on <strong>${platformName}</strong>.</p>
+              <p>
+                <strong>Order ID:</strong> ${orderReference}<br />
+                <strong>Account Reference:</strong> ${params.accountReference}<br />
+                <strong>Previous status:</strong> ${previousLabel.toUpperCase()}<br />
+                <strong>Current status:</strong> ${currentLabel.toUpperCase()}<br />
+                <strong>Action Time (IST):</strong> ${actionTime}
+              </p>
+              <p>
+                For support, contact
+                <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
+              </p>
+            </div>
+          `,
+                }));
+            }
+            const roleCopyRecipients = yield this.getAdminStatusCopyRecipients(customerEmail);
+            for (const recipient of roleCopyRecipients) {
+                notificationPromises.push((0, sendEmail_1.default)({
+                    to: recipient.email,
+                    subject: `${platformName} | Order Status Updated (${currentLabel.toUpperCase()})`,
+                    text: [
+                        `Hello ${recipient.name},`,
+                        "",
+                        `An order status has been updated on ${platformName}.`,
+                        `Order ID: ${orderReference}`,
+                        `Customer: ${customerName}`,
+                        `Customer Email: ${customerEmail || "Not available"}`,
+                        `Account Reference: ${params.accountReference}`,
+                        `Previous status: ${previousLabel.toUpperCase()}`,
+                        `Current status: ${currentLabel.toUpperCase()}`,
+                        `Action Time (IST): ${actionTime}`,
+                        `Recipient role: ${recipient.role}`,
+                        "",
+                        "This is an automated copy for operational tracking.",
+                    ].join("\n"),
+                    html: `
+            <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
+              <p>Hello <strong>${recipient.name}</strong>,</p>
+              <p>An order status has been updated on <strong>${platformName}</strong>.</p>
+              <p>
+                <strong>Order ID:</strong> ${orderReference}<br />
+                <strong>Customer:</strong> ${customerName}<br />
+                <strong>Customer Email:</strong> ${customerEmail || "Not available"}<br />
+                <strong>Account Reference:</strong> ${params.accountReference}<br />
+                <strong>Previous status:</strong> ${previousLabel.toUpperCase()}<br />
+                <strong>Current status:</strong> ${currentLabel.toUpperCase()}<br />
+                <strong>Action Time (IST):</strong> ${actionTime}<br />
+                <strong>Recipient role:</strong> ${recipient.role}
+              </p>
+              <p>This is an automated copy for operational tracking.</p>
+            </div>
+          `,
+                }));
+            }
+            if (!notificationPromises.length) {
+                return;
+            }
+            const results = yield Promise.allSettled(notificationPromises);
+            const hasFailure = results.some((result) => result.status === "rejected" ||
+                (result.status === "fulfilled" && result.value === false));
+            if (hasFailure) {
+                throw new Error("One or more order status notification emails failed.");
             }
         });
     }
@@ -167,26 +265,27 @@ class TransactionService {
             const transaction = yield this.transactionRepository.updateTransaction(id, {
                 status: nextStatus,
             });
-            const recipientEmail = (_b = (_a = transaction.order) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.email;
+            const recipientEmail = ((_b = (_a = transaction.order) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.email) || null;
             const recipientName = ((_d = (_c = transaction.order) === null || _c === void 0 ? void 0 : _c.user) === null || _d === void 0 ? void 0 : _d.name) || "Customer";
             const recipientUserId = (_f = (_e = transaction.order) === null || _e === void 0 ? void 0 : _e.user) === null || _f === void 0 ? void 0 : _f.id;
-            if (recipientEmail && recipientUserId) {
-                yield this.notifyOrderStatusChange({
-                    recipientEmail,
-                    recipientName,
-                    accountReference: (0, accountReference_1.toAccountReference)(recipientUserId),
+            const accountReference = recipientUserId
+                ? (0, accountReference_1.toAccountReference)(recipientUserId)
+                : "N/A";
+            yield this.notifyOrderStatusChange({
+                recipientEmail,
+                recipientName,
+                accountReference,
+                orderId: transaction.orderId,
+                previousStatus,
+                nextStatus,
+            }).catch((error) => __awaiter(this, void 0, void 0, function* () {
+                const errorMessage = error instanceof Error ? error.message : "Unknown email error";
+                yield this.logsService.warn("Order status notification email failed", {
+                    transactionId: id,
                     orderId: transaction.orderId,
-                    previousStatus,
-                    nextStatus,
-                }).catch((error) => __awaiter(this, void 0, void 0, function* () {
-                    const errorMessage = error instanceof Error ? error.message : "Unknown email error";
-                    yield this.logsService.warn("Order status notification email failed", {
-                        transactionId: id,
-                        orderId: transaction.orderId,
-                        error: errorMessage,
-                    });
-                }));
-            }
+                    error: errorMessage,
+                });
+            }));
             if (previousStatus === "PLACED" &&
                 nextStatus === "CONFIRMED") {
                 this.invoiceService

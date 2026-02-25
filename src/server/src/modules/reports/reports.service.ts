@@ -2,24 +2,17 @@ import { subDays, subMonths, subYears, startOfYear, endOfYear } from "date-fns";
 import redisClient from "@/infra/cache/redis";
 import { ReportsRepository } from "./reports.repository";
 import { AnalyticsRepository } from "../analytics/analytics.repository";
-import { ProductRepository } from "../product/product.repository";
 import {
   DateRangeQuery,
   SalesReport,
   UserRetentionReport,
 } from "./reports.types";
-import { PrismaClient } from "@prisma/client";
 
 export class ReportsService {
-  private prisma: PrismaClient;
-
   constructor(
     private reportsRepository: ReportsRepository,
-    private analyticsRepository: AnalyticsRepository,
-    private productRepository: ProductRepository
-  ) {
-    this.prisma = new PrismaClient();
-  }
+    private analyticsRepository: AnalyticsRepository
+  ) {}
 
   async generateSalesReport(query: DateRangeQuery): Promise<SalesReport> {
     const { timePeriod, year, startDate, endDate } = query;
@@ -59,9 +52,7 @@ export class ReportsService {
       [key: string]: { revenue: number; sales: number; name: string };
     } = {};
     for (const item of orderItems) {
-      const product = await this.productRepository.findProductById(
-        item.variantId
-      );
+      const product = item.variant?.product;
       const categoryId = product?.categoryId || "uncategorized";
       const categoryName = product?.category?.name || "Uncategorized";
       if (!categorySales[categoryId]) {
@@ -72,7 +63,7 @@ export class ReportsService {
         };
       }
       categorySales[categoryId].revenue +=
-        item.quantity * ( item.variant.price || 0); 
+        item.quantity * (item.price || item.variant?.price || 0);
       categorySales[categoryId].sales += item.quantity;
     }
     const byCategory = Object.entries(categorySales).map(
@@ -88,25 +79,29 @@ export class ReportsService {
     const productSales: {
       [key: string]: {
         productId: string;
+        sku: string;
         productName: string;
         quantity: number;
         revenue: number;
       };
     } = {};
     for (const item of orderItems) {
-      const productId = item.variantId;
-      if (!productSales[productId]) {
-        const product = await this.productRepository.findProductById(productId);
-        productSales[productId] = {
+      const sku = item.variant?.sku || "N/A";
+      const productId = item.variant?.productId || item.variantId;
+      const aggregationKey = `${productId}:${sku}`;
+
+      if (!productSales[aggregationKey]) {
+        productSales[aggregationKey] = {
           productId,
-          productName: product?.name || "Unknown",
+          sku,
+          productName: item.variant?.product?.name || "Unknown",
           quantity: 0,
           revenue: 0,
         };
       }
-      productSales[productId].quantity += item.quantity;
-      productSales[productId].revenue +=
-        item.quantity * (item.variant.price || 0);
+      productSales[aggregationKey].quantity += item.quantity;
+      productSales[aggregationKey].revenue +=
+        item.quantity * (item.price || item.variant?.price || 0);
     }
     const topProducts = Object.values(productSales)
       .sort((a, b) => b.revenue - a.revenue)

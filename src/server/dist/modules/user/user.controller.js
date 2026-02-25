@@ -61,6 +61,25 @@ class UserController {
                 message: "User fetched successfully",
             });
         }));
+        this.updateCurrentUserProfile = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            const currentUserId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            if (!currentUserId) {
+                throw new AppError_1.default(401, "User not authenticated");
+            }
+            const { name } = req.body;
+            const user = yield this.userService.updateCurrentUserProfile(currentUserId, {
+                name,
+            });
+            (0, sendResponse_1.default)(res, 200, {
+                data: { user },
+                message: "Profile updated successfully",
+            });
+            this.logsService.info("Self profile updated", {
+                userId: (_b = req.user) === null || _b === void 0 ? void 0 : _b.id,
+                sessionId: req.session.id,
+            });
+        }));
         this.updateMe = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const { id } = req.params;

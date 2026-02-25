@@ -1,6 +1,8 @@
 import PDFDocument from "pdfkit";
 import { getPlatformName } from "../branding";
 import { formatDateTimeInIST } from "../dateTime";
+import { configurePdfFonts } from "../pdfFonts";
+import { formatINRCurrency } from "../currency";
 
 interface InvoicePdfItem {
   productName: string;
@@ -25,49 +27,56 @@ interface InvoicePdfInput {
   customerName: string;
   accountReference?: string;
   customerEmail: string;
-  customerType: "DEALER" | "CLIENT";
+  customerType: "DEALER" | "USER";
   items: InvoicePdfItem[];
   totalAmount: number;
   billingAddress?: InvoiceAddress | null;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-  }).format(value);
-
-const drawSectionTitle = (doc: PDFKit.PDFDocument, label: string) => {
+const drawSectionTitle = (
+  doc: PDFKit.PDFDocument,
+  label: string,
+  fonts: { bold: string }
+) => {
   doc.moveDown(0.5);
-  doc.font("Helvetica-Bold").fontSize(11).text(label);
+  doc.font(fonts.bold).fontSize(11).text(label);
   doc.moveDown(0.2);
 };
 
-const drawItemsTable = (doc: PDFKit.PDFDocument, items: InvoicePdfItem[]) => {
-  doc.font("Helvetica-Bold").fontSize(10);
-  doc.text("Item", 50, doc.y, { width: 200 });
-  doc.text("Qty", 260, doc.y, { width: 40, align: "right" });
-  doc.text("Unit Price", 310, doc.y, { width: 90, align: "right" });
-  doc.text("Subtotal", 410, doc.y, { width: 130, align: "right" });
+const drawItemsTable = (
+  doc: PDFKit.PDFDocument,
+  items: InvoicePdfItem[],
+  fonts: { regular: string; bold: string },
+  formatCurrency: (value: number) => string
+) => {
+  doc.font(fonts.bold).fontSize(10);
+  doc.text("SN No.", 50, doc.y, { width: 45 });
+  doc.text("Item", 98, doc.y, { width: 215 });
+  doc.text("Qty", 318, doc.y, { width: 40, align: "right" });
+  doc.text("Unit Price", 365, doc.y, { width: 80, align: "right" });
+  doc.text("Subtotal", 450, doc.y, { width: 95, align: "right" });
   doc.moveDown(0.4);
   doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#d1d5db").stroke();
   doc.moveDown(0.4);
 
-  doc.font("Helvetica").fontSize(10);
-  items.forEach((item) => {
+  doc.font(fonts.regular).fontSize(10);
+  items.forEach((item, index) => {
     const rowY = doc.y;
     const itemTitle = `${item.productName} (${item.sku})`;
-    doc.text(itemTitle, 50, rowY, { width: 200 });
-    doc.text(String(item.quantity), 260, rowY, { width: 40, align: "right" });
-    doc.text(formatCurrency(item.unitPrice), 310, rowY, {
-      width: 90,
+    doc.text(String(index + 1), 50, rowY, { width: 45 });
+    doc.text(itemTitle, 98, rowY, { width: 215 });
+    doc.text(String(item.quantity), 318, rowY, { width: 40, align: "right" });
+    doc.text(formatCurrency(item.unitPrice), 365, rowY, {
+      width: 80,
       align: "right",
     });
-    doc.text(formatCurrency(item.subtotal), 410, rowY, {
-      width: 130,
+    doc.text(formatCurrency(item.subtotal), 450, rowY, {
+      width: 95,
       align: "right",
     });
-    doc.moveDown(0.8);
+    const itemHeight = doc.heightOfString(itemTitle, { width: 215 });
+    const rowHeight = Math.max(itemHeight, doc.currentLineHeight()) + 6;
+    doc.y = rowY + rowHeight;
   });
 };
 
@@ -78,6 +87,11 @@ export default function generateInvoicePdf(
     const platformName = getPlatformName();
     const doc = new PDFDocument({ margin: 50 });
     const chunks: Buffer[] = [];
+    const fonts = configurePdfFonts(doc);
+    const formatCurrency = (value: number): string =>
+      fonts.supportsUnicode
+        ? formatINRCurrency(value)
+        : `INR ${Number(value || 0).toFixed(2)}`;
 
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -86,23 +100,23 @@ export default function generateInvoicePdf(
     );
 
     try {
-      doc.font("Helvetica-Bold").fontSize(11).text(platformName.toUpperCase(), {
+      doc.font(fonts.bold).fontSize(11).text(platformName.toUpperCase(), {
         align: "left",
       });
       doc.moveDown(0.3);
-      doc.font("Helvetica-Bold").fontSize(22).text("INVOICE", {
+      doc.font(fonts.bold).fontSize(22).text("INVOICE", {
         align: "left",
       });
       doc.moveDown(0.4);
-      doc.font("Helvetica").fontSize(10);
+      doc.font(fonts.regular).fontSize(10);
       doc.text(`Invoice #: ${invoice.invoiceNumber}`);
       doc.text(`Order ID: ${invoice.orderId}`);
       doc.text(`Date (IST): ${formatDateTimeInIST(invoice.orderDate)}`);
       doc.text(`Generated At (IST): ${formatDateTimeInIST(new Date())}`);
       doc.text(`Customer Type: ${invoice.customerType}`);
 
-      drawSectionTitle(doc, "Bill To");
-      doc.font("Helvetica").fontSize(10);
+      drawSectionTitle(doc, "Bill To", fonts);
+      doc.font(fonts.regular).fontSize(10);
       doc.text(invoice.customerName);
       if (invoice.accountReference) {
         doc.text(`Account Ref: ${invoice.accountReference}`);
@@ -116,24 +130,24 @@ export default function generateInvoicePdf(
         doc.text(invoice.billingAddress.country);
       }
 
-      drawSectionTitle(doc, "Items");
+      drawSectionTitle(doc, "Items", fonts);
       if (!invoice.items.length) {
-        doc.font("Helvetica").fontSize(10).text("No items available.");
+        doc.font(fonts.regular).fontSize(10).text("No items available.");
       } else {
-        drawItemsTable(doc, invoice.items);
+        drawItemsTable(doc, invoice.items, fonts, formatCurrency);
       }
 
       doc.moveDown(0.8);
       doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#d1d5db").stroke();
       doc.moveDown(0.8);
-      doc.font("Helvetica-Bold").fontSize(12);
+      doc.font(fonts.bold).fontSize(12);
       doc.text(`Total: ${formatCurrency(invoice.totalAmount)}`, 50, doc.y, {
         align: "right",
       });
 
       doc.moveDown(1);
       doc
-        .font("Helvetica")
+        .font(fonts.regular)
         .fontSize(9)
         .fillColor("#6b7280")
         .text(

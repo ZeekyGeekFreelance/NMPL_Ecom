@@ -60,6 +60,14 @@ export const userApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["User"],
     }),
+    updateMyProfileName: builder.mutation({
+      query: (data: { name: string }) => ({
+        url: "/users/me",
+        method: "PATCH",
+        body: data,
+      }),
+      invalidatesTags: ["User"],
+    }),
     getMe: builder.query<User, void>({
       query: () => ({
         url: "/users/me",
@@ -159,6 +167,7 @@ export const {
   useDeleteUserMutation,
   useGetProfileQuery,
   useGetMeQuery,
+  useUpdateMyProfileNameMutation,
   useGetAllUsersQuery,
   useLazyGetMeQuery,
   useGetDealersQuery,

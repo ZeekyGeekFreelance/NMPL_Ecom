@@ -29,6 +29,36 @@ const userController = (0, user_factory_1.makeUserController)();
 router.get("/me", protect_1.default, userController.getMe);
 /**
  * @swagger
+ * /users/me:
+ *   patch:
+ *     summary: Update authenticated profile name
+ *     description: Updates the display name of the authenticated user.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 80
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully.
+ *       400:
+ *         description: Invalid input data.
+ *       401:
+ *         description: Unauthorized. Token is invalid or missing.
+ */
+router.patch("/me", protect_1.default, (0, validateDto_1.validateDto)(user_dto_1.UpdateOwnProfileDto), userController.updateCurrentUserProfile);
+/**
+ * @swagger
  * /users/admin:
  *   post:
  *     summary: Create a new admin
@@ -141,8 +171,8 @@ router.get("/:id", protect_1.default, (0, authorizeRole_1.default)("SUPERADMIN")
  * @swagger
  * /users/{id}:
  *   put:
- *     summary: Update the authenticated user's profile
- *     description: Updates the profile of the authenticated user.
+ *     summary: Update a user by ID
+ *     description: Updates a user by ID (SuperAdmin only, role hierarchy enforced).
  *     parameters:
  *       - in: path
  *         name: id

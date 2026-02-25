@@ -15,10 +15,10 @@ class AddToCartDto {
 }
 exports.AddToCartDto = AddToCartDto;
 __decorate([
-    (0, class_validator_1.IsNotEmpty)({ message: "Product ID is required" }),
-    (0, class_validator_1.IsString)({ message: "Product ID must be a string" }),
+    (0, class_validator_1.IsNotEmpty)({ message: "Variant ID is required" }),
+    (0, class_validator_1.IsString)({ message: "Variant ID must be a string" }),
     __metadata("design:type", String)
-], AddToCartDto.prototype, "productId", void 0);
+], AddToCartDto.prototype, "variantId", void 0);
 __decorate([
     (0, class_validator_1.IsNotEmpty)({ message: "Quantity is required" }),
     (0, class_validator_1.IsNumber)({}, { message: "Quantity must be a number" }),
@@ -29,10 +29,10 @@ class UpdateCartItemDto {
 }
 exports.UpdateCartItemDto = UpdateCartItemDto;
 __decorate([
-    (0, class_validator_1.IsNotEmpty)({ message: "Product ID is required" }),
-    (0, class_validator_1.IsString)({ message: "Product ID must be a string" }),
+    (0, class_validator_1.IsNotEmpty)({ message: "Variant ID is required" }),
+    (0, class_validator_1.IsString)({ message: "Variant ID must be a string" }),
     __metadata("design:type", String)
-], UpdateCartItemDto.prototype, "productId", void 0);
+], UpdateCartItemDto.prototype, "variantId", void 0);
 __decorate([
     (0, class_validator_1.IsNotEmpty)({ message: "Quantity is required" }),
     (0, class_validator_1.IsNumber)({}, { message: "Quantity must be a number" }),
@@ -43,7 +43,7 @@ class RemoveFromCartDto {
 }
 exports.RemoveFromCartDto = RemoveFromCartDto;
 __decorate([
-    (0, class_validator_1.IsNotEmpty)({ message: "Product ID is required" }),
-    (0, class_validator_1.IsString)({ message: "Product ID must be a string" }),
+    (0, class_validator_1.IsNotEmpty)({ message: "Variant ID is required" }),
+    (0, class_validator_1.IsString)({ message: "Variant ID must be a string" }),
     __metadata("design:type", String)
-], RemoveFromCartDto.prototype, "productId", void 0);
+], RemoveFromCartDto.prototype, "variantId", void 0);

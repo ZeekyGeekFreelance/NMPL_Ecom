@@ -60,5 +60,6 @@ function generateCSV(data) {
             lines.push("");
         }
     });
-    return lines.join("\n");
+    // Include UTF-8 BOM so currency symbols render correctly in Excel.
+    return `\uFEFF${lines.join("\n")}`;
 }

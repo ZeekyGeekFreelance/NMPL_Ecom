@@ -19,6 +19,7 @@ const client_1 = require("@prisma/client");
 const sendEmail_1 = __importDefault(require("@/shared/utils/sendEmail"));
 const branding_1 = require("@/shared/utils/branding");
 const accountReference_1 = require("@/shared/utils/accountReference");
+const dateTime_1 = require("@/shared/utils/dateTime");
 const logs_factory_1 = require("../logs/logs.factory");
 class OrderService {
     constructor(orderRepository) {
@@ -168,6 +169,8 @@ class OrderService {
             const platformName = (0, branding_1.getPlatformName)();
             const supportEmail = (0, branding_1.getSupportEmail)();
             const accountReference = (0, accountReference_1.toAccountReference)(user.id);
+            const orderReference = (0, accountReference_1.toOrderReference)(orderId);
+            const actionTime = (0, dateTime_1.formatDateTimeInIST)(new Date());
             const notificationPromises = [];
             if (user.email) {
                 notificationPromises.push((0, sendEmail_1.default)({
@@ -177,9 +180,10 @@ class OrderService {
                         `Hello ${user.name},`,
                         "",
                         `Your order has been placed on ${platformName}.`,
-                        `Order ID: ${orderId}`,
+                        `Order ID: ${orderReference}`,
                         `Account Reference: ${accountReference}`,
                         `Current status: PLACED`,
+                        `Action Time (IST): ${actionTime}`,
                         "",
                         "We will confirm your order after stock verification.",
                         `Need help? Contact ${supportEmail}.`,
@@ -189,9 +193,10 @@ class OrderService {
               <p>Hello <strong>${user.name}</strong>,</p>
               <p>Your order has been placed on <strong>${platformName}</strong>.</p>
               <p>
-                <strong>Order ID:</strong> ${orderId}<br />
+                <strong>Order ID:</strong> ${orderReference}<br />
                 <strong>Account Reference:</strong> ${accountReference}<br />
-                <strong>Current status:</strong> PLACED
+                <strong>Current status:</strong> PLACED<br />
+                <strong>Action Time (IST):</strong> ${actionTime}
               </p>
               <p>We will confirm your order after stock verification.</p>
               <p>
@@ -210,11 +215,12 @@ class OrderService {
                     text: [
                         "New order received.",
                         "",
-                        `Order ID: ${orderId}`,
+                        `Order ID: ${orderReference}`,
                         `Customer Name: ${user.name}`,
                         `Customer Email: ${user.email || "Not available"}`,
                         `Account Reference: ${accountReference}`,
                         "Current status: PLACED",
+                        `Action Time (IST): ${actionTime}`,
                         "",
                         `Please review and update status from the admin panel.`,
                     ].join("\n"),
@@ -222,11 +228,12 @@ class OrderService {
             <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
               <p><strong>New order received.</strong></p>
               <p>
-                <strong>Order ID:</strong> ${orderId}<br />
+                <strong>Order ID:</strong> ${orderReference}<br />
                 <strong>Customer Name:</strong> ${user.name}<br />
                 <strong>Customer Email:</strong> ${user.email || "Not available"}<br />
                 <strong>Account Reference:</strong> ${accountReference}<br />
-                <strong>Current status:</strong> PLACED
+                <strong>Current status:</strong> PLACED<br />
+                <strong>Action Time (IST):</strong> ${actionTime}
               </p>
               <p>Please review and update status from the admin panel.</p>
             </div>

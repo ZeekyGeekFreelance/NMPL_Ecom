@@ -4,6 +4,14 @@ import React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useGetLogByIdQuery } from "@/app/store/apis/LogsApi";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import {
+  toAccountReference,
+  toOrderReference,
+  toPaymentReference,
+  toPrefixedReference,
+  toProductReference,
+  toTransactionReference,
+} from "@/app/lib/utils/accountReference";
 
 const formatTimestamp = (timestamp: string): string => {
   try {
@@ -17,8 +25,43 @@ const formatTimestamp = (timestamp: string): string => {
   }
 };
 
-const shortenId = (id: string): string =>
-  id ? `${id.substring(0, 8)}...` : "";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const formatContextValue = (key: string, value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "N/A";
+  }
+
+  if (typeof value !== "string") {
+    return String(value);
+  }
+
+  const raw = value.trim();
+  if (!UUID_PATTERN.test(raw)) {
+    return raw;
+  }
+
+  const normalizedKey = key.replace(/\s+/g, "").toLowerCase();
+
+  if (normalizedKey.includes("userid") || normalizedKey.includes("accountid")) {
+    return toAccountReference(raw);
+  }
+  if (normalizedKey.includes("orderid")) {
+    return toOrderReference(raw);
+  }
+  if (normalizedKey.includes("paymentid")) {
+    return toPaymentReference(raw);
+  }
+  if (normalizedKey.includes("transactionid")) {
+    return toTransactionReference(raw);
+  }
+  if (normalizedKey.includes("productid")) {
+    return toProductReference(raw);
+  }
+
+  return toPrefixedReference("REF", raw);
+};
 
 const LogDetails: React.FC = () => {
   const params = useParams<{ logId: string }>();
@@ -90,7 +133,9 @@ const LogDetails: React.FC = () => {
           </div>
           <div>
             <div className="text-sm text-gray-500">Log ID</div>
-            <div className="text-gray-800 font-mono text-sm">{id}</div>
+            <div className="text-gray-800 font-mono text-sm">
+              {toPrefixedReference("LOG", id)}
+            </div>
           </div>
         </div>
       </div>
@@ -104,12 +149,7 @@ const LogDetails: React.FC = () => {
               <div key={key} className="flex flex-col">
                 <div className="text-sm text-gray-500 capitalize">{key}</div>
                 <div className="text-gray-800 break-all">
-                  {typeof value === "string" &&
-                  value.match(
-                    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-                  )
-                    ? shortenId(value)
-                    : value?.toString() || "N/A"}
+                  {formatContextValue(key, value)}
                 </div>
               </div>
             ))}

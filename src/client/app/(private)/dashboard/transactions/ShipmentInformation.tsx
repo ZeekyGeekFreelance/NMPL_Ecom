@@ -1,6 +1,7 @@
 "use client";
 
 import formatDate from "@/app/utils/formatDate";
+import { toShipmentReference } from "@/app/lib/utils/accountReference";
 import { Truck } from "lucide-react";
 
 const ShipmentInformation = ({ shipment }) => {
@@ -25,7 +26,9 @@ const ShipmentInformation = ({ shipment }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6">
         <div>
           <p className="text-sm text-gray-500">Shipment ID</p>
-          <p className="font-mono">{(shipment.id || "").substring(0, 8)}...</p>
+          <p className="font-mono text-sm break-all">
+            {toShipmentReference(shipment.id || "")}
+          </p>
         </div>
         <div>
           <p className="text-sm text-gray-500">Carrier</p>

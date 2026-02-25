@@ -137,7 +137,7 @@ class AnalyticsController {
             switch (format) {
                 case "csv":
                     result = (0, generateCsv_1.default)(data);
-                    contentType = "text/csv";
+                    contentType = "text/csv; charset=utf-8";
                     break;
                 case "pdf":
                     result = yield (0, generatePdf_1.default)(data);

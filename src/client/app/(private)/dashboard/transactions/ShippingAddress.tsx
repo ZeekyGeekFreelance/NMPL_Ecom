@@ -1,5 +1,6 @@
 "use client";
 
+import { toAddressReference } from "@/app/lib/utils/accountReference";
 import { MapPin } from "lucide-react";
 
 const ShippingAddress = ({ address }) => {
@@ -44,7 +45,9 @@ const ShippingAddress = ({ address }) => {
         </div>
         <div>
           <p className="text-sm text-gray-500">Address ID</p>
-          <p className="font-mono">{(address.id || "").substring(0, 8)}...</p>
+          <p className="font-mono text-sm break-all">
+            {toAddressReference(address.id || "")}
+          </p>
         </div>
       </div>
     </div>

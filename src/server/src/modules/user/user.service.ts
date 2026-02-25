@@ -36,6 +36,26 @@ export class UserService {
     return email.trim().toLowerCase();
   }
 
+  private normalizeDisplayName(name: string | undefined, label = "name"): string {
+    const normalized = String(name ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized) {
+      throw new AppError(400, `${label} is required`);
+    }
+
+    if (normalized.length < 2) {
+      throw new AppError(400, `${label} must be at least 2 characters long`);
+    }
+
+    if (normalized.length > 80) {
+      throw new AppError(400, `${label} must be at most 80 characters long`);
+    }
+
+    return normalized;
+  }
+
   private assertUuid(value: string | undefined, label: string): string {
     const normalized = value?.trim();
     if (!normalized || !UserService.UUID_PATTERN.test(normalized)) {
@@ -151,7 +171,34 @@ export class UserService {
     if (!user) {
       throw new AppError(404, "User not found");
     }
-    const updatedUser = await this.userRepository.updateUser(userId, data);
+
+    const payload: Partial<{
+      name?: string;
+      email?: string;
+      avatar?: string;
+    }> = {
+      ...data,
+    };
+
+    if (data.name !== undefined) {
+      payload.name = this.normalizeDisplayName(data.name, "Name");
+    }
+
+    const updatedUser = await this.userRepository.updateUser(userId, payload);
+    return this.withAccountReference(updatedUser);
+  }
+
+  async updateCurrentUserProfile(id: string, data: { name: string }) {
+    const userId = this.assertUuid(id, "user id");
+    const user = await this.userRepository.findUserById(userId);
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    const updatedUser = await this.userRepository.updateUser(userId, {
+      name: this.normalizeDisplayName(data.name, "Name"),
+    });
+
     return this.withAccountReference(updatedUser);
   }
 

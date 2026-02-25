@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import formatAnalyticsData, { ExportSection } from "./formatAnalyticsData";
+import { getPlatformName } from "@/shared/utils/branding";
 
 const EXCEL_MAX_SHEET_NAME_LENGTH = 31;
 
@@ -21,6 +22,10 @@ const toCellValue = (value: unknown): ExcelJS.CellValue => {
     return "";
   }
 
+  if (typeof value === "string") {
+    return value.replace(/\s+/g, " ").trim();
+  }
+
   if (typeof value === "number" || typeof value === "boolean") {
     return value;
   }
@@ -30,16 +35,46 @@ const toCellValue = (value: unknown): ExcelJS.CellValue => {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => String(item ?? "")).join(" | ");
+    return value
+      .map((item) => toCellValue(item))
+      .map((item) => String(item ?? ""))
+      .filter((item) => item !== "")
+      .join(" | ");
   }
 
   if (typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
-      .map(([key, nestedValue]) => `${key}: ${String(nestedValue ?? "")}`)
+      .map(([key, nestedValue]) => `${key}: ${String(toCellValue(nestedValue) ?? "")}`)
+      .filter((row) => !row.endsWith(": "))
       .join("; ");
   }
 
   return String(value);
+};
+
+const isCurrencyOrNumericColumn = (column: string): boolean => {
+  const normalized = column.replace(/\s+/g, "").toLowerCase();
+  return (
+    normalized.includes("revenue") ||
+    normalized.includes("price") ||
+    normalized.includes("amount") ||
+    normalized.includes("total") ||
+    normalized.includes("spent") ||
+    normalized.includes("value")
+  );
+};
+
+const isNumericCell = (value: ExcelJS.CellValue): boolean => {
+  if (typeof value === "number") {
+    return true;
+  }
+
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const normalized = value.replace(/[,\s\u20B9]/g, "");
+  return /^-?\d+(\.\d+)?$/.test(normalized);
 };
 
 const getColumnWidth = (
@@ -93,19 +128,27 @@ const fillSheet = (sheet: ExcelJS.Worksheet, section: ExportSection) => {
   sheet.views = [{ state: "frozen", ySplit: 1 }];
 
   sheet.eachRow((row, rowNumber) => {
-    row.alignment = {
-      vertical: "middle",
-      horizontal: rowNumber === 1 ? "center" : "left",
-      wrapText: true,
-    };
+    row.eachCell((cell, colNumber) => {
+      const column = section.columns[colNumber - 1] || "";
+      const shouldRightAlign =
+        rowNumber > 1 &&
+        (isCurrencyOrNumericColumn(column) || isNumericCell(cell.value));
+
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: rowNumber === 1 ? "center" : shouldRightAlign ? "right" : "left",
+        wrapText: true,
+      };
+    });
   });
 };
 
 export default async function generateXLSX(data: unknown): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const document = formatAnalyticsData(data);
+  const platformName = getPlatformName();
 
-  workbook.creator = "Ecommerce Export Engine";
+  workbook.creator = `${platformName} Export Engine`;
   workbook.created = new Date();
   workbook.modified = new Date();
 

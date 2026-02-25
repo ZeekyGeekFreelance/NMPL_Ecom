@@ -77,7 +77,10 @@ export const buildCsv = (
 };
 
 export const downloadCsv = (csvContent: string, filename: string) => {
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const csvWithBom = csvContent.startsWith("\uFEFF")
+    ? csvContent
+    : `\uFEFF${csvContent}`;
+  const blob = new Blob([csvWithBom], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

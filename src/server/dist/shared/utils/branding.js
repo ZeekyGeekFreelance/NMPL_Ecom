@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getSupportEmail = exports.getPlatformName = void 0;
-const DEFAULT_PLATFORM_NAME = "W-PDMS";
-const DEFAULT_SUPPORT_EMAIL = "support@example.com";
+const DEFAULT_PLATFORM_NAME = "NMPL";
+const DEFAULT_SUPPORT_EMAIL = "support@nmpl.local";
 const firstNonEmpty = (values) => {
     for (const value of values) {
         const normalized = value === null || value === void 0 ? void 0 : value.trim();

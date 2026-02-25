@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
@@ -37,6 +38,14 @@ export class UserIdDto {
   @IsNotEmpty({ message: "ID is required" })
   @IsString({ message: "ID must be a string" })
   id!: string;
+}
+
+export class UpdateOwnProfileDto {
+  @IsNotEmpty({ message: "Name is required" })
+  @IsString({ message: "Name must be a string" })
+  @MinLength(2, { message: "Name must be at least 2 characters long" })
+  @MaxLength(80, { message: "Name must be at most 80 characters long" })
+  name!: string;
 }
 
 export class UserEmailDto {

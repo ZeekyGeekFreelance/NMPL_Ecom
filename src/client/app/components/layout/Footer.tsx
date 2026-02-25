@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@apollo/client";
 import { GET_CATEGORIES } from "@/app/gql/Product";
 import { useAuth } from "@/app/hooks/useAuth";
+import { PLATFORM_NAME, SUPPORT_EMAIL } from "@/app/lib/constants/config";
 import {
   Headset,
   Mail,
@@ -72,7 +73,7 @@ const Footer = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 md:grid-cols-4 gap-10">
         <div>
-          <h3 className="text-xl font-semibold text-white">Ecommerce</h3>
+          <h3 className="text-xl font-semibold text-white">{PLATFORM_NAME}</h3>
           <p className="mt-3 text-sm text-slate-400 leading-relaxed">
             A complete storefront experience with safer order placement and
             confirmation-first checkout.
@@ -88,7 +89,7 @@ const Footer = () => {
             </div>
             <div className="flex items-center gap-2">
               <Mail size={14} />
-              <span>support@ecommerce.local</span>
+              <span>{SUPPORT_EMAIL}</span>
             </div>
           </div>
         </div>
@@ -172,7 +173,7 @@ const Footer = () => {
 
       <div className="border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row gap-2 items-center justify-between text-xs text-slate-500">
-          <p>© {year} Ecommerce. All rights reserved.</p>
+          <p>&copy; {year} {PLATFORM_NAME}. All rights reserved.</p>
           <p>Checkout mode: manual confirmation</p>
         </div>
       </div>

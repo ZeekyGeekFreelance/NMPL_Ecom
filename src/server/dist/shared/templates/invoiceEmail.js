@@ -2,19 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildInvoiceEmailTemplate = void 0;
 const branding_1 = require("@/shared/utils/branding");
-const formatCurrency = (amount) => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-}).format(amount);
-const formatDate = (date) => new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-}).format(date);
-const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel, invoiceNumber, orderId, orderDate, totalAmount, }) => {
+const dateTime_1 = require("@/shared/utils/dateTime");
+const currency_1 = require("@/shared/utils/currency");
+const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel, invoiceNumber, orderId, customerType, orderDate, totalAmount, }) => {
     const normalizedName = (recipientName === null || recipientName === void 0 ? void 0 : recipientName.trim()) || "Customer";
-    const amount = formatCurrency(totalAmount);
-    const placedOn = formatDate(orderDate);
+    const amount = (0, currency_1.formatINRCurrency)(totalAmount);
+    const placedOn = (0, dateTime_1.formatDateTimeInIST)(orderDate);
+    const generatedAt = (0, dateTime_1.formatDateTimeInIST)(new Date());
     const platformName = (0, branding_1.getPlatformName)();
     const supportEmail = (0, branding_1.getSupportEmail)();
     const billingTeamLabel = `${platformName} Billing Team`;
@@ -26,7 +20,9 @@ const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel,
             accountReference ? `Account Reference: ${accountReference}` : null,
             `Invoice Number: ${invoiceNumber}`,
             `Order ID: ${orderId}`,
+            customerType ? `Customer Type: ${customerType}` : null,
             `Order Date: ${placedOn}`,
+            `Generated At: ${generatedAt}`,
             `Total Amount: ${amount}`,
             `Support: ${supportEmail}`,
             "",
@@ -43,7 +39,9 @@ const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel,
             : ""}
           <strong>Invoice Number:</strong> ${invoiceNumber}<br />
           <strong>Order ID:</strong> ${orderId}<br />
+          ${customerType ? `<strong>Customer Type:</strong> ${customerType}<br />` : ""}
           <strong>Order Date:</strong> ${placedOn}<br />
+          <strong>Generated At:</strong> ${generatedAt}<br />
           <strong>Total Amount:</strong> ${amount}
         </p>
         <p>

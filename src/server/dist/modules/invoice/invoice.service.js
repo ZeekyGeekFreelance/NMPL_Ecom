@@ -65,7 +65,11 @@ class InvoiceService {
     getCustomerCopyLabel(invoice) {
         var _a;
         const isDealer = ((_a = invoice.user.dealerProfile) === null || _a === void 0 ? void 0 : _a.status) === "APPROVED";
-        return isDealer ? "Dealer Copy" : "Client Copy";
+        return isDealer ? "Dealer Copy" : "User Copy";
+    }
+    resolveCustomerType(invoice) {
+        var _a;
+        return ((_a = invoice.user.dealerProfile) === null || _a === void 0 ? void 0 : _a.status) === "APPROVED" ? "DEALER" : "USER";
     }
     sendInvoiceEmails(invoice) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -77,8 +81,11 @@ class InvoiceService {
             }
             const pdfBuffer = yield this.buildInvoicePdf(invoice);
             const copyLabel = this.getCustomerCopyLabel(invoice);
+            const customerType = this.resolveCustomerType(invoice);
             const platformName = (0, branding_1.getPlatformName)();
             const accountReference = (0, accountReference_1.toAccountReference)(invoice.user.id);
+            const orderReference = (0, accountReference_1.toOrderReference)(invoice.orderId);
+            const invoiceAttachmentName = `${invoice.invoiceNumber}_${orderReference}.pdf`;
             let customerEmailSent = !shouldSendCustomerCopy;
             let internalEmailSent = !shouldSendInternalCopy;
             const errors = [];
@@ -88,7 +95,8 @@ class InvoiceService {
                     accountReference,
                     copyLabel,
                     invoiceNumber: invoice.invoiceNumber,
-                    orderId: invoice.orderId,
+                    orderId: orderReference,
+                    customerType,
                     orderDate: invoice.order.orderDate,
                     totalAmount: invoice.order.amount,
                 });
@@ -99,7 +107,7 @@ class InvoiceService {
                     html: customerTemplate.html,
                     attachments: [
                         {
-                            filename: `${invoice.invoiceNumber}.pdf`,
+                            filename: invoiceAttachmentName,
                             content: pdfBuffer,
                             contentType: "application/pdf",
                         },
@@ -115,7 +123,8 @@ class InvoiceService {
                     accountReference,
                     copyLabel: "Billing Copy",
                     invoiceNumber: invoice.invoiceNumber,
-                    orderId: invoice.orderId,
+                    orderId: orderReference,
+                    customerType,
                     orderDate: invoice.order.orderDate,
                     totalAmount: invoice.order.amount,
                 });
@@ -126,7 +135,7 @@ class InvoiceService {
                     html: internalTemplate.html,
                     attachments: [
                         {
-                            filename: `${invoice.invoiceNumber}.pdf`,
+                            filename: invoiceAttachmentName,
                             content: pdfBuffer,
                             contentType: "application/pdf",
                         },
@@ -186,7 +195,6 @@ class InvoiceService {
     }
     buildInvoicePdf(invoice) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const items = invoice.order.orderItems.map((item) => ({
                 productName: item.variant.product.name,
                 sku: item.variant.sku,
@@ -194,10 +202,10 @@ class InvoiceService {
                 unitPrice: item.price,
                 subtotal: item.price * item.quantity,
             }));
-            const customerType = ((_a = invoice.user.dealerProfile) === null || _a === void 0 ? void 0 : _a.status) === "APPROVED" ? "DEALER" : "CLIENT";
+            const customerType = this.resolveCustomerType(invoice);
             return (0, generateInvoicePdf_1.default)({
                 invoiceNumber: invoice.invoiceNumber,
-                orderId: invoice.orderId,
+                orderId: (0, accountReference_1.toOrderReference)(invoice.orderId),
                 orderDate: invoice.order.orderDate,
                 customerName: invoice.user.name,
                 accountReference: (0, accountReference_1.toAccountReference)(invoice.user.id),
@@ -255,9 +263,10 @@ class InvoiceService {
         return __awaiter(this, void 0, void 0, function* () {
             const invoice = yield this.getInvoiceByOrder(orderId, requester);
             const content = yield this.buildInvoicePdf(invoice);
+            const orderReference = (0, accountReference_1.toOrderReference)(invoice.orderId);
             return {
                 invoiceNumber: invoice.invoiceNumber,
-                filename: `${invoice.invoiceNumber}.pdf`,
+                filename: `${invoice.invoiceNumber}_${orderReference}.pdf`,
                 content,
             };
         });
@@ -271,9 +280,10 @@ class InvoiceService {
             }
             this.assertOrderAccess(invoice.userId, requester);
             const content = yield this.buildInvoicePdf(invoice);
+            const orderReference = (0, accountReference_1.toOrderReference)(invoice.orderId);
             return {
                 invoiceNumber: invoice.invoiceNumber,
-                filename: `${invoice.invoiceNumber}.pdf`,
+                filename: `${invoice.invoiceNumber}_${orderReference}.pdf`,
                 content,
             };
         });

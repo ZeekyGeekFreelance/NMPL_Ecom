@@ -1,12 +1,19 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import MainLayout from "@/app/components/templates/MainLayout";
-import { useGetMeQuery } from "@/app/store/apis/UserApi";
+import {
+  useGetMeQuery,
+  useUpdateMyProfileNameMutation,
+} from "@/app/store/apis/UserApi";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
+import useToast from "@/app/hooks/ui/useToast";
+import { useAppDispatch } from "@/app/store/hooks";
+import { setUser } from "@/app/store/slices/AuthSlice";
 import {
   AlertCircle,
   ArrowRight,
@@ -187,8 +194,33 @@ const getInitials = (name?: string | null) => {
     .slice(0, 2);
 };
 
+const normalizeDisplayName = (name: string): string =>
+  name.replace(/\s+/g, " ").trim();
+
+const getDisplayNameError = (value: string): string | null => {
+  if (!value) {
+    return "Name is required.";
+  }
+
+  if (value.length < 2) {
+    return "Name must be at least 2 characters long.";
+  }
+
+  if (value.length > 80) {
+    return "Name must be at most 80 characters long.";
+  }
+
+  return null;
+};
+
 const UserProfile = () => {
-  const { data, isLoading, error } = useGetMeQuery(undefined);
+  const dispatch = useAppDispatch();
+  const { showToast } = useToast();
+  const { data, isLoading, error, refetch } = useGetMeQuery(undefined);
+  const [updateMyProfileName, { isLoading: isUpdatingName }] =
+    useUpdateMyProfileNameMutation();
+  const [editableName, setEditableName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
   const user = (data as { user?: ProfileUser } | undefined)?.user;
 
   const normalizeRole = (value?: string | null): Role => {
@@ -211,6 +243,92 @@ const UserProfile = () => {
   const accountMeta = ACCOUNT_META[accountKind];
   const dealerStatus = (dealerProfile?.status || user?.dealerStatus || "PENDING") as DealerStatus;
   const dealerStatusCopy = DEALER_STATUS_COPY[dealerStatus];
+  const normalizedCurrentName = normalizeDisplayName(user?.name || "");
+  const normalizedEditableName = normalizeDisplayName(editableName);
+  const canSaveName = useMemo(
+    () =>
+      normalizedEditableName.length > 0 &&
+      normalizedEditableName !== normalizedCurrentName &&
+      !isUpdatingName,
+    [normalizedCurrentName, normalizedEditableName, isUpdatingName]
+  );
+
+  useEffect(() => {
+    setEditableName(user?.name || "");
+    setNameError(null);
+  }, [user?.id, user?.name]);
+
+  const handleNameChange = (value: string) => {
+    setEditableName(value);
+    if (nameError) {
+      setNameError(null);
+    }
+  };
+
+  const handleSaveName = async () => {
+    const nextName = normalizeDisplayName(editableName);
+    const validationError = getDisplayNameError(nextName);
+
+    if (validationError) {
+      setNameError(validationError);
+      return;
+    }
+
+    if (!user?.id || nextName === normalizedCurrentName) {
+      return;
+    }
+
+    try {
+      const response = (await updateMyProfileName({
+        name: nextName,
+      }).unwrap()) as {
+        user?: ProfileUser;
+      };
+
+      const updatedUser = response.user;
+      if (updatedUser) {
+        dispatch(
+          setUser({
+            user: {
+              id: updatedUser.id,
+              accountReference:
+                updatedUser.accountReference || toAccountReference(updatedUser.id),
+              name: updatedUser.name || nextName,
+              email: updatedUser.email || user.email || "",
+              role: updatedUser.role || role,
+              avatar: updatedUser.avatar || null,
+              isDealer:
+                Boolean(updatedUser.dealerProfile) ||
+                Boolean(updatedUser.isDealer),
+              dealerStatus:
+                updatedUser.dealerProfile?.status ||
+                updatedUser.dealerStatus ||
+                null,
+              dealerBusinessName:
+                updatedUser.dealerProfile?.businessName ||
+                updatedUser.dealerBusinessName ||
+                null,
+              dealerContactPhone:
+                updatedUser.dealerProfile?.contactPhone ||
+                updatedUser.dealerContactPhone ||
+                null,
+            },
+          })
+        );
+      }
+
+      setEditableName(nextName);
+      setNameError(null);
+      showToast("Profile name updated successfully.", "success");
+      await refetch();
+    } catch (saveError: unknown) {
+      const apiMessage =
+        typeof saveError === "object" && saveError !== null
+          ? (saveError as { data?: { message?: string } }).data?.message
+          : null;
+      showToast(apiMessage || "Failed to update profile name.", "error");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -314,10 +432,35 @@ const UserProfile = () => {
                     <h3 className="text-sm font-semibold text-gray-800">Identity</h3>
                   </div>
                   <div className="space-y-2 text-sm">
-                    <p className="text-gray-700">
-                      <span className="text-gray-500">Name:</span>{" "}
-                      {user.name || "Not provided"}
-                    </p>
+                    <div className="text-gray-700">
+                      <p className="text-gray-500">Name</p>
+                      <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <input
+                          type="text"
+                          value={editableName}
+                          onChange={(event) => handleNameChange(event.target.value)}
+                          onBlur={() =>
+                            setNameError(
+                              getDisplayNameError(normalizeDisplayName(editableName))
+                            )
+                          }
+                          maxLength={80}
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          placeholder="Enter your display name"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveName}
+                          disabled={!canSaveName}
+                          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                        >
+                          {isUpdatingName ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                      {nameError && (
+                        <p className="mt-1 text-xs text-red-600">{nameError}</p>
+                      )}
+                    </div>
                     <p className="text-gray-700 break-all">
                       <span className="text-gray-500">Email:</span>{" "}
                       {user.email || "Not provided"}

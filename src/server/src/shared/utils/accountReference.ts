@@ -54,3 +54,12 @@ export const toTransactionReference = (id: string): string =>
 
 export const toProductReference = (id: string): string =>
   toPrefixedReference("PRD", id);
+
+export const toPaymentReference = (id: string): string =>
+  toPrefixedReference("PAY", id);
+
+export const toShipmentReference = (id: string): string =>
+  toPrefixedReference("SHP", id);
+
+export const toAddressReference = (id: string): string =>
+  toPrefixedReference("ADR", id);

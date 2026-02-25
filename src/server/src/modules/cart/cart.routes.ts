@@ -52,7 +52,7 @@ router.get("/count", optionalAuth, cartController.getCartCount);
  *           schema:
  *             type: object
  *             properties:
- *               productId:
+ *               variantId:
  *                 type: string
  *               quantity:
  *                 type: integer

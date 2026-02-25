@@ -1,6 +1,7 @@
 "use client";
 
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import { toPaymentReference } from "@/app/lib/utils/accountReference";
 import formatDate from "@/app/utils/formatDate";
 import { CreditCard } from "lucide-react";
 
@@ -28,7 +29,9 @@ const PaymentInformation = ({ payment }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6">
         <div>
           <p className="text-sm text-gray-500">Payment ID</p>
-          <p className="font-mono">{(payment.id || "").substring(0, 8)}...</p>
+          <p className="font-mono text-sm break-all">
+            {toPaymentReference(payment.id || "")}
+          </p>
         </div>
         <div>
           <p className="text-sm text-gray-500">Payment Method</p>

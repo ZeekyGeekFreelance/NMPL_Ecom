@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toProductReference = exports.toTransactionReference = exports.toOrderReference = exports.toAccountReference = exports.toPrefixedReference = void 0;
+exports.toAddressReference = exports.toShipmentReference = exports.toPaymentReference = exports.toProductReference = exports.toTransactionReference = exports.toOrderReference = exports.toAccountReference = exports.toPrefixedReference = void 0;
 const DEFAULT_REFERENCE_PREFIX = "REF";
 const DEFAULT_TOKEN_LENGTH = 8;
 const normalizeIdentifier = (value) => (value || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
@@ -39,3 +39,9 @@ const toTransactionReference = (id) => (0, exports.toPrefixedReference)("TXN", i
 exports.toTransactionReference = toTransactionReference;
 const toProductReference = (id) => (0, exports.toPrefixedReference)("PRD", id);
 exports.toProductReference = toProductReference;
+const toPaymentReference = (id) => (0, exports.toPrefixedReference)("PAY", id);
+exports.toPaymentReference = toPaymentReference;
+const toShipmentReference = (id) => (0, exports.toPrefixedReference)("SHP", id);
+exports.toShipmentReference = toShipmentReference;
+const toAddressReference = (id) => (0, exports.toPrefixedReference)("ADR", id);
+exports.toAddressReference = toAddressReference;

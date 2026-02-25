@@ -15,17 +15,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReportsService = void 0;
 const date_fns_1 = require("date-fns");
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
-const client_1 = require("@prisma/client");
 class ReportsService {
-    constructor(reportsRepository, analyticsRepository, productRepository) {
+    constructor(reportsRepository, analyticsRepository) {
         this.reportsRepository = reportsRepository;
         this.analyticsRepository = analyticsRepository;
-        this.productRepository = productRepository;
-        this.prisma = new client_1.PrismaClient();
     }
     generateSalesReport(query) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b, _c, _d, _e, _f, _g, _h;
             const { timePeriod, year, startDate, endDate } = query;
             const cacheKey = `reports:sales:${timePeriod}:${year || "all"}:${(startDate === null || startDate === void 0 ? void 0 : startDate.toISOString()) || "none"}:${(endDate === null || endDate === void 0 ? void 0 : endDate.toISOString()) || "none"}`;
             const cachedData = yield redis_1.default.get(cacheKey);
@@ -43,9 +40,9 @@ class ReportsService {
             // By Category
             const categorySales = {};
             for (const item of orderItems) {
-                const product = yield this.productRepository.findProductById(item.variantId);
+                const product = (_a = item.variant) === null || _a === void 0 ? void 0 : _a.product;
                 const categoryId = (product === null || product === void 0 ? void 0 : product.categoryId) || "uncategorized";
-                const categoryName = ((_a = product === null || product === void 0 ? void 0 : product.category) === null || _a === void 0 ? void 0 : _a.name) || "Uncategorized";
+                const categoryName = ((_b = product === null || product === void 0 ? void 0 : product.category) === null || _b === void 0 ? void 0 : _b.name) || "Uncategorized";
                 if (!categorySales[categoryId]) {
                     categorySales[categoryId] = {
                         revenue: 0,
@@ -54,7 +51,7 @@ class ReportsService {
                     };
                 }
                 categorySales[categoryId].revenue +=
-                    item.quantity * (item.variant.price || 0);
+                    item.quantity * (item.price || ((_c = item.variant) === null || _c === void 0 ? void 0 : _c.price) || 0);
                 categorySales[categoryId].sales += item.quantity;
             }
             const byCategory = Object.entries(categorySales).map(([categoryId, data]) => ({
@@ -66,19 +63,21 @@ class ReportsService {
             // Top Products
             const productSales = {};
             for (const item of orderItems) {
-                const productId = item.variantId;
-                if (!productSales[productId]) {
-                    const product = yield this.productRepository.findProductById(productId);
-                    productSales[productId] = {
+                const sku = ((_d = item.variant) === null || _d === void 0 ? void 0 : _d.sku) || "N/A";
+                const productId = ((_e = item.variant) === null || _e === void 0 ? void 0 : _e.productId) || item.variantId;
+                const aggregationKey = `${productId}:${sku}`;
+                if (!productSales[aggregationKey]) {
+                    productSales[aggregationKey] = {
                         productId,
-                        productName: (product === null || product === void 0 ? void 0 : product.name) || "Unknown",
+                        sku,
+                        productName: ((_g = (_f = item.variant) === null || _f === void 0 ? void 0 : _f.product) === null || _g === void 0 ? void 0 : _g.name) || "Unknown",
                         quantity: 0,
                         revenue: 0,
                     };
                 }
-                productSales[productId].quantity += item.quantity;
-                productSales[productId].revenue +=
-                    item.quantity * (item.variant.price || 0);
+                productSales[aggregationKey].quantity += item.quantity;
+                productSales[aggregationKey].revenue +=
+                    item.quantity * (item.price || ((_h = item.variant) === null || _h === void 0 ? void 0 : _h.price) || 0);
             }
             const topProducts = Object.values(productSales)
                 .sort((a, b) => b.revenue - a.revenue)

@@ -439,3 +439,42 @@
 [2026-02-25T07:16:46.393Z] [31MERROR[39M: You are not authorized to perform this action
 [2026-02-25T07:16:46.401Z] [31MERROR[39M: You are not authorized to perform this action
 [2026-02-25T07:16:47.975Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:30:28.531Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T07:30:28.535Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T07:45:02.236Z] [31MERROR[39M: Invoice is available only after admin confirms the order.
+[2026-02-25T07:45:04.565Z] [31MERROR[39M: Invoice is available only after admin confirms the order.
+[2026-02-25T07:45:06.939Z] [31MERROR[39M: Invoice is available only after admin confirms the order.
+[2026-02-25T07:45:31.516Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T07:51:17.637Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T07:54:42.522Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.529Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.530Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.545Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.546Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.554Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.557Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.558Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.560Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.582Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T07:54:42.584Z] [31MERROR[39M: You are not authorized to perform this action
+[2026-02-25T08:00:32.522Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T08:15:32.522Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T08:30:32.525Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T08:30:32.526Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T09:09:32.216Z] [31MERROR[39M: Unauthorized, please log in
+[2026-02-25T09:09:32.372Z] [31MERROR[39M: Refresh token not found
+[2026-02-25T09:12:11.257Z] [31MERROR[39M: Invoice is available only after admin confirms the order.
+[2026-02-25T09:12:14.971Z] [31MERROR[39M: Invoice is available only after admin confirms the order.
+[2026-02-25T09:24:40.994Z] [31MERROR[39M: Invoice is available only after admin confirms the order.
+[2026-02-25T09:25:38.158Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T09:40:39.521Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T09:55:44.529Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T10:10:46.520Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T10:25:46.518Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T10:30:40.590Z] [31MERROR[39M: Unauthorized, please log in
+[2026-02-25T10:30:40.758Z] [31MERROR[39M: Refresh token not found
+[2026-02-25T10:46:21.665Z] [31MERROR[39M: Invalid access token, please log in
+[2026-02-25T10:49:30.059Z] [31MERROR[39M: Unauthorized, please log in
+[2026-02-25T10:49:30.097Z] [31MERROR[39M: Refresh token not found
+[2026-02-25T10:49:38.658Z] [31MERROR[39M: Unauthorized, please log in
+[2026-02-25T10:49:46.034Z] [31MERROR[39M: Unauthorized, please log in

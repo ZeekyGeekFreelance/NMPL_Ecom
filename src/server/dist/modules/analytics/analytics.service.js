@@ -96,6 +96,7 @@ class AnalyticsService {
     }
     getProductPerformance(query) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const { startDate, endDate } = this.getDateRange(query);
             const orderItems = yield database_config_1.default.orderItem.findMany({
                 where: {
@@ -106,14 +107,25 @@ class AnalyticsService {
                         },
                     },
                 },
-                include: { variant: true },
+                include: {
+                    variant: {
+                        include: {
+                            product: {
+                                select: {
+                                    name: true,
+                                },
+                            },
+                        },
+                    },
+                },
             });
             const productMap = new Map();
             for (const item of orderItems) {
                 const productId = item.variantId;
                 const existing = productMap.get(productId) || {
                     id: productId,
-                    name: item.variant.sku,
+                    sku: item.variant.sku || "N/A",
+                    name: ((_a = item.variant.product) === null || _a === void 0 ? void 0 : _a.name) || item.variant.sku,
                     quantity: 0,
                     revenue: 0,
                 };

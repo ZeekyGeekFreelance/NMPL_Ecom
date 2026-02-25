@@ -494,6 +494,7 @@ const DealersDashboard = () => {
           <table className="w-full min-w-[860px] text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">SN No.</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Dealer</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Business</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Contact</th>
@@ -504,19 +505,20 @@ const DealersDashboard = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                     Loading dealer accounts...
                   </td>
                 </tr>
               ) : dealers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                     No dealer accounts found.
                   </td>
                 </tr>
               ) : (
-                dealers.map((dealer) => (
+                dealers.map((dealer, index) => (
                   <tr key={dealer.id} className="border-b border-gray-100 last:border-b-0">
+                    <td className="px-4 py-3 text-gray-700">{index + 1}</td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900">{dealer.name}</p>
                       <p className="text-gray-600">{dealer.email}</p>
@@ -796,6 +798,9 @@ const DealersDashboard = () => {
                       <thead className="sticky top-0 bg-gray-100 border-b border-gray-200">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-gray-700">
+                            SN No.
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-700">
                             Product
                           </th>
                           <th className="px-3 py-2 text-left font-medium text-gray-700">
@@ -822,14 +827,14 @@ const DealersDashboard = () => {
                         {filteredVariants.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={7}
+                              colSpan={8}
                               className="px-3 py-8 text-center text-sm text-gray-500"
                             >
                               No variants match your filter.
                             </td>
                           </tr>
                         ) : (
-                          filteredVariants.map((variant) => {
+                          filteredVariants.map((variant, index) => {
                             const customPriceRaw = priceMap[variant.id] || "";
                             const hasCustomPrice = customPriceRaw.trim() !== "";
                             const parsedCustomPrice = Number(customPriceRaw);
@@ -841,6 +846,9 @@ const DealersDashboard = () => {
                                 key={variant.id}
                                 className="border-b border-gray-100 last:border-b-0"
                               >
+                                <td className="px-3 py-2 text-gray-700">
+                                  {index + 1}
+                                </td>
                                 <td className="px-3 py-2 text-gray-800">
                                   {variant.product?.name || "Product"}
                                 </td>

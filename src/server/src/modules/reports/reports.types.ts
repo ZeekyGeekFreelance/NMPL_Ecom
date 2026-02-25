@@ -18,6 +18,7 @@ export interface SalesReport {
   }[];
   topProducts: {
     productId: string;
+    sku: string;
     productName: string;
     quantity: number;
     revenue: number;

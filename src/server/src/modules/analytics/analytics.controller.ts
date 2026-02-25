@@ -185,7 +185,7 @@ export class AnalyticsController {
     switch (format) {
       case "csv":
         result = generateCSV(data);
-        contentType = "text/csv";
+        contentType = "text/csv; charset=utf-8";
         break;
       case "pdf":
         result = await generatePDF(data);

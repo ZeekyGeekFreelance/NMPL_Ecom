@@ -7,6 +7,7 @@ import {
 import ChatContainer from "../(chat)";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { toPrefixedReference } from "@/app/lib/utils/accountReference";
 
 const SupportPage = () => {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -14,6 +15,8 @@ const SupportPage = () => {
   const [createChat, { isLoading: isCreatingChat }] = useCreateChatMutation();
 
   const chats = useMemo(() => chatsData?.chats || [], [chatsData?.chats]);
+
+  const formatChatReference = (id: string) => toPrefixedReference("CHT", id);
 
   const handleCreateChat = async () => {
     try {
@@ -49,7 +52,7 @@ const SupportPage = () => {
                       }`}
                     >
                       <div className="font-medium">
-                        Support Ticket #{chat.id.substring(0, 8)}
+                        Support Ticket #{formatChatReference(chat.id)}
                       </div>
                       <div className="mt-1 flex items-center text-sm text-gray-500">
                         <span

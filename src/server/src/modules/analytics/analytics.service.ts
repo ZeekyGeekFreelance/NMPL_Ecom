@@ -125,7 +125,17 @@ export class AnalyticsService {
           },
         },
       },
-      include: { variant: true },
+      include: {
+        variant: {
+          include: {
+            product: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     const productMap = new Map<string, ProductPerformance>();
@@ -133,7 +143,8 @@ export class AnalyticsService {
       const productId = item.variantId;
       const existing = productMap.get(productId) || {
         id: productId,
-        name: item.variant.sku,
+        sku: item.variant.sku || "N/A",
+        name: item.variant.product?.name || item.variant.sku,
         quantity: 0,
         revenue: 0,
       };

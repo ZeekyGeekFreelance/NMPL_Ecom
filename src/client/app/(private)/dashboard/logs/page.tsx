@@ -8,6 +8,7 @@ import {
 import React, { useState } from "react";
 import LogContext from "./LogContext";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { toPrefixedReference } from "@/app/lib/utils/accountReference";
 
 const LogsDashboard = () => {
   const { data, isLoading, error } = useGetAllLogsQuery({});
@@ -36,7 +37,7 @@ const LogsDashboard = () => {
   // Shortens IDs for display
   const shortenId = (id) => {
     if (!id) return "";
-    return `${id.substring(0, 8)}...`;
+    return toPrefixedReference("LOG", id);
   };
 
   // Handle delete single log

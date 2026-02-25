@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SetDealerPricesDto = exports.DealerPriceItemDto = exports.UpdateDealerStatusDto = exports.CreateDealerDto = exports.CreateAdminDto = exports.UserEmailDto = exports.UserIdDto = exports.UpdateUserDto = void 0;
+exports.SetDealerPricesDto = exports.DealerPriceItemDto = exports.UpdateDealerStatusDto = exports.CreateDealerDto = exports.CreateAdminDto = exports.UserEmailDto = exports.UpdateOwnProfileDto = exports.UserIdDto = exports.UpdateUserDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 class UpdateUserDto {
@@ -46,6 +46,16 @@ __decorate([
     (0, class_validator_1.IsString)({ message: "ID must be a string" }),
     __metadata("design:type", String)
 ], UserIdDto.prototype, "id", void 0);
+class UpdateOwnProfileDto {
+}
+exports.UpdateOwnProfileDto = UpdateOwnProfileDto;
+__decorate([
+    (0, class_validator_1.IsNotEmpty)({ message: "Name is required" }),
+    (0, class_validator_1.IsString)({ message: "Name must be a string" }),
+    (0, class_validator_1.MinLength)(2, { message: "Name must be at least 2 characters long" }),
+    (0, class_validator_1.MaxLength)(80, { message: "Name must be at most 80 characters long" }),
+    __metadata("design:type", String)
+], UpdateOwnProfileDto.prototype, "name", void 0);
 class UserEmailDto {
 }
 exports.UserEmailDto = UserEmailDto;

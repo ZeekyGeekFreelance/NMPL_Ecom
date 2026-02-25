@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = generateXLSX;
 const exceljs_1 = __importDefault(require("exceljs"));
 const formatAnalyticsData_1 = __importDefault(require("./formatAnalyticsData"));
+const branding_1 = require("@/shared/utils/branding");
 const EXCEL_MAX_SHEET_NAME_LENGTH = 31;
 const toSheetName = (input, index) => {
     const safe = input
@@ -30,6 +31,9 @@ const toCellValue = (value) => {
     if (value === null || value === undefined || value === "") {
         return "";
     }
+    if (typeof value === "string") {
+        return value.replace(/\s+/g, " ").trim();
+    }
     if (typeof value === "number" || typeof value === "boolean") {
         return value;
     }
@@ -37,14 +41,38 @@ const toCellValue = (value) => {
         return value.toISOString();
     }
     if (Array.isArray(value)) {
-        return value.map((item) => String(item !== null && item !== void 0 ? item : "")).join(" | ");
+        return value
+            .map((item) => toCellValue(item))
+            .map((item) => String(item !== null && item !== void 0 ? item : ""))
+            .filter((item) => item !== "")
+            .join(" | ");
     }
     if (typeof value === "object") {
         return Object.entries(value)
-            .map(([key, nestedValue]) => `${key}: ${String(nestedValue !== null && nestedValue !== void 0 ? nestedValue : "")}`)
+            .map(([key, nestedValue]) => { var _a; return `${key}: ${String((_a = toCellValue(nestedValue)) !== null && _a !== void 0 ? _a : "")}`; })
+            .filter((row) => !row.endsWith(": "))
             .join("; ");
     }
     return String(value);
+};
+const isCurrencyOrNumericColumn = (column) => {
+    const normalized = column.replace(/\s+/g, "").toLowerCase();
+    return (normalized.includes("revenue") ||
+        normalized.includes("price") ||
+        normalized.includes("amount") ||
+        normalized.includes("total") ||
+        normalized.includes("spent") ||
+        normalized.includes("value"));
+};
+const isNumericCell = (value) => {
+    if (typeof value === "number") {
+        return true;
+    }
+    if (typeof value !== "string") {
+        return false;
+    }
+    const normalized = value.replace(/[,\s\u20B9]/g, "");
+    return /^-?\d+(\.\d+)?$/.test(normalized);
 };
 const getColumnWidth = (column, rows) => {
     const headerWidth = column.length + 2;
@@ -84,18 +112,24 @@ const fillSheet = (sheet, section) => {
     };
     sheet.views = [{ state: "frozen", ySplit: 1 }];
     sheet.eachRow((row, rowNumber) => {
-        row.alignment = {
-            vertical: "middle",
-            horizontal: rowNumber === 1 ? "center" : "left",
-            wrapText: true,
-        };
+        row.eachCell((cell, colNumber) => {
+            const column = section.columns[colNumber - 1] || "";
+            const shouldRightAlign = rowNumber > 1 &&
+                (isCurrencyOrNumericColumn(column) || isNumericCell(cell.value));
+            cell.alignment = {
+                vertical: "middle",
+                horizontal: rowNumber === 1 ? "center" : shouldRightAlign ? "right" : "left",
+                wrapText: true,
+            };
+        });
     });
 };
 function generateXLSX(data) {
     return __awaiter(this, void 0, void 0, function* () {
         const workbook = new exceljs_1.default.Workbook();
         const document = (0, formatAnalyticsData_1.default)(data);
-        workbook.creator = "Ecommerce Export Engine";
+        const platformName = (0, branding_1.getPlatformName)();
+        workbook.creator = `${platformName} Export Engine`;
         workbook.created = new Date();
         workbook.modified = new Date();
         document.sections.forEach((section, index) => {

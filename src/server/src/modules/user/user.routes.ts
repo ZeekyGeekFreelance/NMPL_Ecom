@@ -6,6 +6,7 @@ import authorizeRoleHierarchy from "@/shared/middlewares/authorizeRoleHierarchy"
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
   UpdateUserDto,
+  UpdateOwnProfileDto,
   CreateAdminDto,
   CreateDealerDto,
   UpdateDealerStatusDto,
@@ -30,6 +31,42 @@ const userController = makeUserController();
  *         description: Unauthorized. Token is invalid or missing.
  */
 router.get("/me", protect, userController.getMe);
+
+/**
+ * @swagger
+ * /users/me:
+ *   patch:
+ *     summary: Update authenticated profile name
+ *     description: Updates the display name of the authenticated user.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 80
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully.
+ *       400:
+ *         description: Invalid input data.
+ *       401:
+ *         description: Unauthorized. Token is invalid or missing.
+ */
+router.patch(
+  "/me",
+  protect,
+  validateDto(UpdateOwnProfileDto),
+  userController.updateCurrentUserProfile
+);
 
 /**
  * @swagger
@@ -204,8 +241,8 @@ router.get(
  * @swagger
  * /users/{id}:
  *   put:
- *     summary: Update the authenticated user's profile
- *     description: Updates the profile of the authenticated user.
+ *     summary: Update a user by ID
+ *     description: Updates a user by ID (SuperAdmin only, role hierarchy enforced).
  *     parameters:
  *       - in: path
  *         name: id

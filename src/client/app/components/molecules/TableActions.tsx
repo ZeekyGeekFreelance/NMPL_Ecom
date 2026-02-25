@@ -9,6 +9,15 @@ import {
   formatExportCell,
   getNestedValue,
 } from "@/app/utils/export";
+import {
+  toAccountReference,
+  toAddressReference,
+  toOrderReference,
+  toPaymentReference,
+  toProductReference,
+  toShipmentReference,
+  toTransactionReference,
+} from "@/app/lib/utils/accountReference";
 
 interface Column {
   key: string;
@@ -40,6 +49,9 @@ const TableActions: React.FC<TableActionsProps> = ({
   visibleColumns,
   onToggleColumn,
 }) => {
+  const UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
   const extractTextFromReactNode = (node: React.ReactNode): string => {
     if (node === null || node === undefined || typeof node === "boolean") {
       return "";
@@ -71,6 +83,129 @@ const TableActions: React.FC<TableActionsProps> = ({
     return null;
   };
 
+  const normalizeRoleForExport = (value: unknown): unknown => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const normalized = value.trim().toUpperCase();
+    if (!normalized) {
+      return "";
+    }
+
+    if (normalized === "CLIENT") {
+      return "USER";
+    }
+
+    return normalized;
+  };
+
+  const mapReferenceForExport = (column: Column, value: unknown): unknown => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const raw = value.trim();
+    if (!UUID_PATTERN.test(raw)) {
+      return value;
+    }
+
+    const normalizedKey = column.key.replace(/\s+/g, "").toLowerCase();
+    const normalizedLabel = column.label.replace(/\s+/g, "").toLowerCase();
+
+    if (normalizedKey.includes("orderid") || normalizedLabel.includes("orderid")) {
+      return toOrderReference(raw);
+    }
+
+    if (
+      normalizedKey.includes("paymentid") ||
+      normalizedLabel.includes("paymentid")
+    ) {
+      return toPaymentReference(raw);
+    }
+
+    if (
+      normalizedKey.includes("transactionid") ||
+      normalizedLabel.includes("transactionid")
+    ) {
+      return toTransactionReference(raw);
+    }
+
+    if (
+      normalizedKey.includes("userid") ||
+      normalizedLabel.includes("userid") ||
+      normalizedKey.includes("accountid") ||
+      normalizedLabel.includes("accountreference")
+    ) {
+      return toAccountReference(raw);
+    }
+
+    if (
+      normalizedKey.includes("productid") ||
+      normalizedLabel.includes("productid")
+    ) {
+      return toProductReference(raw);
+    }
+
+    if (
+      normalizedKey.includes("shipmentid") ||
+      normalizedLabel.includes("shipmentid")
+    ) {
+      return toShipmentReference(raw);
+    }
+
+    if (
+      normalizedKey.includes("addressid") ||
+      normalizedLabel.includes("addressid")
+    ) {
+      return toAddressReference(raw);
+    }
+
+    if (normalizedKey === "id") {
+      if (normalizedLabel.includes("transaction")) {
+        return toTransactionReference(raw);
+      }
+      if (normalizedLabel.includes("order")) {
+        return toOrderReference(raw);
+      }
+      if (normalizedLabel.includes("payment")) {
+        return toPaymentReference(raw);
+      }
+      if (normalizedLabel.includes("user") || normalizedLabel.includes("account")) {
+        return toAccountReference(raw);
+      }
+      if (normalizedLabel.includes("product")) {
+        return toProductReference(raw);
+      }
+      if (normalizedLabel.includes("shipment")) {
+        return toShipmentReference(raw);
+      }
+      if (normalizedLabel.includes("address")) {
+        return toAddressReference(raw);
+      }
+    }
+
+    return value;
+  };
+
+  const normalizeExportValue = (column: Column, value: unknown): unknown => {
+    const withReference = mapReferenceForExport(column, value);
+    const normalizedKey = column.key.replace(/\s+/g, "").toLowerCase();
+    const normalizedLabel = column.label.replace(/\s+/g, "").toLowerCase();
+
+    const isRoleField =
+      normalizedKey.includes("role") ||
+      normalizedLabel.includes("role") ||
+      normalizedKey.includes("customertype") ||
+      normalizedLabel.includes("customertype");
+
+    if (isRoleField) {
+      return normalizeRoleForExport(withReference);
+    }
+
+    return withReference;
+  };
+
   const handleExport = () => {
     const rowsToExport =
       selectedRows.size > 0
@@ -97,7 +232,9 @@ const TableActions: React.FC<TableActionsProps> = ({
               ? extractTextFromReactNode(column.render(row))
               : getNestedValue(row, column.key);
 
-        record[column.label] = formatExportCell(exportValue);
+        record[column.label] = formatExportCell(
+          normalizeExportValue(column, exportValue)
+        );
       });
 
       return record;

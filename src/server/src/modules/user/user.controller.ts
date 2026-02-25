@@ -59,6 +59,30 @@ export class UserController {
     });
   });
 
+  updateCurrentUserProfile = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const { name } = req.body as { name: string };
+      const user = await this.userService.updateCurrentUserProfile(currentUserId, {
+        name,
+      });
+
+      sendResponse(res, 200, {
+        data: { user },
+        message: "Profile updated successfully",
+      });
+
+      this.logsService.info("Self profile updated", {
+        userId: req.user?.id,
+        sessionId: req.session.id,
+      });
+    }
+  );
+
   updateMe = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
