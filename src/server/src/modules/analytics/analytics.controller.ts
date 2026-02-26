@@ -85,6 +85,8 @@ export class AnalyticsController {
 
   exportAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const { type, format, timePeriod, year, startDate, endDate } = req.query;
+    const now = new Date();
+    const currentYear = now.getFullYear();
 
     const validFormats = ["csv", "pdf", "xlsx"];
     if (!format || !validFormats.includes(format as string)) {
@@ -116,13 +118,26 @@ export class AnalyticsController {
     let selectedYear: number | undefined;
     if (year) {
       selectedYear = parseInt(year as string, 10);
-      if (isNaN(selectedYear)) {
+      if (
+        isNaN(selectedYear) ||
+        selectedYear < 1900 ||
+        selectedYear > currentYear
+      ) {
         throw new AppError(400, "Invalid year format.");
       }
+    } else if (timePeriod === "allTime" && !startDate && !endDate) {
+      selectedYear = currentYear;
     }
 
     let customStartDate: Date | undefined;
     let customEndDate: Date | undefined;
+    if (timePeriod === "custom" && (!startDate || !endDate)) {
+      throw new AppError(
+        400,
+        "Both startDate and endDate must be provided for a custom range."
+      );
+    }
+
     if (startDate && endDate) {
       customStartDate = new Date(startDate as string);
       customEndDate = new Date(endDate as string);
@@ -136,6 +151,10 @@ export class AnalyticsController {
 
       if (customStartDate > customEndDate) {
         throw new AppError(400, "startDate must be before endDate.");
+      }
+
+      if (customStartDate > now || customEndDate > now) {
+        throw new AppError(400, "Future dates are not allowed.");
       }
     } else if (startDate || endDate) {
       throw new AppError(

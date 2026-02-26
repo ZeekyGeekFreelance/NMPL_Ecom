@@ -10,10 +10,13 @@ import {
 } from "class-validator";
 
 export class RegisterDto {
+  @IsString()
   @IsNotEmpty({
     message: "Name is required",
   })
-  @MinLength(3)
+  @MinLength(2, {
+    message: "Name must be at least 2 characters long",
+  })
   name!: string;
 
   @IsEmail()
@@ -41,11 +44,10 @@ export class RegisterDto {
 
   @IsNotEmpty()
   @IsString()
+  @Matches(/^\d{6}$/, {
+    message: "OTP must be a valid 6-digit code",
+  })
   otpCode!: string;
-
-  @IsOptional()
-  @IsIn(["USER", "ADMIN", "SUPERADMIN"])
-  role?: string;
 
   @IsOptional()
   @IsBoolean()

@@ -63,7 +63,7 @@ const TransactionsDashboard = () => {
     nextStatus: OrderLifecycleStatus;
   } | null>(null);
 
-  const { data, isLoading, refetch } = useGetAllTransactionsQuery(undefined, {
+  const { data, error, isLoading, refetch } = useGetAllTransactionsQuery(undefined, {
     pollingInterval: 8000,
     refetchOnFocus: true,
     refetchOnReconnect: true,
@@ -322,6 +322,24 @@ const TransactionsDashboard = () => {
     !!newStatus &&
     availableNextStatuses.includes(newStatus as OrderLifecycleStatus);
 
+  const transactions = Array.isArray((data as any)?.transactions)
+    ? (data as any).transactions
+    : Array.isArray((data as any)?.data?.transactions)
+    ? (data as any).data.transactions
+    : [];
+
+  const totalPages =
+    (data as any)?.totalPages ?? (data as any)?.data?.totalPages;
+  const totalResults =
+    (data as any)?.totalResults ?? (data as any)?.data?.totalResults;
+  const resultsPerPage =
+    (data as any)?.resultsPerPage ?? (data as any)?.data?.resultsPerPage;
+  const currentPage =
+    (data as any)?.currentPage ?? (data as any)?.data?.currentPage;
+  const tableEmptyMessage = error
+    ? getApiErrorMessage(error, "Failed to load transactions")
+    : "No transactions available";
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -332,17 +350,17 @@ const TransactionsDashboard = () => {
       </div>
 
       <Table
-        data={data?.transactions || []}
+        data={transactions}
         columns={columns}
         isLoading={isLoading}
-        emptyMessage="No transactions available"
+        emptyMessage={tableEmptyMessage}
         initialSortKey="transactionDate"
         initialSortDirection="desc"
         onRefresh={refetch}
-        totalPages={data?.totalPages}
-        totalResults={data?.totalResults}
-        resultsPerPage={data?.resultsPerPage}
-        currentPage={data?.currentPage}
+        totalPages={totalPages}
+        totalResults={totalResults}
+        resultsPerPage={resultsPerPage}
+        currentPage={currentPage}
         showHeader={false}
       />
 

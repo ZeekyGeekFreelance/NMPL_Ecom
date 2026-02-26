@@ -6,6 +6,7 @@ import Button from "@/app/components/atoms/Button";
 import { useResetPasswordMutation } from "@/app/store/apis/AuthApi";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const PasswordResetWithToken = () => {
   const { handleSubmit, control } = useForm({
@@ -33,12 +34,14 @@ const PasswordResetWithToken = () => {
     try {
       await resetPassword({
         token: token as string,
-        password: formData.password,
+        newPassword: formData.password,
       }).unwrap();
       setMessage("Password reset successful! You can now log in.");
       setIsError(false);
-    } catch {
-      // setMessage(err?.data?.message || "Something went wrong");
+    } catch (error) {
+      setMessage(
+        getApiErrorMessage(error, "Unable to reset password. Please try again.")
+      );
       setIsError(true);
     }
   };
@@ -70,7 +73,21 @@ const PasswordResetWithToken = () => {
           control={control}
           validation={{
             required: "Password is required",
-            minLength: { value: 6, message: "Minimum 6 characters" },
+            minLength: { value: 8, message: "Minimum 8 characters" },
+            validate: {
+              hasUppercase: (value: string) =>
+                /[A-Z]/.test(value) ||
+                "Password must contain at least one uppercase letter",
+              hasLowercase: (value: string) =>
+                /[a-z]/.test(value) ||
+                "Password must contain at least one lowercase letter",
+              hasNumber: (value: string) =>
+                /[0-9]/.test(value) ||
+                "Password must contain at least one number",
+              hasSpecialChar: (value: string) =>
+                /[!@#$%^&*]/.test(value) ||
+                "Password must contain at least one special character (!@#$%^&*)",
+            },
           }}
           className="py-4"
         />

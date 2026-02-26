@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { useLazyGenerateReportQuery } from "@/app/store/apis/ReportsApi";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import { withAuth } from "@/app/components/HOC/WithAuth";
@@ -10,11 +11,14 @@ interface DropdownOption {
 }
 
 const ReportsDashboard: React.FC = () => {
+  const currentYear = new Date().getFullYear();
+  const todayIso = new Date().toISOString().split("T")[0];
+
   const [generateReport, { isLoading }] = useLazyGenerateReportQuery();
   const [reportType, setReportType] = useState<string | null>("sales");
   const [format, setFormat] = useState<string | null>("pdf");
-  const [timePeriod, setTimePeriod] = useState<string | null>("last7days");
-  const [year, setYear] = useState<string | null>(null);
+  const [timePeriod, setTimePeriod] = useState<string | null>("allTime");
+  const [year, setYear] = useState<string | null>(String(currentYear));
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -42,7 +46,6 @@ const ReportsDashboard: React.FC = () => {
   ];
 
   // Generate year options (last 10 years)
-  const currentYear = new Date().getFullYear();
   const yearOptions: DropdownOption[] = [
     { label: "Select Year", value: "" },
     ...Array.from({ length: 10 }, (_, i) => ({
@@ -67,7 +70,12 @@ const ReportsDashboard: React.FC = () => {
       format,
       timePeriod,
     };
-    if (year) query.year = year;
+
+    const effectiveYear = year || String(currentYear);
+    if (timePeriod !== "custom") {
+      query.year = effectiveYear;
+    }
+
     if (timePeriod === "custom") {
       if (!startDate || !endDate) {
         setErrorMessage(
@@ -75,6 +83,28 @@ const ReportsDashboard: React.FC = () => {
         );
         return;
       }
+
+      const parsedStartDate = new Date(startDate);
+      const parsedEndDate = new Date(endDate);
+
+      if (
+        Number.isNaN(parsedStartDate.getTime()) ||
+        Number.isNaN(parsedEndDate.getTime())
+      ) {
+        setErrorMessage("Invalid date format. Use YYYY-MM-DD.");
+        return;
+      }
+
+      if (startDate > endDate) {
+        setErrorMessage("Start date must be on or before end date.");
+        return;
+      }
+
+      if (startDate > todayIso || endDate > todayIso) {
+        setErrorMessage("Future dates are not allowed.");
+        return;
+      }
+
       query.startDate = startDate;
       query.endDate = endDate;
     }
@@ -103,13 +133,6 @@ const ReportsDashboard: React.FC = () => {
     if (timePeriod !== "custom") {
       setStartDate("");
       setEndDate("");
-    }
-  }, [timePeriod]);
-
-  // Clear year when allTime is selected
-  useEffect(() => {
-    if (timePeriod === "allTime") {
-      setYear(null);
     }
   }, [timePeriod]);
 
@@ -163,10 +186,10 @@ const ReportsDashboard: React.FC = () => {
             />
           </div>
 
-          {/* Year (optional, disabled for allTime) */}
+          {/* Year filter (not used only when custom range is active) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Year (Optional)
+              Year
             </label>
             <Dropdown
               label="Select Year"
@@ -174,7 +197,7 @@ const ReportsDashboard: React.FC = () => {
               value={year}
               onChange={setYear}
               className="w-full"
-              disabled={timePeriod === "allTime"}
+              disabled={timePeriod === "custom"}
             />
           </div>
 
@@ -192,9 +215,15 @@ const ReportsDashboard: React.FC = () => {
                   type="date"
                   id="startDate"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  // max={endDate || format(new Date(), "yyyy-MM-dd")}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    setStartDate(nextValue);
+                    if (endDate && nextValue > endDate) {
+                      setEndDate(nextValue);
+                    }
+                  }}
+                  max={endDate || todayIso}
+                  className="mt-1 block h-11 w-full rounded-md border border-gray-300 px-3 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   required={timePeriod === "custom"}
                 />
               </div>
@@ -211,8 +240,8 @@ const ReportsDashboard: React.FC = () => {
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   min={startDate}
-                  // max={format(new Date(), "yyyy-MM-dd")}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  max={todayIso}
+                  className="mt-1 block h-11 w-full rounded-md border border-gray-300 px-3 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   required={timePeriod === "custom"}
                 />
               </div>
@@ -232,10 +261,16 @@ const ReportsDashboard: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 
-              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-50"
+              className="btn-primary w-full"
             >
-              {isLoading ? "Generating..." : "Generate Report"}
+              {isLoading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  Generating...
+                </span>
+              ) : (
+                "Generate Report"
+              )}
             </button>
           </div>
         </form>

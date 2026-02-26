@@ -8,8 +8,10 @@ import {
   getDaysInMonth,
   startOfMonth,
   getDay,
+  isAfter,
   isSameDay,
   isToday,
+  startOfDay,
 } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
@@ -26,8 +28,11 @@ const DatePicker = ({
   name: string;
 }) => {
   const { field } = useController({ name, control });
+  const maxSelectableDate = startOfDay(new Date());
   const [currentMonth, setCurrentMonth] = useState<Date>(
-    field.value || new Date()
+    field.value && !isAfter(startOfDay(field.value), maxSelectableDate)
+      ? field.value
+      : maxSelectableDate
   );
   const [isOpen, setIsOpen] = useState(false);
   const [direction, setDirection] = useState(1);
@@ -69,7 +74,7 @@ const DatePicker = ({
   };
 
   const handleDateSelect = (date: Date | null) => {
-    if (date) {
+    if (date && !isAfter(startOfDay(date), maxSelectableDate)) {
       field.onChange(date);
       setIsOpen(false);
     }
@@ -77,15 +82,31 @@ const DatePicker = ({
 
   const handleMonthChange = (next: boolean) => {
     setDirection(next ? 1 : -1);
-    setCurrentMonth(
-      next ? addMonths(currentMonth, 1) : subMonths(currentMonth, 1)
-    );
+    setCurrentMonth((previousMonth) => {
+      const nextMonth = next
+        ? addMonths(previousMonth, 1)
+        : subMonths(previousMonth, 1);
+
+      if (isAfter(startOfMonth(nextMonth), startOfMonth(maxSelectableDate))) {
+        return previousMonth;
+      }
+
+      return nextMonth;
+    });
   };
 
   const handleYearChange = (selectedYear: string | null) => {
     if (selectedYear !== null) {
+      const nextMonth = new Date(
+        parseInt(selectedYear, 10),
+        currentMonth.getMonth(),
+        1
+      );
+
       setCurrentMonth(
-        new Date(parseInt(selectedYear), currentMonth.getMonth(), 1)
+        isAfter(startOfMonth(nextMonth), startOfMonth(maxSelectableDate))
+          ? maxSelectableDate
+          : nextMonth
       );
     }
   };
@@ -99,7 +120,12 @@ const DatePicker = ({
       (month) => month.value === selectedMonth
     );
     if (monthIndex >= 0) {
-      setCurrentMonth(new Date(currentMonth.getFullYear(), monthIndex, 1));
+      const nextMonth = new Date(currentMonth.getFullYear(), monthIndex, 1);
+      setCurrentMonth(
+        isAfter(startOfMonth(nextMonth), startOfMonth(maxSelectableDate))
+          ? maxSelectableDate
+          : nextMonth
+      );
     }
   };
 
@@ -121,7 +147,7 @@ const DatePicker = ({
   return (
     <div className="relative w-full" ref={pickerRef}>
       <div
-        className="flex justify-between items-center px-3 py-2 rounded-lg border border-gray-200 
+        className="flex h-11 justify-between items-center px-3.5 rounded-lg border border-gray-200 
                   bg-white shadow-sm cursor-pointer hover:border-gray-300 transition-all duration-200"
         onClick={() => setIsOpen(!isOpen)}
       >
@@ -186,7 +212,11 @@ const DatePicker = ({
                 <button
                   type="button"
                   onClick={() => handleMonthChange(true)}
-                  className="p-1 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+                  className="p-1 rounded-full hover:bg-gray-100 text-gray-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isAfter(
+                    startOfMonth(addMonths(currentMonth, 1)),
+                    startOfMonth(maxSelectableDate)
+                  )}
                 >
                   <ChevronRight size={18} />
                 </button>
@@ -217,7 +247,12 @@ const DatePicker = ({
                         key={index}
                         className={`
                           aspect-square flex items-center justify-center rounded-full text-sm
-                          ${date ? "cursor-pointer" : ""}
+                          ${date && !isAfter(startOfDay(date), maxSelectableDate) ? "cursor-pointer" : ""}
+                          ${
+                            date && isAfter(startOfDay(date), maxSelectableDate)
+                              ? "text-gray-300 cursor-not-allowed"
+                              : ""
+                          }
                           ${
                             date &&
                             isToday(date) &&
@@ -228,7 +263,8 @@ const DatePicker = ({
                           ${
                             date && isSameDay(date, field.value)
                               ? "bg-blue-500 text-white hover:bg-blue-600"
-                              : date
+                              : date &&
+                                !isAfter(startOfDay(date), maxSelectableDate)
                               ? "hover:bg-gray-100 text-gray-800"
                               : ""
                           }

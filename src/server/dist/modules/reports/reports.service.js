@@ -54,12 +54,13 @@ class ReportsService {
                     item.quantity * (item.price || ((_c = item.variant) === null || _c === void 0 ? void 0 : _c.price) || 0);
                 categorySales[categoryId].sales += item.quantity;
             }
-            const byCategory = Object.entries(categorySales).map(([categoryId, data]) => ({
-                categoryId,
+            const byCategory = Object.values(categorySales)
+                .map((data) => ({
                 categoryName: data.name,
                 revenue: data.revenue,
                 sales: data.sales,
-            }));
+            }))
+                .sort((first, second) => second.revenue - first.revenue);
             // Top Products
             const productSales = {};
             for (const item of orderItems) {
@@ -196,6 +197,10 @@ class ReportsService {
                     previousEndDate = (0, date_fns_1.subYears)(now, 1);
                     break;
                 case "allTime":
+                    if (!query.year && !query.startDate && !query.endDate) {
+                        yearStart = (0, date_fns_1.startOfYear)(now);
+                        yearEnd = (0, date_fns_1.endOfYear)(now);
+                    }
                     currentStartDate = undefined;
                     currentEndDate = undefined;
                     break;

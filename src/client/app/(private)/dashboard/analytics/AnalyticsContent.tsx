@@ -18,14 +18,12 @@ interface FormData {
   year?: string;
   startDate?: string;
   endDate?: string;
-  useCustomRange: boolean;
 }
 
 const AnalyticsContent = () => {
   const { control, watch } = useForm<FormData>({
     defaultValues: {
       timePeriod: "allTime",
-      useCustomRange: false,
       year: new Date().getFullYear().toString(),
     },
   });
@@ -38,7 +36,10 @@ const AnalyticsContent = () => {
     { label: "All Time", value: "allTime" },
   ];
 
-  const { timePeriod, year, startDate, endDate, useCustomRange } = watch();
+  const { timePeriod, year, startDate, endDate } = watch();
+  const hasStartDate = Boolean(startDate);
+  const hasEndDate = Boolean(endDate);
+  const useCustomRange = hasStartDate && hasEndDate;
 
   const queryParams = {
     timePeriod: timePeriod || "allTime",
@@ -54,8 +55,6 @@ const AnalyticsContent = () => {
   const [exportType, setExportType] = useState<string>("all");
   const [exportFormat, setExportFormat] = useState<string>("csv");
 
-  console.log("Analytics data => ", data);
-  console.log("error loading analytics => ", error);
 
   const minYear = data?.yearRange?.minYear || 2020;
   const maxYear = data?.yearRange?.maxYear || 2020;
@@ -65,10 +64,8 @@ const AnalyticsContent = () => {
     value: (minYear + i).toString(),
   }));
 
-  const [, { isLoading: isExporting, error: exportError }] =
-    useLazyExportAnalyticsQuery();
+  const [, { isLoading: isExporting }] = useLazyExportAnalyticsQuery();
 
-  console.log("export error => ", exportError);
 
   // const handleExport = async () => {
   //   try {
@@ -105,7 +102,6 @@ const AnalyticsContent = () => {
   }
 
   if (error) {
-    console.error("GraphQL Error:", error);
     return <div>Error loading analytics data</div>;
   }
 
@@ -132,6 +128,7 @@ const AnalyticsContent = () => {
     data?.productPerformance?.slice(0, 10).map((p) => ({
       id: p.id,
       name: p.name,
+      subtitle: p.sku ? `SKU: ${p.sku}` : "SKU: N/A",
       quantity: p.quantity,
       revenue: formatPrice(p.revenue),
     })) || [];
@@ -150,6 +147,7 @@ const AnalyticsContent = () => {
     data?.interactionAnalytics?.mostViewedProducts?.slice(0, 10).map((p) => ({
       id: p.productId,
       name: p.productName,
+      subtitle: p.productSku ? `SKU: ${p.productSku}` : "SKU: N/A",
       viewCount: p.viewCount,
     })) || [];
 
@@ -191,7 +189,7 @@ const AnalyticsContent = () => {
               <Dropdown
                 onChange={field.onChange}
                 options={yearOptions}
-                value={field.value ?? "all"}
+                value={field.value ?? null}
                 label="Year"
                 className="min-w-[150px] max-w-[200px]"
                 disabled={useCustomRange}

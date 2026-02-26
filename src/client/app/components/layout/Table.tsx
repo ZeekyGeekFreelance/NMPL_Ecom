@@ -175,6 +175,7 @@ const Table: React.FC<TableProps> = ({
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(columns.map((col) => col.key))
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const debouncedSearchQuery = useDebounce(searchQuery, 180);
 
   useEffect(() => {
@@ -209,17 +210,15 @@ const Table: React.FC<TableProps> = ({
   }, [initialSortDirection, initialSortKey]);
 
   const handleSort = (key: string) => {
-    setSortKey((previousSortKey) => {
-      if (previousSortKey === key) {
-        setSortDirection((previousDirection) =>
-          previousDirection === "asc" ? "desc" : "asc"
-        );
-        return previousSortKey;
-      }
+    if (sortKey === key) {
+      setSortDirection((previousDirection) =>
+        previousDirection === "asc" ? "desc" : "asc"
+      );
+      return;
+    }
 
-      setSortDirection("asc");
-      return key;
-    });
+    setSortKey(key);
+    setSortDirection("asc");
   };
 
   const handleSearch = (data: { searchQuery: string }) =>
@@ -321,21 +320,22 @@ const Table: React.FC<TableProps> = ({
   }, [columns, data, debouncedSearchQuery, sortDirection, sortKey]);
 
   const handleRefresh = useCallback(() => {
+    if (isRefreshing) {
+      return;
+    }
+
+    setIsRefreshing(true);
     setSearchQuery("");
     setSortKey(initialSortKey);
     setSortDirection(initialSortDirection);
     setSelectedRows(new Set());
 
     Promise.resolve(onRefresh?.())
-      .catch((error) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.error("Failed to refresh table data", error);
-        }
-      })
       .finally(() => {
-      router.refresh();
+        router.refresh();
+        setIsRefreshing(false);
       });
-  }, [initialSortDirection, initialSortKey, onRefresh, router]);
+  }, [initialSortDirection, initialSortKey, isRefreshing, onRefresh, router]);
 
   const handleSelectRow = (rowId: string) => {
     setSelectedRows((previousSelectedRows) => {
@@ -400,6 +400,7 @@ const Table: React.FC<TableProps> = ({
           currentPage={currentPage}
           resultsPerPage={resultsPerPage}
           onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
         />
       )}
       <TableActions

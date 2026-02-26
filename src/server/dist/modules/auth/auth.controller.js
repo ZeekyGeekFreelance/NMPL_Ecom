@@ -46,17 +46,19 @@ class AuthController {
             });
             (0, sendResponse_1.default)(res, 200, {
                 message: response.message,
+                data: {
+                    resendAvailableInSeconds: response.resendAvailableInSeconds,
+                },
             });
         }));
         this.signup = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const start = Date.now();
-            const { name, email, password, role, otpCode, requestDealerAccess, businessName, contactPhone, } = req.body;
+            const { name, email, password, otpCode, requestDealerAccess, businessName, contactPhone, } = req.body;
             const { user, accessToken, refreshToken, requiresApproval } = yield this.authService.registerUser({
                 name,
                 email,
                 password,
-                role,
                 otpCode,
                 requestDealerAccess,
                 businessName,

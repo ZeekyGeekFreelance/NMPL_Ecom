@@ -15,10 +15,13 @@ class RegisterDto {
 }
 exports.RegisterDto = RegisterDto;
 __decorate([
+    (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)({
         message: "Name is required",
     }),
-    (0, class_validator_1.MinLength)(3),
+    (0, class_validator_1.MinLength)(2, {
+        message: "Name must be at least 2 characters long",
+    }),
     __metadata("design:type", String)
 ], RegisterDto.prototype, "name", void 0);
 __decorate([
@@ -49,13 +52,11 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^\d{6}$/, {
+        message: "OTP must be a valid 6-digit code",
+    }),
     __metadata("design:type", String)
 ], RegisterDto.prototype, "otpCode", void 0);
-__decorate([
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsIn)(["USER", "ADMIN", "SUPERADMIN"]),
-    __metadata("design:type", String)
-], RegisterDto.prototype, "role", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),

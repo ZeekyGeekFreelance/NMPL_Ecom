@@ -60,6 +60,8 @@ class AnalyticsController {
         this.exportAnalytics = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const { type, format, timePeriod, year, startDate, endDate } = req.query;
+            const now = new Date();
+            const currentYear = now.getFullYear();
             const validFormats = ["csv", "pdf", "xlsx"];
             if (!format || !validFormats.includes(format)) {
                 throw new AppError_1.default(400, "Invalid format. Use: csv, pdf, or xlsx");
@@ -81,12 +83,20 @@ class AnalyticsController {
             let selectedYear;
             if (year) {
                 selectedYear = parseInt(year, 10);
-                if (isNaN(selectedYear)) {
+                if (isNaN(selectedYear) ||
+                    selectedYear < 1900 ||
+                    selectedYear > currentYear) {
                     throw new AppError_1.default(400, "Invalid year format.");
                 }
             }
+            else if (timePeriod === "allTime" && !startDate && !endDate) {
+                selectedYear = currentYear;
+            }
             let customStartDate;
             let customEndDate;
+            if (timePeriod === "custom" && (!startDate || !endDate)) {
+                throw new AppError_1.default(400, "Both startDate and endDate must be provided for a custom range.");
+            }
             if (startDate && endDate) {
                 customStartDate = new Date(startDate);
                 customEndDate = new Date(endDate);
@@ -95,6 +105,9 @@ class AnalyticsController {
                 }
                 if (customStartDate > customEndDate) {
                     throw new AppError_1.default(400, "startDate must be before endDate.");
+                }
+                if (customStartDate > now || customEndDate > now) {
+                    throw new AppError_1.default(400, "Future dates are not allowed.");
                 }
             }
             else if (startDate || endDate) {

@@ -29,6 +29,9 @@ export class AuthController {
 
       sendResponse(res, 200, {
         message: response.message,
+        data: {
+          resendAvailableInSeconds: response.resendAvailableInSeconds,
+        },
       });
     }
   );
@@ -39,7 +42,6 @@ export class AuthController {
       name,
       email,
       password,
-      role,
       otpCode,
       requestDealerAccess,
       businessName,
@@ -50,7 +52,6 @@ export class AuthController {
         name,
         email,
         password,
-        role,
         otpCode,
         requestDealerAccess,
         businessName,

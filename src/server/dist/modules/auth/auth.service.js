@@ -17,7 +17,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const sendEmail_1 = __importDefault(require("@/shared/utils/sendEmail"));
 const passwordReset_1 = __importDefault(require("@/shared/templates/passwordReset"));
-const emailVerification_1 = __importDefault(require("@/shared/templates/emailVerification"));
+const registrationOtp_1 = __importDefault(require("@/shared/templates/registrationOtp"));
 const authUtils_1 = require("@/shared/utils/authUtils");
 const client_1 = require("@prisma/client");
 const logger_1 = __importDefault(require("@/infra/winston/logger"));
@@ -26,7 +26,7 @@ const BadRequestError_1 = __importDefault(require("@/shared/errors/BadRequestErr
 const NotFoundError_1 = __importDefault(require("@/shared/errors/NotFoundError"));
 const accountReference_1 = require("@/shared/utils/accountReference");
 const branding_1 = require("@/shared/utils/branding");
-const registrationOtp_1 = require("@/shared/utils/auth/registrationOtp");
+const registrationOtp_2 = require("@/shared/utils/auth/registrationOtp");
 const resolveClientUrl = () => {
     return (process.env.CLIENT_URL ||
         process.env.CLIENT_URL_DEV ||
@@ -71,22 +71,44 @@ class AuthService {
             if (existingUser) {
                 throw new BadRequestError_1.default("This email is already registered. Please sign in instead.");
             }
-            const { otpCode, expiresInSeconds } = yield (0, registrationOtp_1.createRegistrationOtp)({
-                email: normalizedEmail,
-                purpose,
-                requestDealerAccess,
+            let otpDetails;
+            try {
+                otpDetails = yield (0, registrationOtp_2.createRegistrationOtp)({
+                    email: normalizedEmail,
+                    purpose,
+                    requestDealerAccess,
+                });
+            }
+            catch (error) {
+                if (error instanceof registrationOtp_2.RegistrationOtpRateLimitError) {
+                    throw new BadRequestError_1.default(`OTP already sent. Please wait ${error.retryAfterSeconds} seconds before requesting a new one.`);
+                }
+                throw new AppError_1.default(500, "Unable to prepare registration OTP. Please try again in a moment.");
+            }
+            const { otpCode, expiresInSeconds, resendAvailableInSeconds } = otpDetails;
+            const purposeLabel = purpose === "DEALER_PORTAL" ? "Dealer Registration" : "Account Registration";
+            const platformName = (0, branding_1.getPlatformName)();
+            const supportEmail = (0, branding_1.getSupportEmail)();
+            const otpTemplate = (0, registrationOtp_1.default)({
+                platformName,
+                otpCode,
+                purposeLabel,
+                expiresInMinutes: Math.floor(expiresInSeconds / 60),
+                supportEmail,
             });
             const sent = yield (0, sendEmail_1.default)({
                 to: normalizedEmail,
-                subject: "Your registration OTP code",
-                text: `Your OTP code is ${otpCode}. It expires in ${Math.floor(expiresInSeconds / 60)} minutes.`,
-                html: (0, emailVerification_1.default)(otpCode),
+                subject: otpTemplate.subject,
+                text: otpTemplate.text,
+                html: otpTemplate.html,
             });
             if (!sent) {
+                yield (0, registrationOtp_2.clearRegistrationOtp)(normalizedEmail);
                 throw new AppError_1.default(500, "Failed to send OTP email. Please try again in a moment.");
             }
             return {
                 message: `OTP sent successfully. It will expire in ${Math.floor(expiresInSeconds / 60)} minutes.`,
+                resendAvailableInSeconds,
             };
         });
     }
@@ -98,24 +120,30 @@ class AuthService {
             if (existingUser) {
                 throw new AppError_1.default(400, "This email is already registered, please log in instead.");
             }
-            const pendingOtp = yield (0, registrationOtp_1.hasPendingRegistrationOtp)(normalizedEmail);
-            if (pendingOtp && !otpCode) {
+            if (!otpCode || !otpCode.trim()) {
                 throw new BadRequestError_1.default("Registration OTP is required. Please use the OTP sent to your email.");
             }
-            let otpContext = null;
-            if (otpCode) {
-                otpContext = yield (0, registrationOtp_1.verifyAndConsumeRegistrationOtp)(normalizedEmail, otpCode);
-                if (!otpContext) {
-                    throw new BadRequestError_1.default("Invalid or expired registration OTP code.");
-                }
+            const otpVerification = yield (0, registrationOtp_2.verifyAndConsumeRegistrationOtp)(normalizedEmail, otpCode);
+            if (otpVerification.status === "EXPIRED") {
+                throw new BadRequestError_1.default("Registration OTP expired. Request a new OTP and try again.");
             }
-            const shouldRequestDealerAccess = requestDealerAccess || (otpContext === null || otpContext === void 0 ? void 0 : otpContext.requestDealerAccess) === true;
-            // Force new registrations to be USER role only for security
+            if (otpVerification.status === "LOCKED") {
+                throw new BadRequestError_1.default("Too many incorrect OTP attempts. Please request a new OTP.");
+            }
+            if (otpVerification.status === "INVALID") {
+                throw new BadRequestError_1.default(`Invalid registration OTP code. ${otpVerification.attemptsRemaining} attempt(s) remaining.`);
+            }
+            const otpContext = otpVerification.context;
+            const shouldRequestDealerAccess = otpContext.requestDealerAccess === true;
+            if (requestDealerAccess && !shouldRequestDealerAccess) {
+                throw new BadRequestError_1.default("Dealer signup requires an OTP requested from the dealer registration flow.");
+            }
+            // Registrations created through this flow always start as USER role.
             const newUser = yield this.authRepository.createUser({
                 email: normalizedEmail,
                 name,
                 password,
-                role: client_1.ROLE.USER, // Ignore any role passed from client for security
+                role: client_1.ROLE.USER,
             });
             const accountReference = (0, accountReference_1.toAccountReference)(newUser.id);
             const adminsEmail = resolveNotificationRecipients();

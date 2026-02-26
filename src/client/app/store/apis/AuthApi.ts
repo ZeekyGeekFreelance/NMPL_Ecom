@@ -4,17 +4,21 @@ import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
 
 interface User {
   id: string;
+  accountReference?: string;
   name: string;
   email: string;
   role: string;
-  emailVerified: boolean;
   avatar: string | null;
+  isDealer?: boolean;
+  dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  dealerBusinessName?: string | null;
+  dealerContactPhone?: string | null;
 }
 
 export const authApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     requestRegistrationOtp: builder.mutation<
-      { message: string },
+      { message: string; resendAvailableInSeconds?: number },
       {
         email: string;
         purpose?: "USER_PORTAL" | "DEALER_PORTAL";
@@ -28,7 +32,7 @@ export const authApi = apiSlice.injectEndpoints({
       }),
     }),
     signIn: builder.mutation<
-      { accessToken: string; user: User },
+      { message: string; user: User },
       { email: string; password: string }
     >({
       query: (credentials) => ({
@@ -37,18 +41,21 @@ export const authApi = apiSlice.injectEndpoints({
         body: credentials,
       }),
       onQueryStarted: async (_, { dispatch, queryFulfilled }) => {
-        const { data } = await queryFulfilled;
-        // Backend returns { success, message, user }
-        dispatch(setUser({ user: data.user }));
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(setUser({ user: data.user }));
+        } catch {
+          // Ignore mutation rejection here; components already consume error state.
+        }
       },
     }),
     signup: builder.mutation<
-      { accessToken: string; user: User },
+      { message: string; user: User; requiresApproval?: boolean },
       {
         name: string;
         email: string;
         password: string;
-        otpCode?: string;
+        otpCode: string;
         requestDealerAccess?: boolean;
         businessName?: string;
         contactPhone?: string;
@@ -60,9 +67,14 @@ export const authApi = apiSlice.injectEndpoints({
         body: data,
       }),
       onQueryStarted: async (_, { dispatch, queryFulfilled }) => {
-        const { data } = await queryFulfilled;
-        // Backend returns { success, message, user }
-        dispatch(setUser({ user: data.user }));
+        try {
+          const { data } = await queryFulfilled;
+          if (!data.requiresApproval) {
+            dispatch(setUser({ user: data.user }));
+          }
+        } catch {
+          // Ignore mutation rejection here; components already consume error state.
+        }
       },
     }),
     signOut: builder.mutation<void, void>({
@@ -82,14 +94,20 @@ export const authApi = apiSlice.injectEndpoints({
         body: { email },
       }),
     }),
-    resetPassword: builder.mutation<{ message?: string }, { token: string; password: string }>({
-      query: ({ token, password }) => ({
+    resetPassword: builder.mutation<
+      { message?: string },
+      { token: string; newPassword: string }
+    >({
+      query: ({ token, newPassword }) => ({
         url: "/auth/reset-password",
         method: "POST",
-        body: { token, password },
+        body: { token, newPassword },
       }),
     }),
-    checkAuth: builder.mutation<{ accessToken: string; user: User }, void>({
+    checkAuth: builder.mutation<
+      { message: string; accessToken: string; user: User },
+      void
+    >({
       query: () => ({
         url: "/auth/refresh-token",
         method: "POST",

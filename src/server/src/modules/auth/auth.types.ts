@@ -12,8 +12,7 @@ export interface RegisterUserParams {
   name: string;
   email: string;
   password: string;
-  role?: ROLE;
-  otpCode?: string;
+  otpCode: string;
   requestDealerAccess?: boolean;
   businessName?: string;
   contactPhone?: string;

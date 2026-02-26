@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isTokenBlacklisted = exports.blacklistToken = void 0;
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
+const logger_1 = __importDefault(require("@/infra/winston/logger"));
 // Blacklist token in Redis
 const blacklistToken = (token, ttl) => __awaiter(void 0, void 0, void 0, function* () {
     yield redis_1.default.set(`blacklist:${token}`, "blacklisted", "EX", ttl);
@@ -26,7 +27,8 @@ const isTokenBlacklisted = (token) => __awaiter(void 0, void 0, void 0, function
         return result !== null;
     }
     catch (error) {
-        console.error("Redis error:", error);
+        const message = error instanceof Error ? error.message : String(error);
+        logger_1.default.warn(`[auth.redisUtils] Redis lookup failed: ${message}`);
         return false;
     }
 });

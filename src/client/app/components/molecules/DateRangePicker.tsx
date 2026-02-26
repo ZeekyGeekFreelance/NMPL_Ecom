@@ -1,22 +1,26 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  format,
   addMonths,
-  subMonths,
-  getDaysInMonth,
-  startOfMonth,
+  format,
   getDay,
+  getDaysInMonth,
+  isAfter,
+  isBefore,
   isSameDay,
   isToday,
+  isValid,
   isWithinInterval,
-  isBefore,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  subDays,
+  subMonths,
 } from "date-fns";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
-import { Controller, useController } from "react-hook-form";
-import Dropdown from "./Dropdown";
+import { useController } from "react-hook-form";
 
 interface DateRangePickerProps {
   label?: string;
@@ -26,8 +30,30 @@ interface DateRangePickerProps {
   className?: string;
 }
 
+const DAYS_OF_WEEK = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+const toDateValue = (value: unknown): Date | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return isValid(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const parsed = parseISO(value);
+    return isValid(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const serializeDateValue = (value: Date | null): string | null =>
+  value ? format(value, "yyyy-MM-dd") : null;
+
 const DateRangePicker: React.FC<DateRangePickerProps> = ({
-  label,
+  label = "Custom Date Range",
   control,
   startName,
   endName,
@@ -36,296 +62,330 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
   const { field: startField } = useController({ name: startName, control });
   const { field: endField } = useController({ name: endName, control });
 
-  const [currentMonth, setCurrentMonth] = useState<Date>(
-    startField.value || new Date()
-  );
+  const startDate = toDateValue(startField.value);
+  const endDate = toDateValue(endField.value);
+  const maxSelectableDate = useMemo(() => startOfDay(new Date()), []);
+
   const [isOpen, setIsOpen] = useState(false);
   const [direction, setDirection] = useState(1);
-  const [selecting, setSelecting] = useState<"start" | "end">("start"); // Track which date is being selected
+  const [selecting, setSelecting] = useState<"start" | "end">("start");
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => {
+    const candidateMonth = startDate || endDate || maxSelectableDate;
+    return isAfter(candidateMonth, maxSelectableDate)
+      ? maxSelectableDate
+      : candidateMonth;
+  });
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  const daysOfWeek = [
-    { label: "Sunday", value: "Su" },
-    { label: "Monday", value: "Mo" },
-    { label: "Tuesday", value: "Tu" },
-    { label: "Wednesday", value: "We" },
-    { label: "Thursday", value: "Th" },
-    { label: "Friday", value: "Fr" },
-    { label: "Saturday", value: "Sa" },
-  ];
+  const years = useMemo(() => {
+    const currentYear = maxSelectableDate.getFullYear();
+    return Array.from({ length: 8 }, (_, index) => currentYear - 7 + index);
+  }, [maxSelectableDate]);
 
-  const years = Array.from(
-    { length: new Date().getFullYear() - 1899 },
-    (_, i) => ({ label: (1900 + i).toString(), value: (1900 + i).toString() })
-  );
+  const isFutureMonth = (date: Date) =>
+    isAfter(startOfMonth(date), startOfMonth(maxSelectableDate));
 
-  const months = Array.from({ length: 12 }, (_, i) => ({
-    label: format(new Date(2000, i, 1), "MMMM"),
-    value: format(new Date(2000, i, 1), "MMMM"),
-  }));
-
-  const generateCalendarDays = () => {
+  const calendarDays = useMemo(() => {
     const daysInMonth = getDaysInMonth(currentMonth);
     const firstDay = getDay(startOfMonth(currentMonth));
-    const days: (Date | null)[] = Array.from({ length: firstDay }, () => null);
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(
-        new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day)
-      );
+    const days: Array<Date | null> = Array.from({ length: firstDay }, () => null);
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      days.push(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day));
     }
+
     while (days.length % 7 !== 0) {
       days.push(null);
     }
+
     return days;
+  }, [currentMonth]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelecting(startDate && !endDate ? "end" : "start");
+    }
+  }, [isOpen, startDate, endDate]);
+
+  const handleMonthShift = (next: boolean) => {
+    setDirection(next ? 1 : -1);
+    setCurrentMonth((previousMonth) => {
+      const shiftedMonth = next
+        ? addMonths(previousMonth, 1)
+        : subMonths(previousMonth, 1);
+
+      return isFutureMonth(shiftedMonth) ? previousMonth : shiftedMonth;
+    });
+  };
+
+  const handleMonthSelect = (monthIndex: number) => {
+    const nextMonth = new Date(currentMonth.getFullYear(), monthIndex, 1);
+    setCurrentMonth(isFutureMonth(nextMonth) ? maxSelectableDate : nextMonth);
+  };
+
+  const handleYearSelect = (year: number) => {
+    const nextMonth = new Date(year, currentMonth.getMonth(), 1);
+    setCurrentMonth(isFutureMonth(nextMonth) ? maxSelectableDate : nextMonth);
+  };
+
+  const applyRange = (nextStart: Date | null, nextEnd: Date | null) => {
+    startField.onChange(serializeDateValue(nextStart));
+    endField.onChange(serializeDateValue(nextEnd));
   };
 
   const handleDateSelect = (date: Date | null) => {
-    if (!date) return;
+    if (!date) {
+      return;
+    }
+    if (isAfter(startOfDay(date), maxSelectableDate)) {
+      return;
+    }
 
     if (selecting === "start") {
-      startField.onChange(date);
-      // If the end date is before the new start date, clear it
-      if (endField.value && isBefore(endField.value, date)) {
-        endField.onChange(null);
-      }
+      applyRange(date, endDate && isBefore(endDate, date) ? null : endDate);
       setSelecting("end");
+      return;
+    }
+
+    if (startDate && isBefore(date, startDate)) {
+      applyRange(date, startDate);
     } else {
-      // Ensure end date is not before start date
-      if (startField.value && isBefore(date, startField.value)) {
-        endField.onChange(startField.value);
-        startField.onChange(date);
-      } else {
-        endField.onChange(date);
-      }
-      setSelecting("start");
-      setIsOpen(false); // Close the picker after selecting the end date
+      applyRange(startDate || date, date);
     }
+
+    setSelecting("start");
+    setIsOpen(false);
   };
 
-  const handleMonthChange = (next: boolean) => {
-    setDirection(next ? 1 : -1);
-    setCurrentMonth(
-      next ? addMonths(currentMonth, 1) : subMonths(currentMonth, 1)
-    );
+  const handlePresetToday = () => {
+    const today = maxSelectableDate;
+    applyRange(today, today);
+    setCurrentMonth(today);
+    setSelecting("start");
+    setIsOpen(false);
   };
 
-  const handleYearChange = (selectedYear: string | null) => {
-    if (selectedYear !== null) {
-      setCurrentMonth(
-        new Date(parseInt(selectedYear), currentMonth.getMonth(), 1)
-      );
-    }
+  const handlePresetLast7Days = () => {
+    const today = maxSelectableDate;
+    applyRange(subDays(today, 6), today);
+    setCurrentMonth(today);
+    setSelecting("start");
+    setIsOpen(false);
   };
 
-  const handleMonthSelect = (selectedMonth: string | null) => {
-    if (selectedMonth !== null) {
-      const monthIndex = months.findIndex((m) => m.value === selectedMonth);
-      setCurrentMonth(new Date(currentMonth.getFullYear(), monthIndex, 1));
-    }
+  const handleClear = () => {
+    applyRange(null, null);
+    setSelecting("start");
+    setIsOpen(false);
   };
 
-  const calendarDays = generateCalendarDays();
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        pickerRef.current &&
-        !pickerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
+  const displayValue = (() => {
+    if (!startDate && !endDate) {
+      return "Select Dates";
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
-  // Format the display value for the input
-  const displayValue = () => {
-    if (!startField.value && !endField.value) {
-      return label || "Select date range";
+    if (startDate && !endDate) {
+      return `${format(startDate, "MMM dd, yyyy")} - End date`;
     }
-    const start = startField.value
-      ? format(startField.value, "MMM dd, yyyy")
-      : "Start";
-    const end = endField.value ? format(endField.value, "MMM dd, yyyy") : "End";
-    return `${start} - ${end}`;
-  };
+
+    if (!startDate && endDate) {
+      return `Start date - ${format(endDate, "MMM dd, yyyy")}`;
+    }
+
+    return `${format(startDate as Date, "MMM dd, yyyy")} - ${format(
+      endDate as Date,
+      "MMM dd, yyyy"
+    )}`;
+  })();
 
   return (
     <div className={`relative min-w-0 w-full ${className}`} ref={pickerRef}>
-      <div
-        className="flex justify-between items-center px-3 py-2 rounded-lg border border-gray-200 
-                  bg-white cursor-pointer hover:border-gray-300 transition-all duration-200"
-        onClick={() => setIsOpen(!isOpen)}
+      <button
+        type="button"
+        onClick={() => setIsOpen((previous) => !previous)}
+        className="h-11 w-full rounded-lg border border-gray-200 bg-white px-4 text-left hover:border-gray-300 transition-colors"
       >
-        <span className="text-sm font-medium text-gray-700">
-          {displayValue()}
-        </span>
-        <Calendar size={18} className="text-gray-400" />
-      </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              {label}
+            </p>
+            <p className="truncate text-sm font-medium text-gray-800">{displayValue}</p>
+          </div>
+          <Calendar size={18} className="shrink-0 text-gray-400" />
+        </div>
+      </button>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -5 }}
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            transition={{ duration: 0.15 }}
-            className="absolute mt-2 bg-white border border-gray-100 rounded-lg shadow-lg z-10 w-full overflow-hidden"
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16 }}
+            className="absolute left-1/2 z-20 mt-2 w-[min(94vw,420px)] -translate-x-1/2 rounded-xl border border-gray-200 bg-white shadow-xl md:left-0 md:translate-x-0"
           >
-            <div className="p-3">
-              <div className="flex justify-between items-center mb-4">
+            <div className="p-5">
+              <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
+                <p className="text-xs font-semibold text-blue-700">
+                  {selecting === "start"
+                    ? "Select start date"
+                    : "Select end date"}
+                </p>
+                <p className="text-[11px] text-blue-600">
+                  Choose both dates to apply the custom range. Future dates are disabled.
+                </p>
+              </div>
+
+              <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5">
+                  <p className="font-semibold text-gray-600">Start</p>
+                  <p className="text-gray-800">
+                    {startDate ? format(startDate, "MMM dd, yyyy") : "-"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5">
+                  <p className="font-semibold text-gray-600">End</p>
+                  <p className="text-gray-800">
+                    {endDate ? format(endDate, "MMM dd, yyyy") : "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-3 flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => handleMonthChange(false)}
-                  className="p-1 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+                  onClick={() => handleMonthShift(false)}
+                  className="rounded-md border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-100"
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={16} />
                 </button>
 
-                <div className="flex space-x-2 w-full px-2">
-                  <Controller
-                    name="months"
-                    control={control}
-                    render={({ field }) => (
-                      <Dropdown
-                        options={months}
-                        value={
-                          field.value ||
-                          currentMonth.toLocaleString("default", {
-                            month: "long",
-                          })
-                        }
-                        onChange={handleMonthSelect}
-                        className="text-xs font-medium px-6
-                        "
-                      />
-                    )}
-                  />
-
-                  <Controller
-                    name="years"
-                    control={control}
-                    render={() => (
-                      <Dropdown
-                        options={years}
-                        value={currentMonth.getFullYear().toString()}
-                        onChange={handleYearChange}
-                        className="text-xs font-medium px-6
-                        "
-                      />
-                    )}
-                  />
+                <div className="flex items-center gap-2">
+                  <select
+                    value={currentMonth.getMonth()}
+                    onChange={(event) => handleMonthSelect(Number(event.target.value))}
+                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  >
+                    {Array.from({ length: 12 }, (_, monthIndex) => (
+                      <option key={monthIndex} value={monthIndex}>
+                        {format(new Date(2000, monthIndex, 1), "MMMM")}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={currentMonth.getFullYear()}
+                    onChange={(event) => handleYearSelect(Number(event.target.value))}
+                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  >
+                    {years.map((yearOption) => (
+                      <option key={yearOption} value={yearOption}>
+                        {yearOption}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => handleMonthChange(true)}
-                  className="p-1 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+                  onClick={() => handleMonthShift(true)}
+                  className="rounded-md border border-gray-200 p-1.5 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isFutureMonth(addMonths(currentMonth, 1))}
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={16} />
                 </button>
               </div>
 
               <AnimatePresence mode="wait">
                 <motion.div
                   key={format(currentMonth, "yyyy-MM")}
-                  initial={{ x: direction * 10, opacity: 0 }}
+                  initial={{ x: direction * 12, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: -direction * 10, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ x: -direction * 12, opacity: 0 }}
+                  transition={{ duration: 0.14 }}
                 >
-                  <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                    {daysOfWeek.map((day) => (
-                      <div
-                        key={day.value}
-                        className="text-xs font-medium text-gray-400 py-1"
-                      >
-                        {day.value}
+                  <div className="mb-1 grid grid-cols-7 gap-1 text-center">
+                    {DAYS_OF_WEEK.map((dayLabel) => (
+                      <div key={dayLabel} className="text-[11px] font-semibold text-gray-500">
+                        {dayLabel}
                       </div>
                     ))}
                   </div>
 
-                  <div className="grid grid-cols-7 gap-1 text-center">
-                    {calendarDays.map((date, index) => {
-                      const isInRange =
-                        date &&
-                        startField.value &&
-                        endField.value &&
-                        isWithinInterval(date, {
-                          start: startField.value,
-                          end: endField.value,
-                        });
-                      const isStart =
-                        date &&
-                        startField.value &&
-                        isSameDay(date, startField.value);
-                      const isEnd =
-                        date &&
-                        endField.value &&
-                        isSameDay(date, endField.value);
+                  <div className="grid grid-cols-7 gap-1">
+                    {calendarDays.map((dateValue, index) => {
+                      const isFutureDate =
+                        dateValue &&
+                        isAfter(startOfDay(dateValue), maxSelectableDate);
+                      const inRange =
+                        dateValue &&
+                        startDate &&
+                        endDate &&
+                        isWithinInterval(dateValue, { start: startDate, end: endDate });
+                      const isStart = dateValue && startDate && isSameDay(dateValue, startDate);
+                      const isEnd = dateValue && endDate && isSameDay(dateValue, endDate);
+                      const isClickable = Boolean(dateValue) && !isFutureDate;
 
                       return (
-                        <div
-                          key={index}
-                          className={`
-                            aspect-square flex items-center justify-center rounded-full text-sm
-                            ${date ? "cursor-pointer" : ""}
-                            ${
-                              date && isToday(date) && !isStart && !isEnd
-                                ? "border border-blue-400 text-blue-600"
-                                : ""
-                            }
-                            ${
-                              isInRange && !isStart && !isEnd
-                                ? "bg-blue-100 text-gray-800"
-                                : ""
-                            }
-                            ${
-                              isStart || isEnd
-                                ? "bg-blue-500 text-white hover:bg-blue-600"
-                                : date
-                                ? "hover:bg-gray-100 text-gray-800"
-                                : ""
-                            }
-                            transition-colors duration-200
-                          `}
-                          onClick={() => date && handleDateSelect(date)}
+                        <button
+                          key={`${format(currentMonth, "yyyy-MM")}-${index}`}
+                          type="button"
+                          onClick={() => isClickable && handleDateSelect(dateValue)}
+                          disabled={!isClickable}
+                          className={`h-9 rounded-md text-xs font-medium transition-colors ${
+                            !dateValue
+                              ? "cursor-default text-transparent"
+                              : isFutureDate
+                              ? "cursor-not-allowed text-gray-300"
+                              : isStart || isEnd
+                              ? "bg-blue-600 text-white hover:bg-blue-700"
+                              : inRange
+                              ? "bg-blue-100 text-blue-700"
+                              : isToday(dateValue as Date)
+                              ? "border border-blue-300 text-blue-600 hover:bg-blue-50"
+                              : "text-gray-700 hover:bg-gray-100"
+                          }`}
                         >
-                          {date ? (
-                            <span className="text-xs font-medium">
-                              {date.getDate()}
-                            </span>
-                          ) : (
-                            ""
-                          )}
-                        </div>
+                          {dateValue ? dateValue.getDate() : "."}
+                        </button>
                       );
                     })}
                   </div>
                 </motion.div>
               </AnimatePresence>
 
-              <div className="mt-3 pt-2 border-t border-gray-100 flex justify-between">
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-gray-100 pt-3">
                 <button
-                  className="text-xs font-medium text-blue-500 hover:text-blue-600 px-2 py-1 rounded transition-colors"
-                  onClick={() => {
-                    const today = new Date();
-                    startField.onChange(today);
-                    endField.onChange(today);
-                    setSelecting("start");
-                  }}
+                  type="button"
+                  onClick={handlePresetToday}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
                 >
                   Today
                 </button>
                 <button
-                  className="text-xs font-medium text-gray-500 hover:text-gray-600 px-2 py-1 rounded transition-colors"
-                  onClick={() => {
-                    startField.onChange(null);
-                    endField.onChange(null);
-                    setSelecting("start");
-                    setIsOpen(false);
-                  }}
+                  type="button"
+                  onClick={handlePresetLast7Days}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                >
+                  Last 7 Days
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
                 >
                   Clear
                 </button>

@@ -46,9 +46,11 @@ const productPerformance = {
           id: string;
           productId: string;
           productSlug: string | null;
+          sku: string | null;
           name: string;
           quantity: number;
           revenue: number;
+          skuSales: Record<string, number>;
         };
       } = {};
 
@@ -56,23 +58,45 @@ const productPerformance = {
         const productId = item.variant.product?.id || item.variantId;
         const productName = item.variant.product?.name || item.variant.sku || "Unknown";
         const productSlug = item.variant.product?.slug || null;
+        const sku = item.variant.sku || null;
 
         if (!productSales[productId]) {
           productSales[productId] = {
             id: productId,
             productId,
             productSlug,
+            sku,
             name: productName,
             quantity: 0,
             revenue: 0,
+            skuSales: {},
           };
+        }
+        if (sku) {
+          productSales[productId].skuSales[sku] =
+            (productSales[productId].skuSales[sku] || 0) + item.quantity;
         }
         productSales[productId].quantity += item.quantity;
         productSales[productId].revenue +=
           item.quantity * (item.variant.price || 0);
       }
 
-      return Object.values(productSales).sort((a, b) => b.quantity - a.quantity);
+      return Object.values(productSales)
+        .map((product) => {
+          const topSku = Object.entries(product.skuSales).sort(
+            (first, second) => second[1] - first[1]
+          )[0]?.[0];
+          return {
+            id: product.id,
+            productId: product.productId,
+            productSlug: product.productSlug,
+            sku: topSku || product.sku,
+            name: product.name,
+            quantity: product.quantity,
+            revenue: product.revenue,
+          };
+        })
+        .sort((a, b) => b.quantity - a.quantity);
     },
   },
 };

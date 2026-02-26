@@ -1,4 +1,5 @@
 import redisClient from "@/infra/cache/redis";
+import logger from "@/infra/winston/logger";
 
 // Blacklist token in Redis
 export const blacklistToken = async (
@@ -14,7 +15,8 @@ export const isTokenBlacklisted = async (token: string): Promise<boolean> => {
     const result = await redisClient.get(`blacklist:${token}`);
     return result !== null;
   } catch (error) {
-    console.error("Redis error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[auth.redisUtils] Redis lookup failed: ${message}`);
     return false;
   }
 };

@@ -381,9 +381,8 @@ const buildSalesSections = (sales: SalesReport): ExportSection[] => [
   {
     key: "sales-by-category",
     title: "Sales by Category",
-    columns: ["Category ID", "Category Name", "Revenue", "Sales Count"],
+    columns: ["Category Name", "Revenue", "Sales Count"],
     rows: (sales.byCategory || []).map((category) => ({
-      "Category ID": toExportCell("Category ID", category.categoryId),
       "Category Name": toExportCell("Category Name", category.categoryName),
       Revenue: toExportCell("Revenue", toCurrencyValue(category.revenue)),
       "Sales Count": toExportCell(
@@ -552,6 +551,7 @@ const buildUserAnalyticsSections = (
 ];
 
 const sanitizeSection = (section: ExportSection): ExportSection => {
+  const blockedColumns = new Set(["categoryid", "category id"]);
   const normalizedRows = section.rows.map((row) => {
     const nextRow: Record<string, unknown> = {};
     section.columns.forEach((column) => {
@@ -570,12 +570,14 @@ const sanitizeSection = (section: ExportSection): ExportSection => {
     };
   }
 
-  const meaningfulColumns = section.columns.filter((column) =>
+  const visibleColumns = section.columns.filter(
+    (column) => !blockedColumns.has(column.trim().toLowerCase())
+  );
+
+  const meaningfulColumns = visibleColumns.filter((column) =>
     normalizedRows.some((row) => row[column] !== EMPTY_VALUE)
   );
-  const columnsToUse = meaningfulColumns.length
-    ? meaningfulColumns
-    : section.columns;
+  const columnsToUse = meaningfulColumns.length ? meaningfulColumns : visibleColumns;
 
   return {
     ...section,

@@ -11,7 +11,6 @@ export interface SalesReport {
   totalSales: number;
   averageOrderValue: number;
   byCategory: {
-    categoryId: string;
     categoryName: string;
     revenue: number;
     sales: number;

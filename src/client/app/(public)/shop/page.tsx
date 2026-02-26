@@ -1,26 +1,35 @@
 "use client";
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@apollo/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Filter, Loader2 } from "lucide-react";
+import { Package, Filter, Loader2, ChevronDown } from "lucide-react";
 import { GET_PRODUCTS, GET_CATEGORIES } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 import ProductCard from "../product/ProductCard";
 import MainLayout from "@/app/components/templates/MainLayout";
-import ProductFilters, { FilterValues } from "./ProductFilters";
+import ProductFilters, {
+  FilterValues,
+  SortByOption,
+} from "./ProductFilters";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
-const debugLog = (...args: unknown[]) => {
-  if (isDevelopment) {
-    console.log(...args);
-  }
-};
-
-const DEFAULT_SORT: NonNullable<FilterValues["sortBy"]> = "RELEVANCE";
+const DEFAULT_SORT: SortByOption = "RELEVANCE";
 const BASE_PAGE_SIZE = 12;
 const SEARCH_PAGE_SIZE = 48;
+
+const SORT_OPTIONS: Array<{ label: string; value: SortByOption }> = [
+  { label: "Relevance", value: "RELEVANCE" },
+  { label: "Price: Low to High", value: "PRICE_ASC" },
+  { label: "Price: High to Low", value: "PRICE_DESC" },
+  { label: "Top Rated", value: "RATING_DESC" },
+  { label: "Name: A to Z", value: "NAME_ASC" },
+];
 
 const normalizeText = (value: string) =>
   value
@@ -81,13 +90,11 @@ const ShopPage: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Memoize initialFilters to prevent recreation on every render
-  const initialFilters = useMemo(
+  const initialFilters = useMemo<FilterValues>(
     () => ({
       search: searchParams.get("search") || "",
       sortBy:
-        (searchParams.get("sortBy") as FilterValues["sortBy"] | null) ||
-        DEFAULT_SORT,
+        (searchParams.get("sortBy") as SortByOption | null) || DEFAULT_SORT,
       isNew: searchParams.get("isNew") === "true" || undefined,
       isFeatured: searchParams.get("isFeatured") === "true" || undefined,
       isTrending: searchParams.get("isTrending") === "true" || undefined,
@@ -104,16 +111,18 @@ const ShopPage: React.FC = () => {
   );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [filtersVisible, setFiltersVisible] = useState(true); // Desktop filters toggle state
   const [filters, setFilters] = useState<FilterValues>(initialFilters);
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+
   const requestPageSize = filters.search?.trim()
     ? SEARCH_PAGE_SIZE
     : BASE_PAGE_SIZE;
+
   const dealerCatalogPollInterval = useDealerCatalogPollInterval(skip === 0);
+  const currentSortBy = (filters.sortBy || DEFAULT_SORT) as SortByOption;
 
   const serverFilters = useMemo(
     () => ({
@@ -143,56 +152,120 @@ const ShopPage: React.FC = () => {
     [serverFilters]
   );
 
-  // Count active filters
-  const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
-    if (key === "sortBy") {
-      return value && value !== DEFAULT_SORT;
-    }
-    return value !== undefined && value !== "" && value !== false;
-  }).length;
+  const activeFilterCount = useMemo(
+    () =>
+      Object.values(serverFilters).filter(
+        (value) => value !== undefined && value !== "" && value !== false
+      ).length,
+    [serverFilters]
+  );
 
-  // Fetch categories
   const { data: categoriesData } = useQuery(GET_CATEGORIES);
   const categories = categoriesData?.categories || [];
-  debugLog("Categories data:", categories);
 
   const {
-    data: productsData,
     loading,
     error,
     fetchMore,
   } = useQuery(GET_PRODUCTS, {
     variables: { first: requestPageSize, skip: 0, filters: serverFilters },
-    fetchPolicy: "no-cache", // Avoid cache issues
+    fetchPolicy: "no-cache",
     pollInterval: dealerCatalogPollInterval,
-    onError: (err) => {
-      console.error("Error fetching products:", err);
-    },
     onCompleted: (data) => {
       setDisplayedProducts(data.products.products);
       setHasMore(data.products.hasMore);
-      setSkip(0); // Reset skip when filters change
+      setSkip(0);
     },
   });
-  debugLog("Products data:", productsData);
-  debugLog("products error:", error);
 
-  // Update filters only when searchParams change meaningfully
   useEffect(() => {
     setFilters(initialFilters);
   }, [initialFilters]);
 
-  // Reset pagination only when server-backed filters change (not local search/sort).
   useEffect(() => {
     setDisplayedProducts([]);
     setSkip(0);
     setHasMore(true);
   }, [serverFilterSignature]);
 
+  useEffect(() => {
+    if (!sidebarOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [sidebarOpen]);
+
+  const syncFiltersToUrl = useCallback(
+    (nextFilters: FilterValues) => {
+      const query = new URLSearchParams();
+
+      if (nextFilters.search?.trim()) {
+        query.set("search", nextFilters.search.trim());
+      }
+      if (nextFilters.sortBy && nextFilters.sortBy !== DEFAULT_SORT) {
+        query.set("sortBy", nextFilters.sortBy);
+      }
+      if (nextFilters.isNew) query.set("isNew", "true");
+      if (nextFilters.isFeatured) query.set("isFeatured", "true");
+      if (nextFilters.isTrending) query.set("isTrending", "true");
+      if (nextFilters.isBestSeller) query.set("isBestSeller", "true");
+      if (nextFilters.minPrice) {
+        query.set("minPrice", nextFilters.minPrice.toString());
+      }
+      if (nextFilters.maxPrice) {
+        query.set("maxPrice", nextFilters.maxPrice.toString());
+      }
+      if (nextFilters.categoryId) {
+        query.set("categoryId", nextFilters.categoryId);
+      }
+
+      const nextQuery = query.toString();
+      router.replace(nextQuery ? `/shop?${nextQuery}` : "/shop");
+    },
+    [router]
+  );
+
+  const applyFilters = useCallback(
+    (nextFilters: FilterValues) => {
+      setFilters(nextFilters);
+      syncFiltersToUrl(nextFilters);
+    },
+    [syncFiltersToUrl]
+  );
+
+  const updateFilters = useCallback(
+    (nextFilters: FilterValues) => {
+      applyFilters({
+        ...nextFilters,
+        sortBy: (nextFilters.sortBy || currentSortBy) as SortByOption,
+      });
+    },
+    [applyFilters, currentSortBy]
+  );
+
+  const handleSortChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const nextSort = event.target.value as SortByOption;
+      applyFilters({
+        ...filters,
+        sortBy: nextSort,
+      });
+    },
+    [applyFilters, filters]
+  );
+
   const handleShowMore = async () => {
     if (isFetchingMore) return;
+
     setIsFetchingMore(true);
     const newSkip = skip + requestPageSize;
+
     try {
       await fetchMore({
         variables: {
@@ -202,6 +275,7 @@ const ShopPage: React.FC = () => {
         },
         updateQuery: (prev, { fetchMoreResult }) => {
           if (!fetchMoreResult) return prev;
+
           const newProducts = fetchMoreResult.products.products;
           const newHasMore = fetchMoreResult.products.hasMore;
 
@@ -225,36 +299,13 @@ const ShopPage: React.FC = () => {
     }
   };
 
-  const updateFilters = useCallback((newFilters: FilterValues) => {
-    setFilters(newFilters);
-
-    const query = new URLSearchParams();
-    if (newFilters.search) query.set("search", newFilters.search);
-    if (newFilters.sortBy && newFilters.sortBy !== DEFAULT_SORT) {
-      query.set("sortBy", newFilters.sortBy);
-    }
-    if (newFilters.isNew) query.set("isNew", "true");
-    if (newFilters.isFeatured) query.set("isFeatured", "true");
-    if (newFilters.isTrending) query.set("isTrending", "true");
-    if (newFilters.isBestSeller) query.set("isBestSeller", "true");
-    if (newFilters.minPrice)
-      query.set("minPrice", newFilters.minPrice.toString());
-    if (newFilters.maxPrice)
-      query.set("maxPrice", newFilters.maxPrice.toString());
-    if (newFilters.categoryId) query.set("categoryId", newFilters.categoryId);
-
-    const nextQuery = query.toString();
-    router.replace(nextQuery ? `/shop?${nextQuery}` : "/shop");
-  }, [router]);
-
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     router.replace("/shop");
-  };
+  }, [router]);
 
   const rankedAndSortedProducts = useMemo(() => {
     const query = filters.search || "";
     const hasQuery = normalizeText(query).length > 0;
-    const sortBy = filters.sortBy || DEFAULT_SORT;
 
     const rows = displayedProducts
       .map((product) => ({
@@ -267,7 +318,7 @@ const ShopPage: React.FC = () => {
       leftProduct: Product,
       rightProduct: Product
     ) => {
-      switch (sortBy) {
+      switch (currentSortBy) {
         case "PRICE_ASC":
           return getVariantMinPrice(leftProduct) - getVariantMinPrice(rightProduct);
         case "PRICE_DESC":
@@ -296,195 +347,139 @@ const ShopPage: React.FC = () => {
     });
 
     return rows.map((row) => row.product);
-  }, [displayedProducts, filters.search, filters.sortBy]);
+  }, [currentSortBy, displayedProducts, filters.search]);
 
   const noProductsFound =
     rankedAndSortedProducts.length === 0 && !loading && !error;
 
   return (
     <MainLayout>
-      <div className="min-h-screen">
-        {/* Header Section */}
-        <div className="sticky top-0 z-30">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                  Shop
-                </h1>
-                <p className="text-sm text-gray-600 mt-1">
-                  {rankedAndSortedProducts.length} products found
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {/* Desktop Filter Toggle Button */}
-                <button
-                  onClick={() => setFiltersVisible(!filtersVisible)}
-                  className="hidden lg:flex items-center gap-2 px-4 py-2.5 bg-teal-700 text-white rounded-lg hover:bg-teal-800 transition-colors shadow-sm"
-                >
-                  <Filter size={18} />
-                  <span className="font-medium">
-                    {filtersVisible ? "Hide" : "Show"} Filters
-                  </span>
-                  {activeFilterCount > 0 && (
-                    <span className="bg-white/20 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Mobile Filter Button */}
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="lg:hidden flex items-center gap-2 px-4 py-2.5 bg-teal-700 text-white rounded-lg hover:bg-teal-800 transition-colors shadow-sm"
-                >
-                  <Filter size={18} />
-                  <span className="font-medium">Filters</span>
-                  {activeFilterCount > 0 && (
-                    <span className="bg-white/20 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-              </div>
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="hidden lg:block">
+              <ProductFilters
+                initialFilters={initialFilters}
+                currentSortBy={currentSortBy}
+                onFilterChange={updateFilters}
+                categories={categories}
+              />
             </div>
-          </div>
-        </div>
 
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Desktop Filters with Toggle */}
-            <AnimatePresence>
-              {filtersVisible && (
-                <motion.div
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: "auto", opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-                  transition={{
-                    type: "spring",
-                    damping: 25,
-                    stiffness: 300,
-                    duration: 0.3,
-                  }}
-                  className="hidden lg:block"
-                >
-                  <div className="w-[320px] xl:w-[380px]">
-                    <ProductFilters
-                      initialFilters={initialFilters}
-                      onFilterChange={updateFilters}
-                      categories={categories}
-                    />
+            <section className="min-w-0">
+              <div className="mb-5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSidebarOpen(true)}
+                      className="btn-secondary lg:hidden"
+                      aria-label="Open filters"
+                      aria-expanded={sidebarOpen}
+                    >
+                      <Filter size={16} />
+                      <span>Filters</span>
+                      {activeFilterCount > 0 && (
+                        <span className="rounded-full bg-gray-900 px-2 py-0.5 text-xs font-bold text-white">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold text-gray-900">
+                        {rankedAndSortedProducts.length}
+                      </span>{" "}
+                      products found
+                    </p>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
-            {/* Mobile Filter Sidebar */}
-            <AnimatePresence>
-              {sidebarOpen && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="lg:hidden fixed inset-0 bg-black/50 z-50"
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <motion.div
-                    initial={{ x: "-100%" }}
-                    animate={{ x: 0 }}
-                    exit={{ x: "-100%" }}
-                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-[90vw] max-w-sm h-full bg-white shadow-2xl"
-                  >
-                    <ProductFilters
-                      initialFilters={initialFilters}
-                      onFilterChange={updateFilters}
-                      categories={categories}
-                      isMobile={true}
-                      onCloseMobile={() => setSidebarOpen(false)}
-                    />
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <div className="flex items-center gap-2 sm:justify-end">
+                    <label
+                      htmlFor="shop-sort-control"
+                      className="text-sm font-medium text-gray-700"
+                    >
+                      Sort by
+                    </label>
+                    <div className="relative">
+                      <select
+                        id="shop-sort-control"
+                        value={currentSortBy}
+                        onChange={handleSortChange}
+                        className="h-11 min-w-[210px] appearance-none rounded-lg border border-gray-300 bg-gray-100 px-3.5 pr-9 text-sm font-medium text-gray-800 transition-colors focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        {SORT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={16}
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-            {/* Products Grid */}
-            <motion.div
-              className="flex-1"
-              layout
-              transition={{
-                type: "spring",
-                damping: 25,
-                stiffness: 300,
-                duration: 0.3,
-              }}
-            >
-              {/* Loading State */}
               {loading && !displayedProducts.length && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 lg:gap-8">
                   {[...Array(8)].map((_, index) => (
                     <div
                       key={index}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden animate-pulse"
+                      className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm animate-pulse"
                     >
-                      <div className="h-48 lg:h-56 bg-gray-200"></div>
-                      <div className="p-4 lg:p-5 space-y-3">
-                        <div className="h-4 lg:h-5 bg-gray-200 rounded"></div>
-                        <div className="h-4 lg:h-5 bg-gray-200 rounded w-2/3"></div>
-                        <div className="h-6 lg:h-7 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-48 bg-gray-200 lg:h-56"></div>
+                      <div className="space-y-3 p-4 lg:p-5">
+                        <div className="h-4 rounded bg-gray-200 lg:h-5"></div>
+                        <div className="h-4 w-2/3 rounded bg-gray-200 lg:h-5"></div>
+                        <div className="h-6 w-1/2 rounded bg-gray-200 lg:h-7"></div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Error State */}
               {error && (
-                <div className="text-center py-16 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="rounded-2xl border border-gray-100 bg-white py-16 text-center shadow-sm">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
                     <Package size={32} className="text-red-500" />
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  <h3 className="mb-2 text-xl font-semibold text-gray-900">
                     Error loading products
                   </h3>
-                  <p className="text-gray-600 mb-6">
+                  <p className="mb-6 text-gray-600">
                     Please try again or adjust your filters.
                   </p>
                   <button
                     onClick={() => window.location.reload()}
-                    className="bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium"
+                    className="btn-primary"
                   >
                     Try Again
                   </button>
                 </div>
               )}
 
-              {/* No Products Found */}
               {noProductsFound && (
-                <div className="text-center py-16 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="rounded-2xl border border-gray-100 bg-white py-16 text-center shadow-sm">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
                     <Package size={32} className="text-gray-400" />
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  <h3 className="mb-2 text-xl font-semibold text-gray-900">
                     No products found
                   </h3>
-                  <p className="text-gray-600 mb-6">
+                  <p className="mb-6 text-gray-600">
                     Try adjusting your filters or search terms.
                   </p>
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <button
-                      onClick={handleReset}
-                      className="bg-teal-700 text-white px-6 py-3 rounded-lg hover:bg-teal-800 transition-colors font-medium"
-                    >
+                  <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+                    <button onClick={handleReset} className="btn-primary">
                       Clear All Filters
                     </button>
                     {hasMore && (
                       <button
                         onClick={handleShowMore}
                         disabled={isFetchingMore}
-                        className="inline-flex items-center gap-2 border border-gray-300 px-6 py-3 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700"
+                        className="btn-secondary"
                       >
                         {isFetchingMore ? (
                           <>
@@ -500,17 +495,16 @@ const ShopPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Products Grid */}
               {!noProductsFound && !loading && (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 lg:gap-8">
                     {rankedAndSortedProducts.map(
                       (product: Product, index: number) => (
                         <motion.div
                           key={product.id}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, delay: index * 0.1 }}
+                          transition={{ duration: 0.25, delay: index * 0.04 }}
                         >
                           <ProductCard product={product} />
                         </motion.div>
@@ -518,12 +512,11 @@ const ShopPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Load More Button */}
                   {hasMore && (
                     <div className="mt-12 text-center">
                       {isFetchingMore ? (
                         <div className="flex items-center justify-center gap-3">
-                          <div className="w-6 h-6 border-2 border-teal-700 border-t-transparent rounded-full animate-spin"></div>
+                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
                           <span className="text-gray-600">
                             Loading more products...
                           </span>
@@ -532,7 +525,7 @@ const ShopPage: React.FC = () => {
                         <button
                           onClick={handleShowMore}
                           disabled={isFetchingMore}
-                          className="bg-teal-700 text-white px-8 py-4 rounded-xl hover:bg-teal-800 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
+                          className="btn-primary h-12 px-8 text-base"
                         >
                           Load More Products
                         </button>
@@ -541,15 +534,42 @@ const ShopPage: React.FC = () => {
                   )}
                 </>
               )}
-            </motion.div>
+            </section>
           </div>
         </div>
+
+        <AnimatePresence>
+          {sidebarOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm lg:hidden"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", damping: 26, stiffness: 280 }}
+                onClick={(event) => event.stopPropagation()}
+                className="h-full w-[92vw] max-w-sm bg-white shadow-2xl"
+              >
+                <ProductFilters
+                  initialFilters={initialFilters}
+                  currentSortBy={currentSortBy}
+                  onFilterChange={updateFilters}
+                  categories={categories}
+                  isMobile
+                  onCloseMobile={() => setSidebarOpen(false)}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </MainLayout>
   );
 };
 
 export default ShopPage;
-
-
-

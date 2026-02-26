@@ -258,11 +258,10 @@ const buildSalesSections = (sales) => {
         {
             key: "sales-by-category",
             title: "Sales by Category",
-            columns: ["Category ID", "Category Name", "Revenue", "Sales Count"],
+            columns: ["Category Name", "Revenue", "Sales Count"],
             rows: (sales.byCategory || []).map((category) => {
                 var _a;
                 return ({
-                    "Category ID": toExportCell("Category ID", category.categoryId),
                     "Category Name": toExportCell("Category Name", category.categoryName),
                     Revenue: toExportCell("Revenue", toCurrencyValue(category.revenue)),
                     "Sales Count": toExportCell("Sales Count", (_a = toNumber(category.sales)) !== null && _a !== void 0 ? _a : EMPTY_VALUE),
@@ -412,6 +411,7 @@ const buildUserAnalyticsSections = (users, keyPrefix = "users") => {
     ];
 };
 const sanitizeSection = (section) => {
+    const blockedColumns = new Set(["categoryid", "category id"]);
     const normalizedRows = section.rows.map((row) => {
         const nextRow = {};
         section.columns.forEach((column) => {
@@ -425,10 +425,9 @@ const sanitizeSection = (section) => {
     if (!normalizedRows.length) {
         return Object.assign(Object.assign({}, section), { rows: [] });
     }
-    const meaningfulColumns = section.columns.filter((column) => normalizedRows.some((row) => row[column] !== EMPTY_VALUE));
-    const columnsToUse = meaningfulColumns.length
-        ? meaningfulColumns
-        : section.columns;
+    const visibleColumns = section.columns.filter((column) => !blockedColumns.has(column.trim().toLowerCase()));
+    const meaningfulColumns = visibleColumns.filter((column) => normalizedRows.some((row) => row[column] !== EMPTY_VALUE));
+    const columnsToUse = meaningfulColumns.length ? meaningfulColumns : visibleColumns;
     return Object.assign(Object.assign({}, section), { columns: columnsToUse, rows: normalizedRows.map((row) => Object.fromEntries(columnsToUse.map((column) => { var _a; return [column, (_a = row[column]) !== null && _a !== void 0 ? _a : EMPTY_VALUE]; }))) });
 };
 const withNonEmptyRows = (sections) => sections.map((section) => sanitizeSection(section));

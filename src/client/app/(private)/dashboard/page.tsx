@@ -61,7 +61,7 @@ const Dashboard = () => {
       id: p.productId || p.id,
       slug: p.productSlug || undefined,
       name: p.name,
-      subtitle: p.productSlug ? `/${p.productSlug}` : "Product",
+      subtitle: p.sku ? `SKU: ${p.sku}` : "SKU: N/A",
       primaryInfo: formatPrice(p.revenue),
       secondaryInfo: `${p.quantity} sold`,
       quantity: p.quantity,

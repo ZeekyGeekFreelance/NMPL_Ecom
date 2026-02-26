@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Loader2, X } from "lucide-react";
-// import useClickOutside from "@/app/hooks/dom/useClickOutside";
 
 interface DropdownOption {
   label: string;
@@ -32,7 +31,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   const [dropdownWidth, setDropdownWidth] = useState<number | null>(null);
 
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const buttonRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (buttonRef.current) {
@@ -40,7 +39,24 @@ const Dropdown: React.FC<DropdownProps> = ({
     }
   }, [isOpen]);
 
-  // useClickOutside(dropdownRef, () => setIsOpen(false));
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, []);
 
   const handleSelect = (selectedValue: string) => {
     onChange(selectedValue);
@@ -52,18 +68,26 @@ const Dropdown: React.FC<DropdownProps> = ({
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <div
+      <button
+        type="button"
         ref={buttonRef}
-        className={`flex items-center justify-between px-3 py-2 
+        className={`flex h-11 items-center justify-between px-3.5
           rounded-lg bg-white border border-gray-200
           transition-all duration-200
-          ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-gray-300 focus:ring-2 focus:ring-blue-100"} ${className}`}
+          ${
+            disabled
+              ? "cursor-not-allowed opacity-60"
+              : "cursor-pointer hover:border-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+          } ${className || ""}`}
         onClick={() => {
           if (!disabled) {
             setIsOpen((prev) => !prev);
           }
         }}
-        aria-disabled={disabled}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={label || "Select option"}
       >
         <span className="text-sm font-medium text-gray-700 truncate">
           {isLoading ? "Loading..." : selectedLabel}
@@ -90,7 +114,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             </motion.div>
           )}
         </div>
-      </div>
+      </button>
 
       <AnimatePresence>
         {isOpen && (
@@ -99,23 +123,27 @@ const Dropdown: React.FC<DropdownProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.1 }}
-            className="absolute mt-1 bg-white border border-gray-100 rounded-lg shadow-lg z-40 overflow-hidden"
+            className="absolute z-40 mt-1 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-lg"
             style={{ width: dropdownWidth || "auto" }}
           >
-            <ul className="max-h-60 overflow-auto py-1">
+            <ul className="max-h-60 overflow-auto py-1" role="listbox">
               {options.map((option) => (
-                <li
-                  key={option.value}
-                  className={`px-3 py-2 text-sm transition-colors duration-150
-                    cursor-pointer hover:bg-gray-50 
-                    ${
-                      value === option.value
-                        ? "bg-blue-50 text-blue-600"
-                        : "text-gray-700"
-                    }`}
-                  onClick={() => handleSelect(option.value)}
-                >
-                  {option.label}
+                <li key={option.value}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={value === option.value}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors duration-150
+                      hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none
+                      ${
+                        value === option.value
+                          ? "bg-blue-50 text-blue-600"
+                          : "text-gray-700"
+                      }`}
+                    onClick={() => handleSelect(option.value)}
+                  >
+                    {option.label}
+                  </button>
                 </li>
               ))}
             </ul>

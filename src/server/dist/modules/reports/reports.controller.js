@@ -27,6 +27,8 @@ class ReportsController {
             var _a;
             const { type, format, timePeriod, year, startDate, endDate } = req.query;
             const user = req.user; // From auth middleware
+            const now = new Date();
+            const currentYear = now.getFullYear();
             // Validate format
             const validFormats = ["csv", "pdf", "xlsx"];
             if (!format || !validFormats.includes(format)) {
@@ -52,13 +54,21 @@ class ReportsController {
             let selectedYear;
             if (year) {
                 selectedYear = parseInt(year, 10);
-                if (isNaN(selectedYear)) {
+                if (isNaN(selectedYear) ||
+                    selectedYear < 1900 ||
+                    selectedYear > currentYear) {
                     throw new AppError_1.default(400, "Invalid year format.");
                 }
+            }
+            else if (timePeriod === "allTime" && !startDate && !endDate) {
+                selectedYear = currentYear;
             }
             // Validate custom date range
             let customStartDate;
             let customEndDate;
+            if (timePeriod === "custom" && (!startDate || !endDate)) {
+                throw new AppError_1.default(400, "Both startDate and endDate must be provided for a custom range.");
+            }
             if (startDate && endDate) {
                 customStartDate = new Date(startDate);
                 customEndDate = new Date(endDate);
@@ -67,6 +77,9 @@ class ReportsController {
                 }
                 if (customStartDate > customEndDate) {
                     throw new AppError_1.default(400, "startDate must be before endDate.");
+                }
+                if (customStartDate > now || customEndDate > now) {
+                    throw new AppError_1.default(400, "Future dates are not allowed.");
                 }
             }
             else if (startDate || endDate) {

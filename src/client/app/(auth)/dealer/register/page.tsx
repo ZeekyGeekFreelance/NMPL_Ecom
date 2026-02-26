@@ -6,12 +6,12 @@ import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import MainLayout from "@/app/components/templates/MainLayout";
-import {
-  useRequestRegistrationOtpMutation,
-  useSignupMutation,
-} from "@/app/store/apis/AuthApi";
+import { useSignupMutation } from "@/app/store/apis/AuthApi";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import PasswordField from "@/app/components/molecules/PasswordField";
+import { z } from "zod";
+import { useRegistrationOtp } from "../../shared/useRegistrationOtp";
 
 interface DealerRegisterForm {
   name: string;
@@ -24,20 +24,40 @@ interface DealerRegisterForm {
 
 const DealerRegister = () => {
   const [signup, { isLoading, error }] = useSignupMutation();
-  const [requestRegistrationOtp, { isLoading: isSendingOtp }] =
-    useRequestRegistrationOtpMutation();
   const [successMessage, setSuccessMessage] = useState("");
-  const [otpMessage, setOtpMessage] = useState("");
   const apiErrorMessage = getApiErrorMessage(
     error,
     "Failed to submit dealer registration."
   );
+  const {
+    sendOtp,
+    isSendingOtp,
+    cooldownSeconds,
+    feedback: otpFeedback,
+    canSendOtp,
+  } = useRegistrationOtp({
+    purpose: "DEALER_PORTAL",
+    requestDealerAccess: true,
+  });
+
+  const nameSchema = (value: string) => {
+    const result = z
+      .string()
+      .min(2, "Name must be at least 2 characters long")
+      .safeParse(value);
+    return result.success || result.error.errors[0].message;
+  };
+
+  const emailSchema = (value: string) => {
+    const result = z.string().email("Invalid email address").safeParse(value);
+    return result.success || result.error.errors[0].message;
+  };
 
   const {
     control,
+    register,
+    watch,
     getValues,
-    setError,
-    clearErrors,
     handleSubmit,
     reset,
     formState: { errors },
@@ -53,25 +73,7 @@ const DealerRegister = () => {
   });
 
   const handleSendOtp = async () => {
-    const email = getValues("email")?.trim();
-    if (!email) {
-      setError("email", { message: "Email is required before requesting OTP." });
-      return;
-    }
-
-    clearErrors("email");
-
-    try {
-      const response = await requestRegistrationOtp({
-        email,
-        purpose: "DEALER_PORTAL",
-        requestDealerAccess: true,
-      }).unwrap();
-
-      setOtpMessage(response.message || "Verification OTP sent to your email.");
-    } catch (otpError) {
-      setOtpMessage(getApiErrorMessage(otpError as any, "Failed to send OTP"));
-    }
+    await sendOtp(getValues("email"));
   };
 
   const onSubmit = async (formData: DealerRegisterForm) => {
@@ -127,10 +129,7 @@ const DealerRegister = () => {
                 control={control}
                 validation={{
                   required: "Name is required",
-                  minLength: {
-                    value: 3,
-                    message: "Name must be at least 3 characters long",
-                  },
+                  validate: nameSchema,
                 }}
                 error={errors.name?.message}
                 className="py-2.5 text-sm"
@@ -143,65 +142,37 @@ const DealerRegister = () => {
                 control={control}
                 validation={{
                   required: "Email is required",
-                  pattern: {
-                    value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                    message: "Enter a valid email",
-                  },
+                  validate: emailSchema,
                 }}
                 error={errors.email?.message}
                 className="py-2.5 text-sm"
               />
 
-              <Input
-                name="password"
-                type="password"
-                placeholder="Password"
-                control={control}
-                validation={{
-                  required: "Password is required",
-                  minLength: {
-                    value: 8,
-                    message: "Password must be at least 8 characters long",
-                  },
-                  validate: {
-                    hasUppercase: (value) =>
-                      /[A-Z]/.test(value) ||
-                      "Password must contain at least one uppercase letter",
-                    hasLowercase: (value) =>
-                      /[a-z]/.test(value) ||
-                      "Password must contain at least one lowercase letter",
-                    hasNumber: (value) =>
-                      /[0-9]/.test(value) ||
-                      "Password must contain at least one number",
-                    hasSpecialChar: (value) =>
-                      /[!@#$%^&*]/.test(value) ||
-                      "Password must contain at least one special character (!@#$%^&*)",
-                  },
-                }}
-                error={errors.password?.message}
-                className="py-2.5 text-sm"
-              />
+              <PasswordField register={register} watch={watch} errors={errors} />
 
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  className="text-xs sm:text-sm px-3 py-1.5 rounded-md border border-indigo-300 text-indigo-700 hover:bg-indigo-50 disabled:opacity-60"
-                  disabled={isSendingOtp}
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                disabled={!canSendOtp}
+                className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
+                  !canSendOtp ? "cursor-not-allowed opacity-70" : ""
+                }`}
+              >
+                {isSendingOtp
+                  ? "Sending OTP..."
+                  : cooldownSeconds > 0
+                  ? `Resend OTP in ${cooldownSeconds}s`
+                  : "Send OTP"}
+              </button>
+
+              {otpFeedback && (
+                <p
+                  className={`text-xs text-center ${
+                    otpFeedback.type === "error" ? "text-red-600" : "text-gray-600"
+                  }`}
                 >
-                  {isSendingOtp ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Loader2 size={14} className="animate-spin" />
-                      Sending OTP...
-                    </span>
-                  ) : (
-                    "Send Email OTP"
-                  )}
-                </button>
-              </div>
-
-              {otpMessage && (
-                <p className="text-xs sm:text-sm text-gray-600">{otpMessage}</p>
+                  {otpFeedback.message}
+                </p>
               )}
 
               <Input
@@ -213,7 +184,7 @@ const DealerRegister = () => {
                   required: "OTP is required",
                   pattern: {
                     value: /^\d{6}$/,
-                    message: "Enter a valid 6-digit OTP",
+                    message: "OTP must be a valid 6-digit code",
                   },
                 }}
                 error={errors.otpCode?.message}
@@ -242,7 +213,7 @@ const DealerRegister = () => {
 
               <button
                 type="submit"
-                className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
+                className={`btn-primary w-full ${
                   isLoading ? "cursor-not-allowed bg-gray-400" : ""
                 }`}
               >

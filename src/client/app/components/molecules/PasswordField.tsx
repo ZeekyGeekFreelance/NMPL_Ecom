@@ -7,6 +7,7 @@ export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters long")
   .regex(/[A-Z]/, "Password must include at least one uppercase letter")
+  .regex(/[a-z]/, "Password must include at least one lowercase letter")
   .regex(/[0-9]/, "Password must include at least one number")
   .regex(
     /[!@#$%^&*(),.?":{}|<>]/,
@@ -34,6 +35,7 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
     let score = 0;
     if (passwordValue.length >= 8) score++;
     if (/[A-Z]/.test(passwordValue)) score++;
+    if (/[a-z]/.test(passwordValue)) score++;
     if (/[0-9]/.test(passwordValue)) score++;
     if (/[!@#$%^&*(),.?":{}|<>]/.test(passwordValue)) score++;
     setStrength(score);
@@ -62,7 +64,7 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
 
       <div className="mt-2">
         <div className="flex items-center justify-center gap-[1px] py-2">
-          {[...Array(4)].map((_, index) => (
+          {[...Array(5)].map((_, index) => (
             <motion.div
               key={index}
               className="h-[6px] flex-1 rounded w-[100px]"
@@ -83,8 +85,10 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
             : strength === 2
             ? "Weak"
             : strength === 3
-            ? "Good"
+            ? "Fair"
             : strength === 4
+            ? "Good"
+            : strength === 5
             ? "Strong"
             : "Password strength"}
         </p>

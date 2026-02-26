@@ -9,12 +9,15 @@ import OrderItems from "../OrderItems";
 import { useGetOrderQuery } from "@/app/store/apis/OrderApi";
 import CustomLoader from "@/app/components/feedback/CustomLoader";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const OrderTrackingPage = () => {
   const { orderId } = useParams();
-  const { data, isLoading, error } = useGetOrderQuery(orderId);
-  const order = data?.order;
-  console.log("order: ", order);
+  const normalizedOrderId = Array.isArray(orderId) ? orderId[0] : orderId;
+  const { data, isLoading, error } = useGetOrderQuery(normalizedOrderId, {
+    skip: !normalizedOrderId,
+  });
+  const order = data?.order || data?.data?.order;
 
   if (isLoading) {
     return (
@@ -23,8 +26,16 @@ const OrderTrackingPage = () => {
       </MainLayout>
     );
   }
-  if (error || !order)
-    return <div>Error loading order or order not found.</div>;
+
+  if (error || !order) {
+    return (
+      <MainLayout>
+        <div className="max-w-7xl mx-auto px-4 py-8 text-sm text-red-600">
+          {getApiErrorMessage(error, "Error loading order or order not found.")}
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>

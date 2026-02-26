@@ -49,31 +49,27 @@ const globalError = (err, req, res, _next) => __awaiter(void 0, void 0, void 0, 
     if (typeof handler === "function") {
         error = handler(err);
     }
-    // DEV logging
     if (isDev) {
-        console.error("🔴 Error Name:", err.name);
-        console.error("🔴 Stack Trace:", (_a = err.stack) === null || _a === void 0 ? void 0 : _a.split("\n").slice(0, 5).join("\n"));
+        console.error("Error Name:", err.name);
+        console.error("Stack Trace:", (_a = err.stack) === null || _a === void 0 ? void 0 : _a.split("\n").slice(0, 5).join("\n"));
         logger_1.default.error(Object.assign({ message: error.message, statusCode: error.statusCode, method: req.method, path: req.originalUrl, stack: error.stack }, (error.details && { details: error.details })));
     }
-    // PROD logging
     if (isProd && error.isOperational) {
         logger_1.default.error(`[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message}`);
     }
     const start = Date.now();
     const end = Date.now();
-    // 🛠️ Logs Service Integration
     yield logsService.error(`Error: ${error.message}`, {
         statusCode: error.statusCode,
         stack: err.stack,
         method: req.method,
         url: req.originalUrl,
-        userId: ((_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id) || null,
+        userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || null,
         timePeriod: end - start,
     });
-    // 📤 Error Response
     res.status(error.statusCode || 500).json(Object.assign(Object.assign({ status: error.statusCode >= 400 && error.statusCode < 500 ? "fail" : "error", message: error.message }, (error.details && { errors: error.details })), (isDev && {
         stack: error.stack,
-        error: error,
+        error,
     })));
 });
 exports.default = globalError;

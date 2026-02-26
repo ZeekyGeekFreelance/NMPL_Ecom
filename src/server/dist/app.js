@@ -14,7 +14,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = void 0;
 const express_1 = __importDefault(require("express"));
-const dotenv_1 = __importDefault(require("dotenv"));
 require("./infra/cloudinary/config");
 const body_parser_1 = __importDefault(require("body-parser"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
@@ -42,7 +41,6 @@ const http_1 = require("http");
 const socket_1 = require("@/infra/socket/socket");
 const database_config_1 = require("./infra/database/database.config");
 const swagger_1 = require("./docs/swagger");
-dotenv_1.default.config();
 const defaultDevOrigins = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -95,7 +93,7 @@ const createApp = () => __awaiter(void 0, void 0, void 0, function* () {
         throw new Error("SESSION_SECRET is required");
     }
     yield (0, database_config_1.connectDB)().catch((err) => {
-        console.error("❌ Failed to connect to DB:", err);
+        console.error("Failed to connect to DB:", err);
         process.exit(1);
     });
     const httpServer = new http_1.Server(app);

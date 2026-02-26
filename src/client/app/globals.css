@@ -91,6 +91,27 @@ input:disabled,
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out;
 }
+
+.btn-base {
+  @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors duration-200 whitespace-nowrap;
+}
+
+.btn-base:disabled {
+  @apply cursor-not-allowed opacity-60;
+}
+
+.btn-primary {
+  @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors duration-200 whitespace-nowrap bg-indigo-600 text-white hover:bg-indigo-700;
+}
+
+.btn-secondary {
+  @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors duration-200 whitespace-nowrap border border-gray-200 bg-white text-gray-700 hover:bg-gray-50;
+}
+
+.btn-ghost {
+  @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors duration-200 whitespace-nowrap bg-transparent text-gray-700 hover:bg-gray-100;
+}
+
 /* NProgress styles */
 #nprogress {
   pointer-events: none;

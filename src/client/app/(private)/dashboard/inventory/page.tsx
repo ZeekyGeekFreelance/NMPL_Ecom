@@ -11,13 +11,6 @@ import RestockModal from "./RestockModal";
 import RestockHistoryModal from "./RestockHistoryModal";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
-const debugLog = (...args: unknown[]) => {
-  if (isDevelopment) {
-    console.log(...args);
-  }
-};
-
 interface Variant {
   id: string;
   productId: string;
@@ -41,11 +34,9 @@ const InventoryDashboard = () => {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const { data, isLoading, refetch } = useGetAllVariantsQuery({});
-  debugLog("data: ", data);
   const [restockVariant, { isLoading: isRestocking }] =
     useRestockVariantMutation();
   const variants = data?.variants || [];
-  debugLog("variants: ", variants);
 
   const handleRestock = async (
     variantId: string,

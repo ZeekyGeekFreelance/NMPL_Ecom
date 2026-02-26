@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowUpDown, FileText, Check } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import CustomLoader from "../feedback/CustomLoader";
 
@@ -137,36 +137,38 @@ const TableBody: React.FC<TableBodyProps> = ({
               )}`}
               style={column.width ? { width: column.width } : undefined}
             >
-              <div
-                className={`flex items-center gap-1.5 ${getHeaderAlignmentClass(
-                  column.align
-                )}`}
-              >
-                <span className="whitespace-nowrap">{column.label}</span>
-                {column.sortable && (
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    type="button"
-                    onClick={() => onSort(column.key)}
-                    className={`rounded p-1 transition-colors hover:bg-blue-100 ${
-                      sortKey === column.key ? "text-blue-600" : "text-blue-300"
-                    }`}
-                  >
-                    <motion.div
-                      animate={{
-                        rotate:
-                          sortKey === column.key && sortDirection === "desc"
-                            ? 180
-                            : 0,
-                      }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <ArrowUpDown size={14} />
-                    </motion.div>
-                  </motion.button>
-                )}
-              </div>
+              {column.sortable ? (
+                <motion.button
+                  whileTap={{ scale: 0.99 }}
+                  type="button"
+                  onClick={() => onSort(column.key)}
+                  className={`group flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition-colors ${
+                    sortKey === column.key
+                      ? "bg-blue-200/80 text-blue-900"
+                      : "bg-blue-100/70 text-blue-700 hover:bg-blue-200/70"
+                  } ${getHeaderAlignmentClass(column.align)}`}
+                  aria-label={`Sort by ${column.label}`}
+                >
+                  <span className="whitespace-nowrap">{column.label}</span>
+                  {sortKey === column.key ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp size={14} className="text-blue-900" />
+                    ) : (
+                      <ArrowDown size={14} className="text-blue-900" />
+                    )
+                  ) : (
+                    <ArrowUpDown size={14} className="text-blue-500" />
+                  )}
+                </motion.button>
+              ) : (
+                <div
+                  className={`flex items-center gap-1.5 ${getHeaderAlignmentClass(
+                    column.align
+                  )}`}
+                >
+                  <span className="whitespace-nowrap">{column.label}</span>
+                </div>
+              )}
             </th>
           ))}
         </tr>

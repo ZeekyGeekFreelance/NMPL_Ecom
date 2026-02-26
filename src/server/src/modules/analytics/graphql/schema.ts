@@ -53,6 +53,7 @@ const typeDefs = gql`
     id: ID!
     productId: ID!
     productSlug: String
+    sku: String
     name: String!
     quantity: Int!
     revenue: Float!
@@ -83,6 +84,7 @@ const typeDefs = gql`
   type MostViewedProduct {
     productId: ID!
     productSlug: String
+    productSku: String
     productName: String!
     viewCount: Int!
   }

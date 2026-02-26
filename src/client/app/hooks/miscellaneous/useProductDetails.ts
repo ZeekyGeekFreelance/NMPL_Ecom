@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { skipToken } from "@reduxjs/toolkit/query";
 import {
   useUpdateProductMutation,
   useDeleteProductMutation,
@@ -15,6 +16,9 @@ const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
 
 export const useProductDetail = () => {
   const { id } = useParams();
+  const productId =
+    typeof id === "string" ? id.trim() : (id?.[0] ?? "").trim();
+  const productQueryArg = productId || skipToken;
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -22,7 +26,7 @@ export const useProductDetail = () => {
     data: product,
     isLoading: productsLoading,
     error: productsError,
-  } = useGetProductByIdQuery(id);
+  } = useGetProductByIdQuery(productQueryArg);
 
   const { data: categoriesData, isLoading: categoriesLoading } =
     useGetAllCategoriesQuery({});
@@ -165,8 +169,13 @@ export const useProductDetail = () => {
     });
 
     try {
+      if (!productId) {
+        showToast("Product id is missing. Please reload and try again.", "error");
+        return;
+      }
+
       await updateProduct({
-        id: id as string,
+        id: productId,
         data: payload,
       }).unwrap();
       showToast("Product updated successfully", "success");
@@ -179,7 +188,12 @@ export const useProductDetail = () => {
   // Handle delete
   const handleDelete = async () => {
     try {
-      await deleteProduct(id as string).unwrap();
+      if (!productId) {
+        showToast("Product id is missing. Please reload and try again.", "error");
+        return;
+      }
+
+      await deleteProduct(productId).unwrap();
       showToast("Product deleted successfully", "success");
       router.push("/dashboard/products");
     } catch (err) {

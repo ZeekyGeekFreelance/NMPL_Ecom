@@ -1,3 +1,4 @@
+import "dotenv/config";
 import "reflect-metadata";
 import { addAlias } from "module-alias";
 import path from "path";

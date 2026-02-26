@@ -1,5 +1,4 @@
 import express from "express";
-import dotenv from "dotenv";
 import "./infra/cloudinary/config";
 import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
@@ -27,8 +26,6 @@ import { Server as HTTPServer } from "http";
 import { SocketManager } from "@/infra/socket/socket";
 import { connectDB } from "./infra/database/database.config";
 import { setupSwagger } from "./docs/swagger";
-
-dotenv.config();
 
 const defaultDevOrigins = [
   "http://localhost:3000",
@@ -92,7 +89,7 @@ export const createApp = async () => {
   }
 
   await connectDB().catch((err) => {
-    console.error("❌ Failed to connect to DB:", err);
+    console.error("Failed to connect to DB:", err);
     process.exit(1);
   });
 

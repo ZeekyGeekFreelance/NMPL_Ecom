@@ -52,7 +52,11 @@ const Charts = ({ data, mostSoldProducts, interactionByType }) => {
         data={interactionByType.data}
         labels={interactionByType.labels}
       />
-      <RevenueOverTimeChart startDate="2023-01-01" endDate="2023-12-31" />
+      <RevenueOverTimeChart
+        labels={data?.revenueAnalytics?.monthlyTrends?.labels || []}
+        revenue={data?.revenueAnalytics?.monthlyTrends?.revenue || []}
+        totalRevenue={data?.revenueAnalytics?.totalRevenue || 0}
+      />
     </div>
   );
 };

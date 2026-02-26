@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import DropdownMultiSelect from "./DropdownMultiSelect";
 import {
   buildCsv,
@@ -49,6 +49,7 @@ const TableActions: React.FC<TableActionsProps> = ({
   visibleColumns,
   onToggleColumn,
 }) => {
+  const [isExporting, setIsExporting] = React.useState(false);
   const UUID_PATTERN =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -207,41 +208,51 @@ const TableActions: React.FC<TableActionsProps> = ({
   };
 
   const handleExport = () => {
-    const rowsToExport =
-      selectedRows.size > 0
-        ? data.filter((row) => {
-            const rowId = getRowId(row);
-            return rowId ? selectedRows.has(rowId) : false;
-          })
-        : data;
-
-    if (rowsToExport.length === 0) {
+    if (isExporting) {
       return;
     }
 
-    const headers = columns.map((column) => column.label);
+    setIsExporting(true);
 
-    const rowRecords = rowsToExport.map((row) => {
-      const record: Record<string, unknown> = {};
+    try {
+      const rowsToExport =
+        selectedRows.size > 0
+          ? data.filter((row) => {
+              const rowId = getRowId(row);
+              return rowId ? selectedRows.has(rowId) : false;
+            })
+          : data;
 
-      columns.forEach((column) => {
-        const exportValue =
-          typeof column.exportAccessor === "function"
-            ? column.exportAccessor(row)
-            : column.render
-              ? extractTextFromReactNode(column.render(row))
-              : getNestedValue(row, column.key);
+      if (rowsToExport.length === 0) {
+        return;
+      }
 
-        record[column.label] = formatExportCell(
-          normalizeExportValue(column, exportValue)
-        );
+      const headers = columns.map((column) => column.label);
+
+      const rowRecords = rowsToExport.map((row) => {
+        const record: Record<string, unknown> = {};
+
+        columns.forEach((column) => {
+          const exportValue =
+            typeof column.exportAccessor === "function"
+              ? column.exportAccessor(row)
+              : column.render
+                ? extractTextFromReactNode(column.render(row))
+                : getNestedValue(row, column.key);
+
+          record[column.label] = formatExportCell(
+            normalizeExportValue(column, exportValue)
+          );
+        });
+
+        return record;
       });
 
-      return record;
-    });
-
-    const csvContent = buildCsv(headers, rowRecords);
-    downloadCsv(csvContent, `table_export_${new Date().toISOString()}.csv`);
+      const csvContent = buildCsv(headers, rowRecords);
+      downloadCsv(csvContent, `table_export_${new Date().toISOString()}.csv`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -253,7 +264,7 @@ const TableActions: React.FC<TableActionsProps> = ({
             placeholder="Search records by keyword"
             value={searchValue}
             onChange={(e) => onSearch({ searchQuery: e.target.value })}
-            className="px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto"
+            className="h-11 w-full rounded-lg border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-auto"
           />
         )}
         <DropdownMultiSelect
@@ -268,12 +279,19 @@ const TableActions: React.FC<TableActionsProps> = ({
       </div>
       <button
         onClick={handleExport}
-        className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 sm:w-auto"
+        className="btn-primary w-full sm:w-auto"
+        disabled={isExporting}
         type="button"
       >
         <span className="flex items-center gap-2">
-          <Download size={16} />
-          Export {selectedRows.size > 0 ? "Selected" : "All"}
+          {isExporting ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Download size={16} />
+          )}
+          {isExporting
+            ? "Exporting..."
+            : `Export ${selectedRows.size > 0 ? "Selected" : "All"}`}
         </span>
       </button>
     </div>

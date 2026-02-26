@@ -55,10 +55,33 @@ const interactionAnalytics = {
             }))
                 .sort((a, b) => b.viewCount - a.viewCount)
                 .slice(0, 5);
+            const productVariantRows = yield prisma.productVariant.findMany({
+                where: {
+                    productId: {
+                        in: mostViewedProducts.map((item) => item.productId),
+                    },
+                },
+                select: {
+                    productId: true,
+                    sku: true,
+                    createdAt: true,
+                },
+                orderBy: [
+                    { productId: "asc" },
+                    { createdAt: "asc" },
+                ],
+            });
+            const skuByProduct = productVariantRows.reduce((accumulator, row) => {
+                if (!accumulator[row.productId]) {
+                    accumulator[row.productId] = row.sku;
+                }
+                return accumulator;
+            }, {});
+            const enrichedMostViewedProducts = mostViewedProducts.map((item) => (Object.assign(Object.assign({}, item), { productSku: skuByProduct[item.productId] || null })));
             return {
                 totalInteractions,
                 byType,
-                mostViewedProducts,
+                mostViewedProducts: enrichedMostViewedProducts,
             };
         }),
     },

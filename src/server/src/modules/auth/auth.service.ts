@@ -2,7 +2,7 @@ import crypto from "crypto";
 import AppError from "@/shared/errors/AppError";
 import sendEmail from "@/shared/utils/sendEmail";
 import passwordResetTemplate from "@/shared/templates/passwordReset";
-import emailVerificationTemplate from "@/shared/templates/emailVerification";
+import buildRegistrationOtpTemplate from "@/shared/templates/registrationOtp";
 import { tokenUtils, passwordUtils } from "@/shared/utils/authUtils";
 import {
   AuthResponse,
@@ -20,8 +20,9 @@ import { toAccountReference } from "@/shared/utils/accountReference";
 import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
 import { DealerNotificationService } from "@/shared/services/dealerNotification.service";
 import {
+  clearRegistrationOtp,
   createRegistrationOtp,
-  hasPendingRegistrationOtp,
+  RegistrationOtpRateLimitError,
   verifyAndConsumeRegistrationOtp,
 } from "@/shared/utils/auth/registrationOtp";
 
@@ -82,7 +83,10 @@ export class AuthService {
     email,
     purpose = "USER_PORTAL",
     requestDealerAccess = false,
-  }: RequestRegistrationOtpParams): Promise<{ message: string }> {
+  }: RequestRegistrationOtpParams): Promise<{
+    message: string;
+    resendAvailableInSeconds: number;
+  }> {
     const normalizedEmail = email.trim().toLowerCase();
     const existingUser = await this.authRepository.findUserByEmail(normalizedEmail);
     if (existingUser) {
@@ -91,22 +95,48 @@ export class AuthService {
       );
     }
 
-    const { otpCode, expiresInSeconds } = await createRegistrationOtp({
-      email: normalizedEmail,
-      purpose,
-      requestDealerAccess,
+    let otpDetails: Awaited<ReturnType<typeof createRegistrationOtp>>;
+    try {
+      otpDetails = await createRegistrationOtp({
+        email: normalizedEmail,
+        purpose,
+        requestDealerAccess,
+      });
+    } catch (error) {
+      if (error instanceof RegistrationOtpRateLimitError) {
+        throw new BadRequestError(
+          `OTP already sent. Please wait ${error.retryAfterSeconds} seconds before requesting a new one.`
+        );
+      }
+
+      throw new AppError(
+        500,
+        "Unable to prepare registration OTP. Please try again in a moment."
+      );
+    }
+
+    const { otpCode, expiresInSeconds, resendAvailableInSeconds } = otpDetails;
+    const purposeLabel =
+      purpose === "DEALER_PORTAL" ? "Dealer Registration" : "Account Registration";
+    const platformName = getPlatformName();
+    const supportEmail = getSupportEmail();
+    const otpTemplate = buildRegistrationOtpTemplate({
+      platformName,
+      otpCode,
+      purposeLabel,
+      expiresInMinutes: Math.floor(expiresInSeconds / 60),
+      supportEmail,
     });
 
     const sent = await sendEmail({
       to: normalizedEmail,
-      subject: "Your registration OTP code",
-      text: `Your OTP code is ${otpCode}. It expires in ${Math.floor(
-        expiresInSeconds / 60
-      )} minutes.`,
-      html: emailVerificationTemplate(otpCode),
+      subject: otpTemplate.subject,
+      text: otpTemplate.text,
+      html: otpTemplate.html,
     });
 
     if (!sent) {
+      await clearRegistrationOtp(normalizedEmail);
       throw new AppError(
         500,
         "Failed to send OTP email. Please try again in a moment."
@@ -117,6 +147,7 @@ export class AuthService {
       message: `OTP sent successfully. It will expire in ${Math.floor(
         expiresInSeconds / 60
       )} minutes.`,
+      resendAvailableInSeconds,
     };
   }
 
@@ -139,35 +170,50 @@ export class AuthService {
       );
     }
 
-    const pendingOtp = await hasPendingRegistrationOtp(normalizedEmail);
-    if (pendingOtp && !otpCode) {
+    if (!otpCode || !otpCode.trim()) {
       throw new BadRequestError(
         "Registration OTP is required. Please use the OTP sent to your email."
       );
     }
 
-    let otpContext: Awaited<
-      ReturnType<typeof verifyAndConsumeRegistrationOtp>
-    > = null;
-    if (otpCode) {
-      otpContext = await verifyAndConsumeRegistrationOtp(
-        normalizedEmail,
-        otpCode
+    const otpVerification = await verifyAndConsumeRegistrationOtp(
+      normalizedEmail,
+      otpCode
+    );
+
+    if (otpVerification.status === "EXPIRED") {
+      throw new BadRequestError(
+        "Registration OTP expired. Request a new OTP and try again."
       );
-      if (!otpContext) {
-        throw new BadRequestError("Invalid or expired registration OTP code.");
-      }
     }
 
-    const shouldRequestDealerAccess =
-      requestDealerAccess || otpContext?.requestDealerAccess === true;
+    if (otpVerification.status === "LOCKED") {
+      throw new BadRequestError(
+        "Too many incorrect OTP attempts. Please request a new OTP."
+      );
+    }
 
-    // Force new registrations to be USER role only for security
+    if (otpVerification.status === "INVALID") {
+      throw new BadRequestError(
+        `Invalid registration OTP code. ${otpVerification.attemptsRemaining} attempt(s) remaining.`
+      );
+    }
+
+    const otpContext = otpVerification.context;
+    const shouldRequestDealerAccess = otpContext.requestDealerAccess === true;
+
+    if (requestDealerAccess && !shouldRequestDealerAccess) {
+      throw new BadRequestError(
+        "Dealer signup requires an OTP requested from the dealer registration flow."
+      );
+    }
+
+    // Registrations created through this flow always start as USER role.
     const newUser = await this.authRepository.createUser({
       email: normalizedEmail,
       name,
       password,
-      role: ROLE.USER, // Ignore any role passed from client for security
+      role: ROLE.USER,
     });
 
     const accountReference = toAccountReference(newUser.id);

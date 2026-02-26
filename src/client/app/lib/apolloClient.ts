@@ -1,5 +1,6 @@
 import { ApolloClient, InMemoryCache, HttpLink, from } from "@apollo/client";
 import { onError } from "@apollo/client/link/error";
+import { RetryLink } from "@apollo/client/link/retry";
 import { loadDevMessages, loadErrorMessages } from "@apollo/client/dev";
 import { GRAPHQL_URL } from "./constants/config";
 
@@ -19,10 +20,21 @@ export const initializeApollo = (initialState = null) => {
     uri: GRAPHQL_URL,
     credentials: "include",
   });
+  const retryLink = new RetryLink({
+    attempts: {
+      max: 3,
+      retryIf: (error) => Boolean(error),
+    },
+    delay: {
+      initial: 300,
+      max: 1500,
+      jitter: true,
+    },
+  });
 
   // Create or reuse Apollo Client instance
   const client = new ApolloClient({
-    link: from([errorLink, httpLink]),
+    link: from([errorLink, retryLink, httpLink]),
     cache: new InMemoryCache({
       typePolicies: {
         Product: {

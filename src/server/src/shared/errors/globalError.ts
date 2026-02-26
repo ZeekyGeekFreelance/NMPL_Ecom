@@ -8,7 +8,7 @@ interface CustomError extends Error {
   code?: number | string;
   errors?: Record<string, { message: string }>;
   path?: string;
-  value?: any;
+  value?: unknown;
   details?: { message: string }[];
   stack?: string;
 }
@@ -76,13 +76,9 @@ const globalError = async (
     error = handler(err as CustomError);
   }
 
-  // DEV logging
   if (isDev) {
-    console.error("🔴 Error Name:", err.name);
-    console.error(
-      "🔴 Stack Trace:",
-      err.stack?.split("\n").slice(0, 5).join("\n")
-    );
+    console.error("Error Name:", err.name);
+    console.error("Stack Trace:", err.stack?.split("\n").slice(0, 5).join("\n"));
 
     logger.error({
       message: error.message,
@@ -94,7 +90,6 @@ const globalError = async (
     });
   }
 
-  // PROD logging
   if (isProd && error.isOperational) {
     logger.error(
       `[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message}`
@@ -104,17 +99,15 @@ const globalError = async (
   const start = Date.now();
   const end = Date.now();
 
-  // 🛠️ Logs Service Integration
   await logsService.error(`Error: ${error.message}`, {
     statusCode: error.statusCode,
     stack: err.stack,
     method: req.method,
     url: req.originalUrl,
-    userId: (req as any)?.user?.id || null,
+    userId: (req as { user?: { id?: string } }).user?.id || null,
     timePeriod: end - start,
   });
 
-  // 📤 Error Response
   res.status(error.statusCode || 500).json({
     status:
       error.statusCode >= 400 && error.statusCode < 500 ? "fail" : "error",
@@ -122,9 +115,10 @@ const globalError = async (
     ...(error.details && { errors: error.details }),
     ...(isDev && {
       stack: error.stack,
-      error: error,
+      error,
     }),
   });
 };
 
 export default globalError;
+

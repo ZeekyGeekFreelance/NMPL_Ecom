@@ -13,28 +13,23 @@ import ProductDetailSkeletonLoader from "@/app/components/feedback/ProductDetail
 import { Product } from "@/app/types/productTypes";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
-const debugLog = (...args: unknown[]) => {
-  if (isDevelopment) {
-    console.log(...args);
-  }
-};
-
 const getDefaultVariant = (variants: Product["variants"]) =>
   variants.find((variant) => variant.stock > 0) || variants[0] || null;
 
 const ProductDetailsPage = () => {
   const { slug } = useParams();
+  const resolvedSlug =
+    typeof slug === "string" ? slug : (slug?.[0] ?? "").trim();
   const dealerCatalogPollInterval = useDealerCatalogPollInterval();
   const { data, loading, error } = useQuery<{ product: Product }>(
     GET_SINGLE_PRODUCT,
     {
-      variables: { slug: typeof slug === "string" ? slug : slug?.[0] || "" },
+      variables: { slug: resolvedSlug },
+      skip: !resolvedSlug,
       fetchPolicy: "no-cache",
       pollInterval: dealerCatalogPollInterval,
     }
   );
-  debugLog("product data:", data);
 
   const [selectedVariant, setSelectedVariant] = useState<
     Product["variants"][0] | null
@@ -67,7 +62,7 @@ const ProductDetailsPage = () => {
     });
   }, [data?.product?.id]);
 
-  if (loading) return <ProductDetailSkeletonLoader />;
+  if (!resolvedSlug || loading) return <ProductDetailSkeletonLoader />;
 
   if (error) {
     return (

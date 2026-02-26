@@ -7,6 +7,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
       - NEXT_PUBLIC_API_URL=http://localhost:5000
       - NEXT_PUBLIC_API_URL_DEV=http://localhost:5000/api/v1
       - NEXT_PUBLIC_API_URL_PROD=http://localhost:5000/api/v1
@@ -27,12 +29,14 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
     depends_on:
       - db
       - redis
     volumes:
       - ./server:/app
       - /app/node_modules
+    command: npm run dev -- --legacy-watch
 
   db:
     image: postgres:15

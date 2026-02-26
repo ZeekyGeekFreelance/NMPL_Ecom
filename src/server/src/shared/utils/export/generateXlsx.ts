@@ -158,5 +158,6 @@ export default async function generateXLSX(data: unknown): Promise<Buffer> {
     fillSheet(sheet, section);
   });
 
-  return workbook.xlsx.writeBuffer() as Promise<Buffer>;
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
 }

@@ -4,11 +4,13 @@ import dynamic from "next/dynamic";
 import React, { useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { motion } from "framer-motion";
+import { isAfter, isValid, parseISO, startOfDay } from "date-fns";
 import {
   BarChart2,
   CreditCard,
   DollarSign,
   Download,
+  Loader2,
   ShoppingCart,
   Users,
 } from "lucide-react";
@@ -45,7 +47,6 @@ interface FormData {
   year?: string;
   startDate?: string;
   endDate?: string;
-  useCustomRange: boolean;
 }
 
 const timePeriodOptions = [
@@ -68,11 +69,19 @@ const exportFormatOptions = [
   { label: "XLSX", value: "xlsx" },
 ];
 
+const parseDateInput = (value?: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = parseISO(value);
+  return isValid(parsed) ? parsed : null;
+};
+
 const AnalyticsDashboard = () => {
   const { control, watch } = useForm<FormData>({
     defaultValues: {
       timePeriod: "allTime",
-      useCustomRange: false,
       year: new Date().getFullYear().toString(),
     },
   });
@@ -85,7 +94,31 @@ const AnalyticsDashboard = () => {
   const [triggerExport, { isLoading: isExporting, error: exportError }] =
     useLazyExportAnalyticsQuery();
 
-  const { timePeriod, year, startDate, endDate, useCustomRange } = watch();
+  const { timePeriod, year, startDate, endDate } = watch();
+  const today = useMemo(() => startOfDay(new Date()), []);
+  const parsedStartDate = parseDateInput(startDate);
+  const parsedEndDate = parseDateInput(endDate);
+  const hasStartDate = Boolean(startDate);
+  const hasEndDate = Boolean(endDate);
+  const hasInvalidStartDate = hasStartDate && !parsedStartDate;
+  const hasInvalidEndDate = hasEndDate && !parsedEndDate;
+  const hasFutureStartDate = Boolean(
+    parsedStartDate && isAfter(startOfDay(parsedStartDate), today)
+  );
+  const hasFutureEndDate = Boolean(
+    parsedEndDate && isAfter(startOfDay(parsedEndDate), today)
+  );
+  const hasInvalidDateOrder = Boolean(
+    parsedStartDate && parsedEndDate && isAfter(parsedStartDate, parsedEndDate)
+  );
+  const hasDateValidationError =
+    hasInvalidStartDate ||
+    hasInvalidEndDate ||
+    hasFutureStartDate ||
+    hasFutureEndDate ||
+    hasInvalidDateOrder;
+  const useCustomRange = hasStartDate && hasEndDate && !hasDateValidationError;
+  const hasIncompleteCustomRange = hasStartDate !== hasEndDate;
 
   const queryParams = useMemo(
     () => ({
@@ -109,6 +142,11 @@ const AnalyticsDashboard = () => {
   }));
 
   const handleExport = async () => {
+    if (hasDateValidationError) {
+      setExportMessage("Fix invalid date values before exporting analytics.");
+      return;
+    }
+
     setExportMessage("");
 
     try {
@@ -171,7 +209,7 @@ const AnalyticsDashboard = () => {
       id: item.productId || item.id,
       slug: item.productSlug || undefined,
       name: item.name,
-      subtitle: item.productSlug ? `/${item.productSlug}` : "Product",
+      subtitle: item.sku ? `SKU: ${item.sku}` : "SKU: N/A",
       primaryInfo: formatPrice(item.revenue),
       secondaryInfo: `${item.quantity} sold`,
       quantity: item.quantity,
@@ -202,7 +240,7 @@ const AnalyticsDashboard = () => {
         id: item.productId,
         slug: item.productSlug || undefined,
         name: item.productName,
-        subtitle: item.productSlug ? `/${item.productSlug}` : "Most viewed",
+        subtitle: item.productSku ? `SKU: ${item.productSku}` : "SKU: N/A",
         primaryInfo: item.viewCount,
         secondaryInfo: `${item.viewCount} views`,
         viewCount: item.viewCount,
@@ -243,10 +281,10 @@ const AnalyticsDashboard = () => {
               <Dropdown
                 onChange={field.onChange}
                 options={yearOptions}
-                value={field.value ?? "all"}
+                value={field.value ?? null}
                 label="Year"
                 className="w-full"
-                disabled={useCustomRange}
+                disabled={useCustomRange || hasIncompleteCustomRange}
               />
             )}
           />
@@ -256,6 +294,7 @@ const AnalyticsDashboard = () => {
             control={control}
             startName="startDate"
             endName="endDate"
+            className="md:col-span-2 xl:col-span-2"
           />
 
           <Dropdown
@@ -276,22 +315,68 @@ const AnalyticsDashboard = () => {
 
           <button
             type="button"
-            className="h-[42px] rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-blue-300"
+            className="btn-primary h-11 rounded-md"
             onClick={handleExport}
-            disabled={isExporting}
+            disabled={isExporting || hasDateValidationError}
           >
             <span className="inline-flex items-center gap-2">
-              <Download className="h-4 w-4" />
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
               {isExporting ? "Exporting..." : "Export"}
             </span>
           </button>
         </div>
 
-        {(exportMessage || exportError) && (
-          <p className={`text-sm ${exportError ? "text-red-600" : "text-green-600"}`}>
-            {exportError ? "Export request failed." : exportMessage}
-          </p>
-        )}
+        <div className="min-h-[22px]">
+          {(exportMessage || exportError) && (
+            <p className={`text-sm ${exportError ? "text-red-600" : "text-green-600"}`}>
+              {exportError ? "Export request failed." : exportMessage}
+            </p>
+          )}
+          {!exportMessage && !exportError && hasFutureStartDate && (
+            <p className="text-sm text-red-600">Start date cannot be in the future.</p>
+          )}
+          {!exportMessage && !exportError && hasInvalidStartDate && (
+            <p className="text-sm text-red-600">Start date format is invalid.</p>
+          )}
+          {!exportMessage &&
+            !exportError &&
+            !hasFutureStartDate &&
+            !hasInvalidStartDate &&
+            hasInvalidEndDate && (
+              <p className="text-sm text-red-600">End date format is invalid.</p>
+            )}
+          {!exportMessage &&
+            !exportError &&
+            !hasFutureStartDate &&
+            !hasInvalidStartDate &&
+            !hasInvalidEndDate &&
+            hasFutureEndDate && (
+            <p className="text-sm text-red-600">End date cannot be in the future.</p>
+          )}
+          {!exportMessage &&
+            !exportError &&
+            !hasInvalidStartDate &&
+            !hasInvalidEndDate &&
+            !hasFutureStartDate &&
+            !hasFutureEndDate &&
+            hasInvalidDateOrder && (
+              <p className="text-sm text-red-600">
+                End date must be on or after start date.
+              </p>
+            )}
+          {!exportMessage &&
+            !exportError &&
+            !hasDateValidationError &&
+            hasIncompleteCustomRange && (
+              <p className="text-sm text-amber-700">
+                Select both start and end dates to apply a custom range.
+              </p>
+            )}
+        </div>
       </section>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -399,7 +484,11 @@ const AnalyticsDashboard = () => {
           data={interactionByType.data}
           labels={interactionByType.labels}
         />
-        <RevenueOverTimeChart startDate="2023-01-01" endDate="2023-12-31" />
+        <RevenueOverTimeChart
+          labels={data?.revenueAnalytics?.monthlyTrends?.labels || []}
+          revenue={data?.revenueAnalytics?.monthlyTrends?.revenue || []}
+          totalRevenue={data?.revenueAnalytics?.totalRevenue || 0}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

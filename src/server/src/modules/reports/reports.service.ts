@@ -66,14 +66,13 @@ export class ReportsService {
         item.quantity * (item.price || item.variant?.price || 0);
       categorySales[categoryId].sales += item.quantity;
     }
-    const byCategory = Object.entries(categorySales).map(
-      ([categoryId, data]) => ({
-        categoryId,
+    const byCategory = Object.values(categorySales)
+      .map((data) => ({
         categoryName: data.name,
         revenue: data.revenue,
         sales: data.sales,
-      })
-    );
+      }))
+      .sort((first, second) => second.revenue - first.revenue);
 
     // Top Products
     const productSales: {
@@ -274,6 +273,10 @@ export class ReportsService {
           previousEndDate = subYears(now, 1);
           break;
         case "allTime":
+          if (!query.year && !query.startDate && !query.endDate) {
+            yearStart = startOfYear(now);
+            yearEnd = endOfYear(now);
+          }
           currentStartDate = undefined;
           currentEndDate = undefined;
           break;

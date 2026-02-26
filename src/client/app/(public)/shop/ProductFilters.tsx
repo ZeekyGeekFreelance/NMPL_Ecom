@@ -6,7 +6,7 @@ import Dropdown from "@/app/components/molecules/Dropdown";
 import CheckBox from "@/app/components/atoms/CheckBox";
 import { debounce } from "lodash";
 
-type SortByOption =
+export type SortByOption =
   | "RELEVANCE"
   | "PRICE_ASC"
   | "PRICE_DESC"
@@ -27,6 +27,7 @@ export interface FilterValues {
 
 interface ProductFiltersProps {
   initialFilters: FilterValues;
+  currentSortBy?: SortByOption;
   onFilterChange: (filters: FilterValues) => void;
   categories: Array<{ id: string; name: string }>;
   isMobile?: boolean;
@@ -149,11 +150,6 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
           <div className="flex items-center gap-3">
             <SlidersHorizontal size={20} className="text-indigo-600" />
             <h2 className="font-bold text-gray-900 text-lg">Filters</h2>
-            {activeFilterCount > 0 && (
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-2.5 py-1">
-                {activeFilterCount}
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-3">
             {activeFilterCount > 0 && (
