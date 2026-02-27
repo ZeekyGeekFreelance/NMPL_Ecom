@@ -41,8 +41,33 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
   isMobile = false,
   onCloseMobile,
 }) => {
+  const normalizedInitialValues = useMemo<FilterValues>(
+    () => ({
+      search: initialFilters.search || "",
+      sortBy: initialFilters.sortBy || "RELEVANCE",
+      categoryId: initialFilters.categoryId,
+      minPrice: initialFilters.minPrice,
+      maxPrice: initialFilters.maxPrice,
+      isNew: initialFilters.isNew,
+      isFeatured: initialFilters.isFeatured,
+      isTrending: initialFilters.isTrending,
+      isBestSeller: initialFilters.isBestSeller,
+    }),
+    [
+      initialFilters.search,
+      initialFilters.sortBy,
+      initialFilters.categoryId,
+      initialFilters.minPrice,
+      initialFilters.maxPrice,
+      initialFilters.isNew,
+      initialFilters.isFeatured,
+      initialFilters.isTrending,
+      initialFilters.isBestSeller,
+    ]
+  );
+
   const { control, watch, reset, handleSubmit, getValues } = useForm<FilterValues>({
-    defaultValues: initialFilters,
+    defaultValues: normalizedInitialValues,
   });
 
   // Watch form values
@@ -63,6 +88,10 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
       debouncedSearch.cancel();
     };
   }, [debouncedSearch]);
+
+  useEffect(() => {
+    reset(normalizedInitialValues);
+  }, [normalizedInitialValues, reset]);
 
   // Handle search input change
   const handleSearchChange = useCallback(
@@ -136,20 +165,23 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
     <aside
       className={`bg-white rounded-xl shadow-sm border border-gray-100 ${
         isMobile
-          ? "fixed inset-0 z-50 overflow-y-auto"
-          : "sticky top-24 h-fit max-h-[calc(100vh-120px)] overflow-y-auto"
+          ? "h-full w-full overflow-hidden rounded-none border-0 shadow-none"
+          : "sticky top-[10.625rem] h-[calc(100dvh-10rem)] max-h-[calc(100dvh-10rem)] w-full overflow-hidden"
       }`}
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="h-full flex flex-col">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="flex h-full min-h-0 flex-col"
+      >
         {/* Header */}
         <div
           className={`flex items-center justify-between border-b border-gray-100 ${
             isMobile ? "p-4" : "p-6 pb-4"
-          }`}
+          } shrink-0`}
         >
           <div className="flex items-center gap-3">
             <SlidersHorizontal size={20} className="text-indigo-600" />
-            <h2 className="font-bold text-gray-900 text-lg">Filters</h2>
+            <h2 className="font-bold text-gray-900 text-lg">Filter By</h2>
           </div>
           <div className="flex items-center gap-3">
             {activeFilterCount > 0 && (
@@ -176,9 +208,9 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
 
         {/* Filters Content */}
         <div
-          className={`flex-1 space-y-6 ${
+          className={`flex-1 min-h-0 space-y-6 ${
             isMobile ? "p-4" : "p-6 pt-4"
-          } overflow-y-auto`}
+          } overflow-y-auto overscroll-y-contain`}
         >
           {/* Search */}
           <div className="space-y-3">
@@ -314,7 +346,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
         <div
           className={`border-t border-gray-100 ${
             isMobile ? "p-4" : "p-6 pt-4"
-          }`}
+          } shrink-0 bg-white`}
         >
           <button
             type="submit"

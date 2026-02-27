@@ -15,7 +15,7 @@ import {
   Send,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useGetMeQuery } from "@/app/store/apis/UserApi";
+import { useAuth } from "@/app/hooks/useAuth";
 
 interface ProductReviewsProps {
   reviews: {
@@ -33,8 +33,11 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({
   reviews,
   productId,
 }) => {
-  const { data } = useGetMeQuery(undefined);
-  const userId = data?.user?.id;
+  const { user, isAuthenticated } = useAuth();
+  const userId = user?.id;
+  const canSubmitReview = isAuthenticated && Boolean(userId);
+  const canDeleteReview = (reviewUserId: string) =>
+    user?.role === "ADMIN" || user?.role === "SUPERADMIN" || userId === reviewUserId;
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [expandedReviews, setExpandedReviews] = useState<
@@ -195,7 +198,7 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({
       )}
 
       {/* Review Form */}
-      {userId ? (
+      {canSubmitReview ? (
         <div className="bg-white rounded-lg p-4 sm:p-6 mb-6 border border-gray-100">
           <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 flex items-center">
             <ThumbsUp className="mr-2 text-indigo-600" size={18} />
@@ -316,7 +319,7 @@ const ProductReviews: React.FC<ProductReviewsProps> = ({
                     </p>
                   </div>
                 </div>
-                {(data?.user?.role === "ADMIN" || userId === review.userId) && (
+                {canDeleteReview(review.userId) && (
                   <button
                     onClick={() => handleDeleteReview(review.id)}
                     className="text-red-500 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-red-50"

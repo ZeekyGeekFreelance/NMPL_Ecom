@@ -1,7 +1,11 @@
+"use client";
+
 import { useLazyGetMeQuery } from "@/app/store/apis/UserApi";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { logout, setUser } from "@/app/store/slices/AuthSlice";
 import { subscribeAuthSyncEvents } from "@/app/lib/authSyncChannel";
+import { isAuthOptionalPublicPath } from "@/app/lib/authRoutePolicy";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
 const isDevelopment = process.env.NODE_ENV !== "production";
@@ -84,6 +88,7 @@ export default function AuthProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const dispatch = useAppDispatch();
   const currentUser = useAppSelector((state) => state.auth.user);
   const [triggerGetMe] = useLazyGetMeQuery();
@@ -127,6 +132,10 @@ export default function AuthProvider({
           dispatch(logout());
           return;
         }
+
+        if (currentUserRef.current === undefined) {
+          dispatch(logout());
+        }
         debugLog(`[AuthProvider] Auth revalidation failed (${reason})`, error);
       } finally {
         isRevalidatingRef.current = false;
@@ -136,23 +145,55 @@ export default function AuthProvider({
   );
 
   useEffect(() => {
-    void revalidateAuth("mount");
+    const requiresRouteRevalidation = !isAuthOptionalPublicPath(pathname);
+
+    if (requiresRouteRevalidation && currentUserRef.current !== null) {
+      void revalidateAuth("route-enter");
+    }
 
     const unsubscribe = subscribeAuthSyncEvents((event) => {
-      void revalidateAuth(`auth-sync:${event.type}`);
+      if (event.type === "SIGNED_OUT") {
+        dispatch(logout());
+        return;
+      }
+
+      if (event.type === "SIGNED_IN" || event.type === "SESSION_REFRESHED") {
+        void revalidateAuth(`auth-sync:${event.type}`);
+      }
     });
 
+    const shouldRevalidateFromLifecycleEvent = () => {
+      if (currentUserRef.current) {
+        return true;
+      }
+
+      if (!requiresRouteRevalidation) {
+        return false;
+      }
+
+      return currentUserRef.current !== null;
+    };
+
     const handleFocus = () => {
+      if (!shouldRevalidateFromLifecycleEvent()) {
+        return;
+      }
       void revalidateAuth("window-focus");
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        if (!shouldRevalidateFromLifecycleEvent()) {
+          return;
+        }
         void revalidateAuth("visibility-visible");
       }
     };
 
     const handleOnline = () => {
+      if (!shouldRevalidateFromLifecycleEvent()) {
+        return;
+      }
       void revalidateAuth("network-online");
     };
 
@@ -166,7 +207,7 @@ export default function AuthProvider({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
     };
-  }, [revalidateAuth]);
+  }, [dispatch, pathname, revalidateAuth]);
 
   return <>{children}</>;
 }

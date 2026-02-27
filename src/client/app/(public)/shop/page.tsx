@@ -18,6 +18,7 @@ import ProductFilters, {
   SortByOption,
 } from "./ProductFilters";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
+import { useMediaQuery } from "@/app/hooks/useMediaQuery";
 
 const DEFAULT_SORT: SortByOption = "RELEVANCE";
 const BASE_PAGE_SIZE = 12;
@@ -89,6 +90,7 @@ const getSearchScore = (product: Product, rawQuery: string) => {
 const ShopPage: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   const initialFilters = useMemo<FilterValues>(
     () => ({
@@ -190,7 +192,7 @@ const ShopPage: React.FC = () => {
   }, [serverFilterSignature]);
 
   useEffect(() => {
-    if (!sidebarOpen) {
+    if (!sidebarOpen || isDesktop) {
       return;
     }
 
@@ -200,7 +202,13 @@ const ShopPage: React.FC = () => {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [sidebarOpen]);
+  }, [sidebarOpen, isDesktop]);
+
+  useEffect(() => {
+    if (isDesktop && sidebarOpen) {
+      setSidebarOpen(false);
+    }
+  }, [isDesktop, sidebarOpen]);
 
   const syncFiltersToUrl = useCallback(
     (nextFilters: FilterValues) => {
@@ -356,9 +364,9 @@ const ShopPage: React.FC = () => {
   return (
     <MainLayout>
       <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <div className="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="hidden lg:block">
+        <div className="container mx-auto px-4 pt-0 pb-6 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="flex gap-6 lg:gap-8">
+            <div className="hidden lg:block lg:w-[320px] lg:self-stretch xl:w-[360px]">
               <ProductFilters
                 initialFilters={initialFilters}
                 currentSortBy={currentSortBy}
@@ -367,8 +375,8 @@ const ShopPage: React.FC = () => {
               />
             </div>
 
-            <section className="min-w-0">
-              <div className="mb-5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-4">
+            <section className="min-w-0 flex-1">
+              <div className="sticky top-24 z-20 -mx-6 mb-5 rounded-lg border border-gray-200 bg-white p-3 shadow-sm sm:mx-0 sm:top-[9.125rem] sm:rounded-xl sm:p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <button
@@ -514,7 +522,7 @@ const ShopPage: React.FC = () => {
                   </div>
 
                   {hasMore && (
-                    <div className="mt-12 text-center">
+                    <div className="mt-12 pb-8 text-center">
                       {isFetchingMore ? (
                         <div className="flex items-center justify-center gap-3">
                           <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
