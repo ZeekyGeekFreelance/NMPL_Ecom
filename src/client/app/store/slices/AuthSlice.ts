@@ -6,6 +6,7 @@ interface User {
   name: string;
   email: string;
   role: string;
+  effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
   avatar: string | null;
   isDealer?: boolean;
   dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;

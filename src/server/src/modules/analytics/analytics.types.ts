@@ -10,6 +10,7 @@ export interface TopUser {
   id: string;
   name: string;
   email: string;
+  customerType?: "USER" | "DEALER";
   orderCount: number;
   totalSpent: number;
   engagementScore: number;

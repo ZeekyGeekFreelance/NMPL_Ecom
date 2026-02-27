@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { toTransactionReference } from "@/app/lib/utils/accountReference";
 
 interface SearchResult {
   type: "product" | "category" | "user" | "transaction";
@@ -32,7 +33,10 @@ interface SearchModalProps {
 }
 
 const ROUTES = {
-  transaction: (id: string) => `/dashboard/transactions/${id}`,
+  transaction: (id: string) =>
+    `/dashboard/transactions/${
+      id.toUpperCase().startsWith("TXN-") ? id : toTransactionReference(id)
+    }`,
   product: (id: string) => `/dashboard/products/${id}`,
   category: () => "/dashboard/categories",
   user: () => "/dashboard/users",

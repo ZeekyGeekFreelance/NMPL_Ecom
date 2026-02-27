@@ -51,6 +51,7 @@ export class AuthRepository {
         role: true,
         name: true,
         email: true,
+        phone: true,
         avatar: true,
       },
     });
@@ -63,6 +64,7 @@ export class AuthRepository {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         avatar: true,
       },
@@ -82,6 +84,7 @@ export class AuthRepository {
 
   async createUser(data: {
     email: string;
+    phone: string;
     name: string;
     password: string;
     role: ROLE;
@@ -97,6 +100,7 @@ export class AuthRepository {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         avatar: true,
       },

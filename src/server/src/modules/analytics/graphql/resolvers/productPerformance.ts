@@ -1,5 +1,6 @@
-import { getDateRange } from "@/shared/utils/analytics";
+import { buildDateFilter, getDateRange } from "@/shared/utils/analytics";
 import { Context } from "../resolver";
+import { REJECTED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const productPerformance = {
   Query: {
@@ -15,18 +16,37 @@ const productPerformance = {
         startDate,
         endDate,
       });
+      const currentOrderDateFilter = buildDateFilter(
+        currentStartDate,
+        endDate,
+        yearStart,
+        yearEnd
+      );
 
       const orderItems = await prisma.orderItem.findMany({
         where: {
-          createdAt: {
-            ...(currentStartDate && { gte: currentStartDate }),
-            ...(endDate && { lte: new Date(endDate) }),
-            ...(yearStart && { gte: yearStart }),
-            ...(yearEnd && { lte: yearEnd }),
+          order: {
+            orderDate: currentOrderDateFilter,
+            status: {
+              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+            },
           },
-          // category filter commented out; adjust if needed
+          ...(category && {
+            variant: {
+              product: {
+                category: {
+                  name: category,
+                },
+              },
+            },
+          }),
         },
         include: {
+          order: {
+            select: {
+              orderDate: true,
+            },
+          },
           variant: {
             include: {
               product: {
@@ -78,7 +98,7 @@ const productPerformance = {
         }
         productSales[productId].quantity += item.quantity;
         productSales[productId].revenue +=
-          item.quantity * (item.variant.price || 0);
+          item.quantity * (item.price || 0);
       }
 
       return Object.values(productSales)

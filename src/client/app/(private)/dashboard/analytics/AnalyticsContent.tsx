@@ -43,7 +43,12 @@ const AnalyticsContent = () => {
 
   const queryParams = {
     timePeriod: timePeriod || "allTime",
-    year: useCustomRange ? undefined : year ? parseInt(year, 10) : undefined,
+    year:
+      useCustomRange || timePeriod !== "allTime"
+        ? undefined
+        : year
+        ? parseInt(year, 10)
+        : undefined,
     startDate: useCustomRange && startDate ? startDate : undefined,
     endDate: useCustomRange && endDate ? endDate : undefined,
   };
@@ -192,7 +197,7 @@ const AnalyticsContent = () => {
                 value={field.value ?? null}
                 label="Year"
                 className="min-w-[150px] max-w-[200px]"
-                disabled={useCustomRange}
+                disabled={useCustomRange || timePeriod !== "allTime"}
               />
             )}
           />

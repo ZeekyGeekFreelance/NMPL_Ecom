@@ -4,6 +4,7 @@ export type RegistrationPurpose = "USER_PORTAL" | "DEALER_PORTAL";
 
 export interface RequestRegistrationOtpParams {
   email: string;
+  phone: string;
   purpose?: RegistrationPurpose;
   requestDealerAccess?: boolean;
 }
@@ -11,8 +12,10 @@ export interface RequestRegistrationOtpParams {
 export interface RegisterUserParams {
   name: string;
   email: string;
+  phone: string;
   password: string;
-  otpCode: string;
+  emailOtpCode: string;
+  phoneOtpCode?: string;
   requestDealerAccess?: boolean;
   businessName?: string;
   contactPhone?: string;
@@ -29,7 +32,9 @@ export interface AuthResponse {
     accountReference: string;
     name: string;
     email: string;
+    phone: string | null;
     role: ROLE;
+    effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
     avatar: string | null;
     isDealer?: boolean;
     dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;

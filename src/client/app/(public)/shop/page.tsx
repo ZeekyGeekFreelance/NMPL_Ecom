@@ -169,7 +169,8 @@ const ShopPage: React.FC = () => {
     fetchMore,
   } = useQuery(GET_PRODUCTS, {
     variables: { first: requestPageSize, skip: 0, filters: serverFilters },
-    fetchPolicy: "no-cache",
+    fetchPolicy: "cache-and-network",
+    nextFetchPolicy: "cache-first",
     pollInterval: dealerCatalogPollInterval,
     onCompleted: (data) => {
       setDisplayedProducts(data.products.products);

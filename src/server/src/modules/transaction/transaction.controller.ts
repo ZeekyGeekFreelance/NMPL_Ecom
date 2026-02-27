@@ -8,10 +8,22 @@ export class TransactionController {
   constructor(private transactionService: TransactionService) {}
 
   getAllTransactions = asyncHandler(async (req: Request, res: Response) => {
-    const transactions = await this.transactionService.getAllTransactions();
+    const {
+      transactions,
+      totalResults,
+      totalPages,
+      currentPage,
+      resultsPerPage,
+    } = await this.transactionService.getAllTransactions(req.query);
 
     sendResponse(res, 200, {
-      data: { transactions },
+      data: {
+        transactions,
+        totalResults,
+        totalPages,
+        currentPage,
+        resultsPerPage,
+      },
       message: "Fetched transactions successfully",
     });
   });

@@ -28,6 +28,7 @@ import {
 } from "@/app/lib/orderLifecycle";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import formatDate from "@/app/utils/formatDate";
+import usePageQuery from "@/app/hooks/network/usePageQuery";
 
 const isDevelopment = process.env.NODE_ENV !== "production";
 const debugLog = (...args: unknown[]) => {
@@ -39,6 +40,7 @@ const debugLog = (...args: unknown[]) => {
 const TransactionsDashboard = () => {
   const { showToast } = useToast();
   const router = useRouter();
+  const { page, setPage } = usePageQuery();
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isStatusConfirmModalOpen, setIsStatusConfirmModalOpen] =
@@ -63,11 +65,14 @@ const TransactionsDashboard = () => {
     nextStatus: OrderLifecycleStatus;
   } | null>(null);
 
-  const { data, error, isLoading, refetch } = useGetAllTransactionsQuery(undefined, {
-    pollingInterval: 8000,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
-  });
+  const { data, error, isLoading, refetch } = useGetAllTransactionsQuery(
+    { page },
+    {
+      pollingInterval: 8000,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    }
+  );
   const [updateTransactionStatus, { error: updateError }] =
     useUpdateTransactionStatusMutation();
   debugLog("Error updating transaction status:", updateError);
@@ -97,7 +102,7 @@ const TransactionsDashboard = () => {
   };
 
   const handleViewDetails = (id: string) => {
-    router.push(`/dashboard/transactions/${id}`);
+    router.push(`/dashboard/transactions/${toTransactionReference(id)}`);
   };
 
   const executeStatusUpdate = async (params: {
@@ -361,6 +366,7 @@ const TransactionsDashboard = () => {
         totalResults={totalResults}
         resultsPerPage={resultsPerPage}
         currentPage={currentPage}
+        onPageChange={setPage}
         showHeader={false}
       />
 

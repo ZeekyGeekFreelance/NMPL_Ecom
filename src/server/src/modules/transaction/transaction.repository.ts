@@ -1,6 +1,7 @@
 import prisma from "@/infra/database/database.config";
 import { PAYMENT_STATUS } from "@prisma/client";
 import AppError from "@/shared/errors/AppError";
+import { toTransactionReference } from "@/shared/utils/accountReference";
 
 type TransactionLifecycleStatus =
   | "PLACED"
@@ -17,6 +18,18 @@ const orderStatusByTransactionStatus: Record<TransactionLifecycleStatus, string>
 
 export class TransactionRepository {
   constructor() {}
+
+  private extractReferenceChecksum(reference: string): string | null {
+    const normalizedReference = (reference || "").trim().toUpperCase();
+    const [, token = ""] = normalizedReference.split("-");
+    const cleanToken = token.replace(/[^A-Z0-9]/g, "");
+
+    if (cleanToken.length < 2) {
+      return null;
+    }
+
+    return cleanToken.slice(-2).toLowerCase();
+  }
 
   private normalizeStatusValue(status: string): TransactionLifecycleStatus {
     const normalized = status.toUpperCase();
@@ -72,8 +85,28 @@ export class TransactionRepository {
     );
   }
 
-  async findMany() {
-    return prisma.transaction.findMany();
+  async findMany(params?: { skip?: number; take?: number }) {
+    if (!params) {
+      return prisma.transaction.findMany({
+        orderBy: {
+          transactionDate: "desc",
+        },
+      });
+    }
+
+    const { skip = 0, take = 16 } = params;
+
+    return prisma.transaction.findMany({
+      skip,
+      take,
+      orderBy: {
+        transactionDate: "desc",
+      },
+    });
+  }
+
+  async countTransactions() {
+    return prisma.transaction.count();
   }
 
   async findById(id: string) {
@@ -84,7 +117,20 @@ export class TransactionRepository {
           include: {
             payment: true,
             shipment: true,
-            user: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                role: true,
+                dealerProfile: {
+                  select: {
+                    status: true,
+                  },
+                },
+              },
+            },
             address: true,
             invoice: true,
             orderItems: {
@@ -100,6 +146,30 @@ export class TransactionRepository {
         },
       },
     });
+  }
+
+  async findIdByReference(reference: string): Promise<string | null> {
+    const normalizedReference = (reference || "").trim().toUpperCase();
+    if (!normalizedReference) {
+      return null;
+    }
+
+    const checksum = this.extractReferenceChecksum(normalizedReference);
+    const candidates = await prisma.transaction.findMany({
+      where: checksum ? { id: { endsWith: checksum } } : undefined,
+      select: { id: true },
+      orderBy: { transactionDate: "desc" },
+    });
+
+    const matches = candidates.filter(
+      (candidate) => toTransactionReference(candidate.id) === normalizedReference
+    );
+
+    if (matches.length > 1) {
+      throw new AppError(409, "Multiple transactions matched this reference");
+    }
+
+    return matches[0]?.id ?? null;
   }
 
   async createTransaction(data: any) {
@@ -185,6 +255,13 @@ export class TransactionRepository {
                     id: true,
                     name: true,
                     email: true,
+                    phone: true,
+                    role: true,
+                    dealerProfile: {
+                      select: {
+                        status: true,
+                      },
+                    },
                   },
                 },
               },
@@ -214,6 +291,13 @@ export class TransactionRepository {
                     id: true,
                     name: true,
                     email: true,
+                    phone: true,
+                    role: true,
+                    dealerProfile: {
+                      select: {
+                        status: true,
+                      },
+                    },
                   },
                 },
               },

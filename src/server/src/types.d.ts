@@ -3,6 +3,7 @@ declare namespace Express {
     user?: {
       id: string;
       role: string;
+      effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
     };
     session: {
       id: string;

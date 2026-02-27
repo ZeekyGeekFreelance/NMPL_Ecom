@@ -99,14 +99,20 @@ const globalError = async (
   const start = Date.now();
   const end = Date.now();
 
-  await logsService.error(`Error: ${error.message}`, {
-    statusCode: error.statusCode,
-    stack: err.stack,
-    method: req.method,
-    url: req.originalUrl,
-    userId: (req as { user?: { id?: string } }).user?.id || null,
-    timePeriod: end - start,
-  });
+  try {
+    await logsService.error(`Error: ${error.message}`, {
+      statusCode: error.statusCode,
+      stack: err.stack,
+      method: req.method,
+      url: req.originalUrl,
+      userId: (req as { user?: { id?: string } }).user?.id || null,
+      timePeriod: end - start,
+    });
+  } catch (loggingError) {
+    const logErrorMessage =
+      loggingError instanceof Error ? loggingError.message : String(loggingError);
+    logger.error(`[globalError] Failed to persist error log: ${logErrorMessage}`);
+  }
 
   res.status(error.statusCode || 500).json({
     status:
@@ -121,4 +127,3 @@ const globalError = async (
 };
 
 export default globalError;
-

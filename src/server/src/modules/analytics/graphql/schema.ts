@@ -63,6 +63,7 @@ const typeDefs = gql`
     id: ID!
     name: String!
     email: String!
+    customerType: String!
     orderCount: Int!
     totalSpent: Float!
     engagementScore: Float!

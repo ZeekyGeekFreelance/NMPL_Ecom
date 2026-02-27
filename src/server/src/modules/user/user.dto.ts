@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsIn,
   IsNotEmpty,
+  Matches,
   IsNumber,
   IsOptional,
   IsString,
@@ -64,6 +65,14 @@ export class CreateAdminDto {
   @IsEmail({}, { message: "Invalid email format" })
   email!: string;
 
+  @IsNotEmpty({ message: "Phone number is required" })
+  @IsString({ message: "Phone number must be a string" })
+  @Matches(/^[0-9()+\-\s]{7,20}$/, {
+    message:
+      "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  })
+  phone!: string;
+
   @IsNotEmpty({ message: "Password is required" })
   @MinLength(6, { message: "Password must be at least 6 characters long" })
   @IsString({ message: "Password must be a string" })
@@ -89,9 +98,13 @@ export class CreateDealerDto {
   @IsString({ message: "Business name must be a string" })
   businessName?: string;
 
-  @IsOptional()
+  @IsNotEmpty({ message: "Contact phone is required" })
   @IsString({ message: "Contact phone must be a string" })
-  contactPhone?: string;
+  @Matches(/^[0-9()+\-\s]{7,20}$/, {
+    message:
+      "Contact phone must be 7-20 characters and contain only valid digits/symbols",
+  })
+  contactPhone!: string;
 }
 
 export class UpdateDealerStatusDto {

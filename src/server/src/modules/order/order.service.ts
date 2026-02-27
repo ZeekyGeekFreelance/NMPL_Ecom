@@ -1,7 +1,7 @@
 import AppError from "@/shared/errors/AppError";
 import { OrderRepository } from "./order.repository";
 import prisma from "@/infra/database/database.config";
-import { CART_STATUS, Prisma, ROLE } from "@prisma/client";
+import { CART_STATUS, ROLE } from "@prisma/client";
 import sendEmail from "@/shared/utils/sendEmail";
 import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
 import {
@@ -10,66 +10,13 @@ import {
 } from "@/shared/utils/accountReference";
 import { formatDateTimeInIST } from "@/shared/utils/dateTime";
 import { makeLogsService } from "../logs/logs.factory";
+import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
+import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
 
 export class OrderService {
   private logsService = makeLogsService();
 
   constructor(private orderRepository: OrderRepository) {}
-
-  private isDealerTableMissing(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    return (
-      error.message.includes('relation "DealerProfile" does not exist') ||
-      error.message.includes('relation "DealerPriceMapping" does not exist')
-    );
-  }
-
-  private async getDealerPriceMap(
-    userId: string,
-    variantIds: string[]
-  ): Promise<Map<string, number>> {
-    if (!variantIds.length) {
-      return new Map();
-    }
-
-    try {
-      const dealerProfileRows = await prisma.$queryRaw<
-        Array<{ status: string }>
-      >(
-        Prisma.sql`
-          SELECT "status"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `
-      );
-
-      if (!dealerProfileRows.length || dealerProfileRows[0].status !== "APPROVED") {
-        return new Map();
-      }
-
-      const priceRows = await prisma.$queryRaw<
-        Array<{ variantId: string; customPrice: number }>
-      >(
-        Prisma.sql`
-          SELECT "variantId", "customPrice"
-          FROM "DealerPriceMapping"
-          WHERE "dealerId" = ${userId}
-            AND "variantId" IN (${Prisma.join(variantIds)})
-        `
-      );
-
-      return new Map(priceRows.map((row) => [row.variantId, row.customPrice]));
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        return new Map();
-      }
-      throw error;
-    }
-  }
 
   async getAllOrders() {
     return this.orderRepository.findAllOrders();
@@ -79,8 +26,34 @@ export class OrderService {
     return this.orderRepository.findOrdersByUserId(userId);
   }
 
+  private async resolveOrderIdForUser(
+    orderIdentifier: string,
+    userId: string
+  ): Promise<string> {
+    const normalized = String(orderIdentifier || "").trim();
+    if (!normalized) {
+      throw new AppError(400, "Order ID is required");
+    }
+
+    if (!normalized.toUpperCase().startsWith("ORD-")) {
+      return normalized;
+    }
+
+    const orderId = await this.orderRepository.findOrderIdByReferenceForUser(
+      normalized,
+      userId
+    );
+
+    if (!orderId) {
+      throw new AppError(404, "Order not found");
+    }
+
+    return orderId;
+  }
+
   async getOrderDetails(orderId: string, userId: string) {
-    const order = await this.orderRepository.findOrderById(orderId);
+    const resolvedOrderId = await this.resolveOrderIdForUser(orderId, userId);
+    const order = await this.orderRepository.findOrderById(resolvedOrderId);
     if (!order) {
       throw new AppError(404, "Order not found");
     }
@@ -91,6 +64,21 @@ export class OrderService {
   }
 
   async createOrderFromCart(userId: string, cartId: string) {
+    const orderingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        dealerProfile: {
+          select: {
+            status: true,
+          },
+        },
+      },
+    });
+    if (!orderingUser) {
+      throw new AppError(404, "User not found");
+    }
+
     const cart = await prisma.cart.findUnique({
       where: { id: cartId },
       include: { cartItems: { include: { variant: { include: { product: true } } } } },
@@ -105,10 +93,12 @@ export class OrderService {
       throw new AppError(403, "You are not authorized to access this cart");
     }
 
-    const dealerPriceMap = await this.getDealerPriceMap(
+    const dealerPriceMap = await getDealerPriceMap(
+      prisma,
       userId,
       cart.cartItems.map((item) => item.variantId)
     );
+    const customerRoleSnapshot = resolveCustomerTypeFromUser(orderingUser);
 
     const amount = cart.cartItems.reduce(
       (sum, item) =>
@@ -127,11 +117,16 @@ export class OrderService {
     const order = await this.orderRepository.createOrder({
       userId,
       amount,
+      customerRoleSnapshot,
       cartId,
       orderItems,
     });
 
-    await this.sendOrderPlacedNotifications(userId, order.id).catch(
+    await this.sendOrderPlacedNotifications(
+      userId,
+      order.id,
+      customerRoleSnapshot
+    ).catch(
       async (error: unknown) => {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown notification error";
@@ -172,7 +167,8 @@ export class OrderService {
 
   private async sendOrderPlacedNotifications(
     userId: string,
-    orderId: string
+    orderId: string,
+    customerType: "USER" | "DEALER"
   ): Promise<void> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -244,6 +240,7 @@ export class OrderService {
             `Order ID: ${orderReference}`,
             `Customer Name: ${user.name}`,
             `Customer Email: ${user.email || "Not available"}`,
+            `Customer Type: ${customerType}`,
             `Account Reference: ${accountReference}`,
             "Current status: PLACED",
             `Action Time (IST): ${actionTime}`,
@@ -259,6 +256,7 @@ export class OrderService {
                 <strong>Customer Email:</strong> ${
                   user.email || "Not available"
                 }<br />
+                <strong>Customer Type:</strong> ${customerType}<br />
                 <strong>Account Reference:</strong> ${accountReference}<br />
                 <strong>Current status:</strong> PLACED<br />
                 <strong>Action Time (IST):</strong> ${actionTime}

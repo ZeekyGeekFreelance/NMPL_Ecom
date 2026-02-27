@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useGetRestockHistoryQuery } from "@/app/store/apis/VariantApi";
 import Table from "@/app/components/layout/Table";
 import { X } from "lucide-react";
@@ -16,8 +17,16 @@ const RestockHistoryModal: React.FC<RestockHistoryModalProps> = ({
   onClose,
   variantId,
 }) => {
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPage(1);
+    }
+  }, [isOpen, variantId]);
+
   const { data, isLoading } = useGetRestockHistoryQuery(
-    { variantId: variantId || "all", page: 1, limit: 10 },
+    { variantId: variantId || "all", page, limit: 10 },
     { skip: !isOpen }
   );
   const restocks = data?.restocks || [];
@@ -89,6 +98,7 @@ const RestockHistoryModal: React.FC<RestockHistoryModalProps> = ({
               totalResults={data?.totalResults}
               resultsPerPage={data?.resultsPerPage}
               currentPage={data?.currentPage}
+              onPageChange={setPage}
             />
           </motion.div>
         </motion.div>

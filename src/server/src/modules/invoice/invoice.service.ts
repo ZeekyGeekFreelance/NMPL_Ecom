@@ -9,6 +9,7 @@ import {
   toOrderReference,
 } from "@/shared/utils/accountReference";
 import { InvoiceRepository, InvoiceWithDetails } from "./invoice.repository";
+import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
 
 interface RequesterContext {
   id: string;
@@ -81,12 +82,21 @@ export class InvoiceService {
   }
 
   private getCustomerCopyLabel(invoice: InvoiceWithDetails): string {
-    const isDealer = invoice.user.dealerProfile?.status === "APPROVED";
-    return isDealer ? "Dealer Copy" : "User Copy";
+    return this.resolveCustomerType(invoice) === "DEALER"
+      ? "Dealer Copy"
+      : "User Copy";
   }
 
   private resolveCustomerType(invoice: InvoiceWithDetails): "DEALER" | "USER" {
-    return invoice.user.dealerProfile?.status === "APPROVED" ? "DEALER" : "USER";
+    if (invoice.order.customerRoleSnapshot === "DEALER") {
+      return "DEALER";
+    }
+
+    if (invoice.order.customerRoleSnapshot === "USER") {
+      return "USER";
+    }
+
+    return resolveCustomerTypeFromUser(invoice.user);
   }
 
   private async sendInvoiceEmails(invoice: InvoiceWithDetails): Promise<void> {

@@ -76,7 +76,10 @@ export const userApi = apiSlice.injectEndpoints({
       providesTags: ["User"],
     }),
 
-    createAdmin: builder.mutation({
+    createAdmin: builder.mutation<
+      { user: User },
+      { name: string; email: string; phone: string; password: string }
+    >({
       query: (data) => ({
         url: "/users/admin",
         method: "POST",
@@ -107,7 +110,7 @@ export const userApi = apiSlice.injectEndpoints({
         email: string;
         password: string;
         businessName?: string;
-        contactPhone?: string;
+        contactPhone: string;
       }
     >({
       query: (data) => ({

@@ -127,7 +127,7 @@ export class UserController {
 
   createAdmin = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { name, email, password } = req.body;
+      const { name, email, phone, password } = req.body;
       const currentUserId = req.user?.id;
 
       if (!currentUserId) {
@@ -135,7 +135,7 @@ export class UserController {
       }
 
       const newAdmin = await this.userService.createAdmin(
-        { name, email, password },
+        { name, email, phone, password },
         currentUserId
       );
 

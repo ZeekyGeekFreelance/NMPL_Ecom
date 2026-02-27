@@ -33,4 +33,7 @@ function bootstrap() {
         });
     });
 }
-bootstrap();
+bootstrap().catch((error) => {
+    console.error("Failed to bootstrap server:", error);
+    process.exit(1);
+});

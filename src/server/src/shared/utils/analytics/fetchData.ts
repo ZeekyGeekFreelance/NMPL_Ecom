@@ -10,9 +10,11 @@ export const fetchData = async <T>(
   yearStart?: Date,
   yearEnd?: Date,
   role?: ROLE,
-  include?: Record<string, boolean>
+  include?: Record<string, any>,
+  additionalWhere?: Record<string, unknown>
 ): Promise<T[]> => {
   const where: any = {
+    ...(additionalWhere || {}),
     [dateField]: buildDateFilter(startDate, endDate, yearStart, yearEnd),
   };
   if (role) where.role = role;

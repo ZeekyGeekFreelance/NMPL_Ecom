@@ -37,7 +37,11 @@ const DealersDashboard = () => {
   const formatPrice = useFormatPrice();
   const { user } = useAuth();
   const { data: meData, isFetching: isFetchingMe } = useGetMeQuery();
-  const effectiveRole = meData?.user?.role || user?.role;
+  const effectiveRole =
+    meData?.user?.effectiveRole ||
+    user?.effectiveRole ||
+    meData?.user?.role ||
+    user?.role;
   const isAdminUser =
     effectiveRole === "ADMIN" || effectiveRole === "SUPERADMIN";
 
@@ -677,6 +681,8 @@ const DealersDashboard = () => {
                 />
                 <input
                   type="text"
+                  required
+                  pattern="^[0-9()+\-\s]{7,20}$"
                   placeholder="Contact phone"
                   value={createDealerForm.contactPhone}
                   onChange={(event) =>

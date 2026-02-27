@@ -3,14 +3,16 @@ import { apiSlice } from "../slices/ApiSlice";
 export const transactionApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getAllTransactions: builder.query({
-      query: () => "/transactions",
-      providesTags: ["Transactions"], // 👈 Tag for all transactions
+      query: (params?: { page?: number; limit?: number }) => ({
+        url: "/transactions",
+        params: params || undefined,
+      }),
+      providesTags: ["Transactions"],
     }),
     getTransaction: builder.query({
       query: (id) => `/transactions/${id}`,
-      providesTags: (result, error, id) => [{ type: "Transactions", id }], // 👈 Tag for single transaction
+      providesTags: (result, error, id) => [{ type: "Transactions", id }],
     }),
-
 
     updateTransactionStatus: builder.mutation({
       query: ({
@@ -33,8 +35,8 @@ export const transactionApi = apiSlice.injectEndpoints({
         },
       }),
       invalidatesTags: (result, error, { id }) => [
-        { type: "Transactions", id }, // 👈 Invalidate single
-        "Transactions", // 👈 Invalidate list if needed
+        { type: "Transactions", id },
+        "Transactions",
       ],
     }),
 
@@ -44,8 +46,8 @@ export const transactionApi = apiSlice.injectEndpoints({
         method: "DELETE",
       }),
       invalidatesTags: (result, error, id) => [
-        { type: "Transactions", id }, // 👈 Invalidate single
-        "Transactions", // 👈 Invalidate list
+        { type: "Transactions", id },
+        "Transactions",
       ],
     }),
   }),

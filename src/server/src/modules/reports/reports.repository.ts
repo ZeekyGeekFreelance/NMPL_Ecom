@@ -1,12 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/infra/database/database.config";
 
 export class ReportsRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
-
   async createReport(data: {
     type: string;
     format: string;
@@ -14,7 +8,7 @@ export class ReportsRepository {
     parameters: any;
     filePath: string | null;
   }) {
-    return this.prisma.report.create({
+    return prisma.report.create({
       data: {
         type: data.type,
         format: data.format,

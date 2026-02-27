@@ -35,6 +35,16 @@ class UserService {
     normalizeEmail(email) {
         return email.trim().toLowerCase();
     }
+    normalizePhone(phone, label = "Phone number") {
+        const normalized = String(phone !== null && phone !== void 0 ? phone : "").trim();
+        if (!normalized) {
+            throw new AppError_1.default(400, `${label} is required`);
+        }
+        if (!/^[0-9()+\-\s]{7,20}$/.test(normalized)) {
+            throw new AppError_1.default(400, `${label} must be 7-20 characters and contain only valid digits/symbols`);
+        }
+        return normalized;
+    }
     normalizeDisplayName(name, label = "name") {
         const normalized = String(name !== null && name !== void 0 ? name : "")
             .replace(/\s+/g, " ")
@@ -187,12 +197,13 @@ class UserService {
             }
             // Check if user already exists
             const normalizedEmail = this.normalizeEmail(adminData.email);
+            const normalizedPhone = this.normalizePhone(adminData.phone);
             const existingUser = yield this.userRepository.findUserByEmail(normalizedEmail);
             if (existingUser) {
                 throw new AppError_1.default(400, "User with this email already exists");
             }
             // Create new admin with ADMIN role (not SUPERADMIN)
-            const newAdmin = yield this.userRepository.createUser(Object.assign(Object.assign({}, adminData), { email: normalizedEmail, role: "ADMIN" }));
+            const newAdmin = yield this.userRepository.createUser(Object.assign(Object.assign({}, adminData), { email: normalizedEmail, phone: normalizedPhone, role: "ADMIN" }));
             return this.withAccountReference(newAdmin);
         });
     }
@@ -223,7 +234,7 @@ class UserService {
     }
     createDealer(dealerData, createdByUserId) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c;
+            var _a, _b;
             const actorUserId = this.assertUuid(createdByUserId, "actor user id");
             const creator = yield this.userRepository.findUserById(actorUserId);
             if (!creator) {
@@ -233,6 +244,7 @@ class UserService {
                 throw new AppError_1.default(403, "Only Admin or SuperAdmin can register dealers");
             }
             const normalizedEmail = this.normalizeEmail(dealerData.email);
+            const normalizedPhone = this.normalizePhone(dealerData.contactPhone, "Contact phone");
             const existingUser = yield this.userRepository.findUserByEmail(normalizedEmail);
             if (existingUser) {
                 throw new AppError_1.default(400, "User with this email already exists");
@@ -240,13 +252,14 @@ class UserService {
             const newDealerUser = yield this.userRepository.createUser({
                 name: dealerData.name,
                 email: normalizedEmail,
+                phone: normalizedPhone,
                 password: dealerData.password,
                 role: "USER",
             });
             yield this.userRepository.upsertDealerProfile({
                 userId: newDealerUser.id,
                 businessName: (_a = dealerData.businessName) !== null && _a !== void 0 ? _a : null,
-                contactPhone: (_b = dealerData.contactPhone) !== null && _b !== void 0 ? _b : null,
+                contactPhone: normalizedPhone,
                 status: "APPROVED",
                 approvedBy: actorUserId,
             });
@@ -255,7 +268,7 @@ class UserService {
                 yield this.dealerNotificationService.sendDealerAccountCreated({
                     recipientName: dealerUser.name,
                     recipientEmail: dealerUser.email,
-                    businessName: (_c = dealerData.businessName) !== null && _c !== void 0 ? _c : null,
+                    businessName: (_b = dealerData.businessName) !== null && _b !== void 0 ? _b : null,
                     accountReference: (0, accountReference_1.toAccountReference)(dealerUser.id),
                     temporaryPassword: dealerData.password,
                 });

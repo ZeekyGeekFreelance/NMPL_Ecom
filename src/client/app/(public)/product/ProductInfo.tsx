@@ -11,6 +11,8 @@ import { motion } from "framer-motion";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 import { useRouter } from "next/navigation";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import Link from "next/link";
+import { isCustomerDisplayRole, resolveDisplayRole } from "@/app/lib/userRole";
 
 interface ProductInfoProps {
   id: string;
@@ -44,8 +46,10 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const router = useRouter();
   const formatPrice = useFormatPrice();
   const [addToCart, { isLoading }] = useAddToCartMutation();
-  const isCustomerUser = isAuthenticated && user?.role === "USER";
+  const isCustomerUser =
+    isAuthenticated && isCustomerDisplayRole(resolveDisplayRole(user));
   const isGuest = !isAuthenticated;
+  const showDealerSignupNudge = !(isAuthenticated && user?.isDealer);
 
   const addSelectedVariantToCart = async (): Promise<boolean> => {
     if (!selectedVariant) {
@@ -423,6 +427,18 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
         <h3 className="text-lg font-semibold text-gray-900">Description</h3>
         <p className="text-gray-600 text-sm leading-relaxed">{description}</p>
       </div>
+
+      {showDealerSignupNudge && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          <span className="font-medium">Are you a dealer?</span>{" "}
+          <Link
+            href="/dealer/register"
+            className="text-indigo-600 hover:text-indigo-700 hover:underline"
+          >
+            Request dealer sign-up
+          </Link>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="space-y-3">

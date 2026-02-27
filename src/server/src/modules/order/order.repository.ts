@@ -1,17 +1,44 @@
 import prisma from "@/infra/database/database.config";
 import {
   CART_STATUS,
+  ORDER_CUSTOMER_ROLE,
   PAYMENT_STATUS,
   TRANSACTION_STATUS,
 } from "@prisma/client";
 import AppError from "@/shared/errors/AppError";
+import { toOrderReference } from "@/shared/utils/accountReference";
 
 export class OrderRepository {
+  private extractReferenceChecksum(reference: string): string | null {
+    const normalizedReference = (reference || "").trim().toUpperCase();
+    const [, token = ""] = normalizedReference.split("-");
+    const cleanToken = token.replace(/[^A-Z0-9]/g, "");
+
+    if (cleanToken.length < 2) {
+      return null;
+    }
+
+    return cleanToken.slice(-2).toLowerCase();
+  }
+
   async findAllOrders() {
     return prisma.order.findMany({
       orderBy: { orderDate: "desc" },
       include: {
         orderItems: { include: { variant: { include: { product: true } } } },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            dealerProfile: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -35,13 +62,58 @@ export class OrderRepository {
         address: true,
         shipment: true,
         transaction: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+            dealerProfile: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
       },
     });
+  }
+
+  async findOrderIdByReferenceForUser(
+    orderReference: string,
+    userId: string
+  ): Promise<string | null> {
+    const normalizedReference = (orderReference || "").trim().toUpperCase();
+    if (!normalizedReference) {
+      return null;
+    }
+
+    const checksum = this.extractReferenceChecksum(normalizedReference);
+    const candidates = await prisma.order.findMany({
+      where: {
+        userId,
+        ...(checksum ? { id: { endsWith: checksum } } : {}),
+      },
+      select: { id: true },
+      orderBy: { orderDate: "desc" },
+    });
+
+    const matches = candidates.filter(
+      (candidate) => toOrderReference(candidate.id) === normalizedReference
+    );
+
+    if (matches.length > 1) {
+      throw new AppError(409, "Multiple orders matched this reference");
+    }
+
+    return matches[0]?.id ?? null;
   }
 
   async createOrder(data: {
     userId: string;
     amount: number;
+    customerRoleSnapshot: ORDER_CUSTOMER_ROLE;
     cartId?: string;
     orderItems: { variantId: string; quantity: number; price: number }[];
   }) {
@@ -95,6 +167,7 @@ export class OrderRepository {
       const order = await tx.order.create({
         data: {
           userId: data.userId,
+          customerRoleSnapshot: data.customerRoleSnapshot,
           amount: computedAmount,
           status: "PLACED",
           orderItems: {

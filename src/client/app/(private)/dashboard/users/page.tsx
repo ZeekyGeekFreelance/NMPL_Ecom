@@ -10,6 +10,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users,
+  Building2,
   Loader2,
   AlertCircle,
   Pencil,
@@ -32,6 +33,7 @@ import RoleHierarchyGuard from "@/app/components/auth/RoleHierarchyGuard";
 import AdminActionGuard from "@/app/components/auth/AdminActionGuard";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
 import formatDate from "@/app/utils/formatDate";
+import { getRoleBadgeClass, resolveDisplayRole } from "@/app/lib/userRole";
 
 const UsersDashboard = () => {
   const { showToast } = useToast();
@@ -70,20 +72,11 @@ const UsersDashboard = () => {
     defaultValues: {
       name: "",
       email: "",
+      phone: "",
       password: "",
       confirmPassword: "",
     },
   });
-
-  // Get role color for display
-  const getRoleColor = (role: string) => {
-    const colors = {
-      USER: "bg-blue-100 text-blue-800 border-blue-200",
-      ADMIN: "bg-purple-100 text-purple-800 border-purple-200",
-      SUPERADMIN: "bg-red-100 text-red-800 border-red-200",
-    };
-    return colors[role as keyof typeof colors] || colors.USER;
-  };
 
   // Get role icon
   const getRoleIcon = (role: string) => {
@@ -92,6 +85,8 @@ const UsersDashboard = () => {
         return <Crown className="w-4 h-4" />;
       case "ADMIN":
         return <Shield className="w-4 h-4" />;
+      case "DEALER":
+        return <Building2 className="w-4 h-4" />;
       default:
         return <Users className="w-4 h-4" />;
     }
@@ -139,19 +134,24 @@ const UsersDashboard = () => {
     {
       key: "role",
       label: "Role",
-      render: (row: any) => (
-        <div className="flex items-center space-x-2">
-          {getRoleIcon(row.role)}
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRoleColor(
-              row.role
-            )}`}
-          >
-            {row.role}
-          </span>
-        </div>
-      ),
       sortable: true,
+      searchAccessor: (row: any) => resolveDisplayRole(row),
+      sortAccessor: (row: any) => resolveDisplayRole(row),
+      render: (row: any) => {
+        const displayRole = resolveDisplayRole(row);
+        return (
+          <div className="flex items-center space-x-2">
+            {getRoleIcon(displayRole)}
+          <span
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRoleBadgeClass(
+                displayRole
+              )}`}
+          >
+              {displayRole}
+          </span>
+          </div>
+        );
+      },
     },
 
     {
@@ -241,8 +241,8 @@ const UsersDashboard = () => {
 
   const handleCreateAdminSubmit = async (data: CreateAdminFormData) => {
     try {
-      const { name, email, password } = data;
-      await createAdmin({ name, email, password }).unwrap();
+      const { name, email, phone, password } = data;
+      await createAdmin({ name, email, phone, password }).unwrap();
       setIsCreateAdminModalOpen(false);
       createAdminForm.reset();
       showToast("Admin created successfully", "success");

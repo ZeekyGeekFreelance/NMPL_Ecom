@@ -95,6 +95,7 @@ export const GET_ALL_ANALYTICS = gql`
         id
         name
         email
+        customerType
         orderCount
         totalSpent
         engagementScore

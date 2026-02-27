@@ -15,6 +15,7 @@ import ProductFileUpload from "./ProductFileUpload";
 import { usePathname } from "next/navigation";
 import { ProductFormData } from "./product.types";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import usePageQuery from "@/app/hooks/network/usePageQuery";
 
 const ProductsDashboard = () => {
   const { showToast } = useToast();
@@ -26,9 +27,10 @@ const ProductsDashboard = () => {
 
   const pathname = usePathname();
   const shouldFetchProducts = pathname === "/dashboard/products";
+  const { page, setPage } = usePageQuery();
 
   const { data, isLoading, refetch } = useGetAllProductsQuery(
-    { select: { variants: true } }, // Ensure variants are included
+    { select: { variants: true }, page }, // Ensure variants are included
     { skip: !shouldFetchProducts }
   );
   const products = data?.products || [];
@@ -316,13 +318,14 @@ const ProductsDashboard = () => {
       <Table
         data={products}
         columns={columns}
-            isLoading={isLoading}
-            emptyMessage="No products available"
-            onRefresh={refetch}
-            totalPages={data?.totalPages}
-            totalResults={data?.totalResults}
-            resultsPerPage={data?.resultsPerPage}
+        isLoading={isLoading}
+        emptyMessage="No products available"
+        onRefresh={refetch}
+        totalPages={data?.totalPages}
+        totalResults={data?.totalResults}
+        resultsPerPage={data?.resultsPerPage}
         currentPage={data?.currentPage}
+        onPageChange={setPage}
       />
 
       <ProductModal

@@ -7,6 +7,7 @@ import {
   SalesReport,
   UserRetentionReport,
 } from "./reports.types";
+import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
 
 export class ReportsService {
   constructor(
@@ -198,6 +199,7 @@ export class ReportsService {
         userId: user.id,
         name: user.name || "Unknown",
         email: user.email,
+        customerType: resolveCustomerTypeFromUser(user),
         orderCount: user.orders.length,
         totalSpent: user.orders.reduce((sum, order) => sum + order.amount, 0),
       }))

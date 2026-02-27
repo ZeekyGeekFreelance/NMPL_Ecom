@@ -187,7 +187,7 @@ const OrderCard = ({
             </span>
           </button>
           <Link
-            href={`/orders/${order.id}`}
+            href={`/orders/${toOrderReference(order.id)}`}
             className="w-full flex items-center justify-center space-x-1 sm:space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-all duration-200 group text-sm sm:text-base"
           >
             <span>Track Order</span>

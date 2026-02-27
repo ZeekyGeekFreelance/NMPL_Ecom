@@ -1,5 +1,4 @@
 import {
-  PrismaClient,
   PAYMENT_STATUS,
   TRANSACTION_STATUS,
   CART_STATUS,
@@ -11,8 +10,7 @@ import { makeLogsService } from "../logs/logs.factory";
 import { CartService } from "../cart/cart.service";
 import { CartRepository } from "../cart/cart.repository";
 import { makeInvoiceService } from "../invoice/invoice.factory";
-
-const prisma = new PrismaClient();
+import prisma from "@/infra/database/database.config";
 
 export class WebhookService {
   private logsService = makeLogsService();

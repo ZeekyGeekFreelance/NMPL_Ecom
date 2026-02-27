@@ -1,7 +1,8 @@
 import AppError from "@/shared/errors/AppError";
 import { CartRepository } from "./cart.repository";
 import prisma from "@/infra/database/database.config";
-import { CART_EVENT, Prisma } from "@prisma/client";
+import { CART_EVENT } from "@prisma/client";
+import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
 
 const isDevelopment = process.env.NODE_ENV !== "production";
 const debugLog = (...args: unknown[]) => {
@@ -13,68 +14,13 @@ const debugLog = (...args: unknown[]) => {
 export class CartService {
   constructor(private cartRepository: CartRepository) {}
 
-  private isDealerTableMissing(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    return (
-      error.message.includes('relation "DealerProfile" does not exist') ||
-      error.message.includes('relation "DealerPriceMapping" does not exist')
-    );
-  }
-
-  private async getDealerPriceMap(
-    userId: string | undefined,
-    variantIds: string[]
-  ): Promise<Map<string, number>> {
-    if (!userId || !variantIds.length) {
-      return new Map();
-    }
-
-    try {
-      const dealerProfileRows = await prisma.$queryRaw<
-        Array<{ status: string }>
-      >(
-        Prisma.sql`
-          SELECT "status"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `
-      );
-
-      if (!dealerProfileRows.length || dealerProfileRows[0].status !== "APPROVED") {
-        return new Map();
-      }
-
-      const priceRows = await prisma.$queryRaw<
-        Array<{ variantId: string; customPrice: number }>
-      >(
-        Prisma.sql`
-          SELECT "variantId", "customPrice"
-          FROM "DealerPriceMapping"
-          WHERE "dealerId" = ${userId}
-            AND "variantId" IN (${Prisma.join(variantIds)})
-        `
-      );
-
-      return new Map(priceRows.map((row) => [row.variantId, row.customPrice]));
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        return new Map();
-      }
-      throw error;
-    }
-  }
-
   private async applyDealerPricingToCart(cart: any, userId?: string) {
     if (!userId || !cart?.cartItems?.length) {
       return cart;
     }
 
     const variantIds = cart.cartItems.map((item: any) => item.variantId);
-    const dealerPriceMap = await this.getDealerPriceMap(userId, variantIds);
+    const dealerPriceMap = await getDealerPriceMap(prisma, userId, variantIds);
 
     if (!dealerPriceMap.size) {
       return cart;

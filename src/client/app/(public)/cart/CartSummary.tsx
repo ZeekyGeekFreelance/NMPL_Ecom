@@ -1,6 +1,6 @@
 "use client";
 import { useInitiateCheckoutMutation } from "@/app/store/apis/CheckoutApi";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import useToast from "@/app/hooks/ui/useToast";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -26,6 +26,8 @@ const CartSummary: React.FC<CartSummaryProps> = ({
   const router = useRouter();
   const formatPrice = useFormatPrice();
   const [isCheckoutConfirmOpen, setIsCheckoutConfirmOpen] = useState(false);
+  const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
+  const checkoutInFlightRef = useRef(false);
 
   const [initiateCheckout, { isLoading }] = useInitiateCheckoutMutation();
 
@@ -36,11 +38,19 @@ const CartSummary: React.FC<CartSummaryProps> = ({
   const total = useMemo(() => subtotal + shippingFee, [subtotal, shippingFee]);
 
   const handleInitiateCheckout = async () => {
+    if (checkoutInFlightRef.current || isLoading) {
+      return;
+    }
+
+    checkoutInFlightRef.current = true;
+    setIsSubmittingCheckout(true);
+
     try {
       const res = await initiateCheckout(undefined).unwrap();
+      const payload = (res as any)?.data ?? res;
+      const orderId = payload?.orderId;
       const orderReference =
-        res?.orderReference ||
-        (res?.orderId ? toOrderReference(res.orderId) : null);
+        payload?.orderReference || (orderId ? toOrderReference(orderId) : null);
       showToast(
         orderReference
           ? `Your order ${orderReference} has been placed successfully.`
@@ -48,18 +58,23 @@ const CartSummary: React.FC<CartSummaryProps> = ({
         "success"
       );
 
-      if (res?.orderId) {
-        router.push(`/orders/${res.orderId}`);
+      if (orderReference) {
+        router.push(`/orders/${orderReference}`);
+      } else if (orderId) {
+        router.push(`/orders/${orderId}`);
       } else {
         router.push("/orders");
       }
     } catch (error: any) {
       showToast(error?.data?.message || "Failed to place order", "error");
+    } finally {
+      checkoutInFlightRef.current = false;
+      setIsSubmittingCheckout(false);
     }
   };
 
   const handleCheckoutClick = () => {
-    if (isLoading || totalItems === 0) {
+    if (isLoading || isSubmittingCheckout || totalItems === 0) {
       return;
     }
 
@@ -67,6 +82,10 @@ const CartSummary: React.FC<CartSummaryProps> = ({
   };
 
   const handleConfirmCheckout = async () => {
+    if (isLoading || isSubmittingCheckout) {
+      return;
+    }
+
     setIsCheckoutConfirmOpen(false);
     await handleInitiateCheckout();
   };
@@ -110,11 +129,13 @@ const CartSummary: React.FC<CartSummaryProps> = ({
 
         {isAuthenticated ? (
           <button
-            disabled={isLoading || totalItems === 0}
+            disabled={isLoading || isSubmittingCheckout || totalItems === 0}
             onClick={handleCheckoutClick}
             className="mt-4 w-full bg-indigo-600 text-white py-2.5 rounded-md font-medium text-sm hover:bg-indigo-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            {isLoading ? "Processing..." : "Proceed to Checkout"}
+            {isLoading || isSubmittingCheckout
+              ? "Processing..."
+              : "Proceed to Checkout"}
           </button>
         ) : (
           <Link
@@ -133,6 +154,9 @@ const CartSummary: React.FC<CartSummaryProps> = ({
         message="Are you sure you want to place this order now? Payment is currently managed outside the online gateway."
         onConfirm={handleConfirmCheckout}
         onCancel={() => setIsCheckoutConfirmOpen(false)}
+        confirmLabel="Place Order"
+        isConfirming={isSubmittingCheckout || isLoading}
+        disableCancelWhileConfirming
       />
     </>
   );

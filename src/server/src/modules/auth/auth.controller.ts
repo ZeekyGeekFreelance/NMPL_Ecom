@@ -20,9 +20,10 @@ export class AuthController {
 
   requestRegistrationOtp = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, purpose, requestDealerAccess } = req.body;
+      const { email, phone, purpose, requestDealerAccess } = req.body;
       const response = await this.authService.requestRegistrationOtp({
         email,
+        phone,
         purpose,
         requestDealerAccess,
       });
@@ -41,8 +42,10 @@ export class AuthController {
     const {
       name,
       email,
+      phone,
       password,
-      otpCode,
+      emailOtpCode,
+      phoneOtpCode,
       requestDealerAccess,
       businessName,
       contactPhone,
@@ -51,8 +54,10 @@ export class AuthController {
       await this.authService.registerUser({
         name,
         email,
+        phone,
         password,
-        otpCode,
+        emailOtpCode,
+        phoneOtpCode,
         requestDealerAccess,
         businessName,
         contactPhone,
@@ -77,7 +82,9 @@ export class AuthController {
           accountReference: user.accountReference,
           name: user.name,
           email: user.email,
+          phone: user.phone || null,
           role: user.role,
+          effectiveRole: user.effectiveRole || user.role,
           avatar: user.avatar || null,
           isDealer: user.isDealer || false,
           dealerStatus: user.dealerStatus || null,
@@ -120,7 +127,9 @@ export class AuthController {
           accountReference: user.accountReference,
           name: user.name,
           email: user.email,
+          phone: user.phone || null,
           role: user.role,
+          effectiveRole: user.effectiveRole || user.role,
           avatar: user.avatar,
           isDealer: user.isDealer || false,
           dealerStatus: user.dealerStatus || null,

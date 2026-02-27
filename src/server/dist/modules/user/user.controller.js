@@ -116,12 +116,12 @@ class UserController {
         }));
         this.createAdmin = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a, _b;
-            const { name, email, password } = req.body;
+            const { name, email, phone, password } = req.body;
             const currentUserId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
             if (!currentUserId) {
                 throw new AppError_1.default(401, "User not authenticated");
             }
-            const newAdmin = yield this.userService.createAdmin({ name, email, password }, currentUserId);
+            const newAdmin = yield this.userService.createAdmin({ name, email, phone, password }, currentUserId);
             (0, sendResponse_1.default)(res, 201, {
                 data: { user: newAdmin },
                 message: "Admin created successfully",

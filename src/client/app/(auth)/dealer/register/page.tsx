@@ -16,10 +16,10 @@ import { useRegistrationOtp } from "../../shared/useRegistrationOtp";
 interface DealerRegisterForm {
   name: string;
   email: string;
-  password: string;
-  otpCode: string;
-  businessName: string;
   contactPhone: string;
+  password: string;
+  emailOtpCode: string;
+  businessName: string;
 }
 
 const DealerRegister = () => {
@@ -53,6 +53,18 @@ const DealerRegister = () => {
     return result.success || result.error.errors[0].message;
   };
 
+  const phoneSchema = (value: string) => {
+    const result = z
+      .string()
+      .trim()
+      .regex(
+        /^[0-9()+\-\s]{7,20}$/,
+        "Phone number must be 7-20 characters and contain only valid digits/symbols"
+      )
+      .safeParse(value);
+    return result.success || result.error.errors[0].message;
+  };
+
   const {
     control,
     register,
@@ -65,15 +77,15 @@ const DealerRegister = () => {
     defaultValues: {
       name: "",
       email: "",
-      password: "",
-      otpCode: "",
-      businessName: "",
       contactPhone: "",
+      password: "",
+      emailOtpCode: "",
+      businessName: "",
     },
   });
 
   const handleSendOtp = async () => {
-    await sendOtp(getValues("email"));
+    await sendOtp(getValues("email"), getValues("contactPhone"));
   };
 
   const onSubmit = async (formData: DealerRegisterForm) => {
@@ -81,8 +93,9 @@ const DealerRegister = () => {
       await signup({
         name: formData.name,
         email: formData.email,
+        phone: formData.contactPhone,
         password: formData.password,
-        otpCode: formData.otpCode,
+        emailOtpCode: formData.emailOtpCode,
         requestDealerAccess: true,
         businessName: formData.businessName,
         contactPhone: formData.contactPhone,
@@ -148,46 +161,16 @@ const DealerRegister = () => {
                 className="py-2.5 text-sm"
               />
 
-              <PasswordField register={register} watch={watch} errors={errors} />
-
-              <button
-                type="button"
-                onClick={handleSendOtp}
-                disabled={!canSendOtp}
-                className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
-                  !canSendOtp ? "cursor-not-allowed opacity-70" : ""
-                }`}
-              >
-                {isSendingOtp
-                  ? "Sending OTP..."
-                  : cooldownSeconds > 0
-                  ? `Resend OTP in ${cooldownSeconds}s`
-                  : "Send OTP"}
-              </button>
-
-              {otpFeedback && (
-                <p
-                  className={`text-xs text-center ${
-                    otpFeedback.type === "error" ? "text-red-600" : "text-gray-600"
-                  }`}
-                >
-                  {otpFeedback.message}
-                </p>
-              )}
-
               <Input
-                name="otpCode"
+                name="contactPhone"
                 type="text"
-                placeholder="6-digit OTP"
+                placeholder="Contact phone"
                 control={control}
                 validation={{
-                  required: "OTP is required",
-                  pattern: {
-                    value: /^\d{6}$/,
-                    message: "OTP must be a valid 6-digit code",
-                  },
+                  required: "Contact phone is required",
+                  validate: phoneSchema,
                 }}
-                error={errors.otpCode?.message}
+                error={errors.contactPhone?.message}
                 className="py-2.5 text-sm"
               />
 
@@ -201,15 +184,57 @@ const DealerRegister = () => {
                 className="py-2.5 text-sm"
               />
 
-              <Input
-                name="contactPhone"
-                type="text"
-                placeholder="Contact phone"
-                control={control}
-                validation={{ required: "Contact phone is required" }}
-                error={errors.contactPhone?.message}
-                className="py-2.5 text-sm"
-              />
+              <PasswordField register={register} watch={watch} errors={errors} />
+
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Verify email</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Request OTP and enter the 6-digit email code to submit dealer access.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={!canSendOtp}
+                  className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
+                    !canSendOtp ? "cursor-not-allowed opacity-70" : ""
+                  }`}
+                >
+                  {isSendingOtp
+                    ? "Sending OTP..."
+                    : cooldownSeconds > 0
+                    ? `Resend OTP in ${cooldownSeconds}s`
+                    : "Send OTP"}
+                </button>
+
+                {otpFeedback && (
+                  <p
+                    className={`text-xs text-center ${
+                      otpFeedback.type === "error" ? "text-red-600" : "text-gray-600"
+                    }`}
+                  >
+                    {otpFeedback.message}
+                  </p>
+                )}
+
+                <Input
+                  name="emailOtpCode"
+                  type="text"
+                  placeholder="Email OTP"
+                  control={control}
+                  validation={{
+                    required: "Email OTP is required",
+                    pattern: {
+                      value: /^\d{6}$/,
+                      message: "Email OTP must be a valid 6-digit code",
+                    },
+                  }}
+                  error={errors.emailOtpCode?.message}
+                  className="py-2.5 text-sm"
+                />
+              </div>
 
               <button
                 type="submit"

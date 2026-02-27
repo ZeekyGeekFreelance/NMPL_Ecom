@@ -62,6 +62,11 @@ const TransactionDetailsPage = () => {
 
   const transaction = data?.transaction;
   const order = transaction?.order;
+  const transactionReferenceForDisplay = transaction?.id
+    ? toTransactionReference(transaction.id)
+    : id.toUpperCase().startsWith("TXN-")
+    ? id.toUpperCase()
+    : toTransactionReference(id);
 
   const currentStatus = useMemo(
     () => normalizeOrderStatus(transaction?.status),
@@ -269,7 +274,7 @@ const TransactionDetailsPage = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <OrderInformation order={order} className="lg:col-span-2" />
-        <CustomerInformation user={order?.user} />
+        <CustomerInformation user={order?.user} customerType={order?.customerType} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -285,9 +290,9 @@ const TransactionDetailsPage = () => {
         isOpen={isStatusConfirmModalOpen}
         title="Confirm Status Update"
         type="warning"
-        message={`Are you sure you want to update ${toTransactionReference(
-          id
-        )} from ${getOrderStatusLabel(currentStatus)} to ${getOrderStatusLabel(
+        message={`Are you sure you want to update ${transactionReferenceForDisplay} from ${getOrderStatusLabel(
+          currentStatus
+        )} to ${getOrderStatusLabel(
           selectedStatus
         )}?`}
         onConfirm={handleConfirmStatusUpdate}

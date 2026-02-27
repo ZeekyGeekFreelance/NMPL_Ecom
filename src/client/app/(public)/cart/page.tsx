@@ -20,6 +20,11 @@ import {
   updateGuestCartQuantity,
 } from "@/app/store/slices/GuestCartSlice";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import {
+  isAdminDisplayRole,
+  isCustomerDisplayRole,
+  resolveDisplayRole,
+} from "@/app/lib/userRole";
 
 const isDevelopment = process.env.NODE_ENV !== "production";
 const debugLog = (...args: unknown[]) => {
@@ -41,8 +46,10 @@ const formatVariantName = (item: any) => {
 const Cart = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const formatPrice = useFormatPrice();
-  const isCustomerUser = isAuthenticated && user?.role === "USER";
-  const isAdminOrSuperAdmin = isAuthenticated && user?.role !== "USER";
+  const displayRole = resolveDisplayRole(user);
+  const isCustomerUser = isAuthenticated && isCustomerDisplayRole(displayRole);
+  const isAdminOrSuperAdmin =
+    isAuthenticated && isAdminDisplayRole(displayRole);
 
   const dispatch = useAppDispatch();
   const guestItems = useAppSelector((state) => state.guestCart.items);

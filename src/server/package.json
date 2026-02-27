@@ -6,7 +6,7 @@
     "@types/express": "4.17.21"
   },
   "scripts": {
-    "dev": "nodemon",
+    "dev": "prisma generate && prisma migrate deploy && nodemon",
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma": "prisma",

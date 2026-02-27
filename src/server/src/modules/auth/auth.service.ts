@@ -3,6 +3,7 @@ import AppError from "@/shared/errors/AppError";
 import sendEmail from "@/shared/utils/sendEmail";
 import passwordResetTemplate from "@/shared/templates/passwordReset";
 import buildRegistrationOtpTemplate from "@/shared/templates/registrationOtp";
+import sendSms from "@/shared/utils/sendSms";
 import { tokenUtils, passwordUtils } from "@/shared/utils/authUtils";
 import {
   AuthResponse,
@@ -22,9 +23,11 @@ import { DealerNotificationService } from "@/shared/services/dealerNotification.
 import {
   clearRegistrationOtp,
   createRegistrationOtp,
+  isRegistrationPhoneOtpEnabled,
   RegistrationOtpRateLimitError,
   verifyAndConsumeRegistrationOtp,
 } from "@/shared/utils/auth/registrationOtp";
+import { resolveEffectiveRole } from "@/shared/utils/userRole";
 
 const resolveClientUrl = (): string => {
   return (
@@ -81,6 +84,7 @@ export class AuthService {
 
   async requestRegistrationOtp({
     email,
+    phone,
     purpose = "USER_PORTAL",
     requestDealerAccess = false,
   }: RequestRegistrationOtpParams): Promise<{
@@ -88,6 +92,7 @@ export class AuthService {
     resendAvailableInSeconds: number;
   }> {
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
     const existingUser = await this.authRepository.findUserByEmail(normalizedEmail);
     if (existingUser) {
       throw new BadRequestError(
@@ -95,10 +100,15 @@ export class AuthService {
       );
     }
 
+    if (!normalizedPhone) {
+      throw new BadRequestError("Phone number is required to request OTP.");
+    }
+
     let otpDetails: Awaited<ReturnType<typeof createRegistrationOtp>>;
     try {
       otpDetails = await createRegistrationOtp({
         email: normalizedEmail,
+        phone: normalizedPhone,
         purpose,
         requestDealerAccess,
       });
@@ -115,14 +125,20 @@ export class AuthService {
       );
     }
 
-    const { otpCode, expiresInSeconds, resendAvailableInSeconds } = otpDetails;
+    const {
+      emailOtpCode,
+      phoneOtpCode,
+      expiresInSeconds,
+      resendAvailableInSeconds,
+    } = otpDetails;
+    const phoneOtpEnabled = isRegistrationPhoneOtpEnabled();
     const purposeLabel =
       purpose === "DEALER_PORTAL" ? "Dealer Registration" : "Account Registration";
     const platformName = getPlatformName();
     const supportEmail = getSupportEmail();
     const otpTemplate = buildRegistrationOtpTemplate({
       platformName,
-      otpCode,
+      emailOtpCode,
       purposeLabel,
       expiresInMinutes: Math.floor(expiresInSeconds / 60),
       supportEmail,
@@ -143,10 +159,35 @@ export class AuthService {
       );
     }
 
+    if (phoneOtpEnabled) {
+      const phoneOtpMessage = [
+        `${platformName} phone verification code: ${phoneOtpCode}`,
+        `For ${purposeLabel}.`,
+        `Expires in ${Math.floor(expiresInSeconds / 60)} minutes.`,
+        "Do not share this code.",
+      ].join(" ");
+      const phoneOtpSent = await sendSms({
+        to: normalizedPhone,
+        body: phoneOtpMessage,
+      });
+
+      if (!phoneOtpSent) {
+        await clearRegistrationOtp(normalizedEmail);
+        throw new AppError(
+          500,
+          "Failed to send phone OTP. Please try again after SMS configuration is verified."
+        );
+      }
+    }
+
     return {
-      message: `OTP sent successfully. It will expire in ${Math.floor(
-        expiresInSeconds / 60
-      )} minutes.`,
+      message: phoneOtpEnabled
+        ? `OTP sent to your email and phone. It will expire in ${Math.floor(
+            expiresInSeconds / 60
+          )} minutes.`
+        : `OTP sent to your email. It will expire in ${Math.floor(
+            expiresInSeconds / 60
+          )} minutes.`,
       resendAvailableInSeconds,
     };
   }
@@ -154,13 +195,16 @@ export class AuthService {
   async registerUser({
     name,
     email,
+    phone,
     password,
-    otpCode,
+    emailOtpCode,
+    phoneOtpCode,
     requestDealerAccess = false,
     businessName,
     contactPhone,
   }: RegisterUserParams): Promise<AuthResponse> {
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = String(phone ?? "").trim();
     const existingUser = await this.authRepository.findUserByEmail(normalizedEmail);
 
     if (existingUser) {
@@ -170,15 +214,29 @@ export class AuthService {
       );
     }
 
-    if (!otpCode || !otpCode.trim()) {
+    if (!normalizedPhone) {
+      throw new BadRequestError("Phone number is required.");
+    }
+
+    if (!emailOtpCode || !emailOtpCode.trim()) {
       throw new BadRequestError(
-        "Registration OTP is required. Please use the OTP sent to your email."
+        "Email OTP is required. Please use the OTP sent during registration."
+      );
+    }
+
+    const phoneOtpEnabled = isRegistrationPhoneOtpEnabled();
+
+    if (phoneOtpEnabled && (!phoneOtpCode || !phoneOtpCode.trim())) {
+      throw new BadRequestError(
+        "Phone OTP is required. Please use the OTP sent during registration."
       );
     }
 
     const otpVerification = await verifyAndConsumeRegistrationOtp(
       normalizedEmail,
-      otpCode
+      normalizedPhone,
+      emailOtpCode,
+      phoneOtpEnabled ? phoneOtpCode : undefined
     );
 
     if (otpVerification.status === "EXPIRED") {
@@ -195,12 +253,15 @@ export class AuthService {
 
     if (otpVerification.status === "INVALID") {
       throw new BadRequestError(
-        `Invalid registration OTP code. ${otpVerification.attemptsRemaining} attempt(s) remaining.`
+        `Invalid registration OTP ${
+          phoneOtpEnabled ? "code(s)" : "code"
+        }. ${otpVerification.attemptsRemaining} attempt(s) remaining.`
       );
     }
 
     const otpContext = otpVerification.context;
     const shouldRequestDealerAccess = otpContext.requestDealerAccess === true;
+    const normalizedDealerContactPhone = contactPhone?.trim() || normalizedPhone;
 
     if (requestDealerAccess && !shouldRequestDealerAccess) {
       throw new BadRequestError(
@@ -211,6 +272,7 @@ export class AuthService {
     // Registrations created through this flow always start as USER role.
     const newUser = await this.authRepository.createUser({
       email: normalizedEmail,
+      phone: normalizedPhone,
       name,
       password,
       role: ROLE.USER,
@@ -222,7 +284,7 @@ export class AuthService {
       const dealerProfile = await this.authRepository.upsertDealerProfile({
         userId: newUser.id,
         businessName: businessName ?? null,
-        contactPhone: contactPhone ?? null,
+        contactPhone: normalizedDealerContactPhone,
         status: "PENDING",
         approvedBy: null,
       });
@@ -244,7 +306,7 @@ export class AuthService {
             <p>Name: ${name}</p>
             <p>Email: ${normalizedEmail}</p>
             <p>Business Name: ${businessName || "Not provided"}</p>
-            <p>Contact Phone: ${contactPhone || "Not provided"}</p>
+            <p>Contact Phone: ${normalizedDealerContactPhone || "Not provided"}</p>
           `,
         });
       }
@@ -255,7 +317,12 @@ export class AuthService {
           accountReference,
           name: newUser.name,
           email: newUser.email,
+          phone: newUser.phone,
           role: newUser.role,
+          effectiveRole: resolveEffectiveRole({
+            role: newUser.role,
+            dealerStatus: dealerProfile?.status,
+          }),
           avatar: null,
           isDealer: true,
           dealerStatus: dealerProfile?.status ?? "PENDING",
@@ -275,7 +342,9 @@ export class AuthService {
         accountReference,
         name: newUser.name,
         email: newUser.email,
+        phone: newUser.phone,
         role: newUser.role,
+        effectiveRole: resolveEffectiveRole({ role: newUser.role }),
         avatar: null,
         isDealer: false,
         dealerStatus: null,
@@ -292,8 +361,10 @@ export class AuthService {
       id: string;
       accountReference: string;
       role: ROLE;
+      effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
       name: string;
       email: string;
+      phone: string | null;
       avatar: string | null;
       isDealer?: boolean;
       dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
@@ -351,6 +422,10 @@ export class AuthService {
       user: {
         accountReference: toAccountReference(user.id),
         ...user,
+        effectiveRole: resolveEffectiveRole({
+          role: user.role,
+          dealerStatus: dealerProfile?.status,
+        }),
         isDealer: !!dealerProfile,
         dealerStatus: dealerProfile?.status ?? null,
         dealerBusinessName: dealerProfile?.businessName ?? null,
@@ -444,7 +519,9 @@ export class AuthService {
       accountReference: string;
       name: string;
       email: string;
+      phone: string | null;
       role: string;
+      effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
       avatar: string | null;
       isDealer?: boolean;
       dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
@@ -499,7 +576,12 @@ export class AuthService {
       accountReference: toAccountReference(user.id),
       name: user.name,
       email: user.email,
+      phone: user.phone ?? null,
       role: user.role,
+      effectiveRole: resolveEffectiveRole({
+        role: user.role,
+        dealerStatus: user.dealerProfile?.status,
+      }),
       avatar: user.avatar,
       isDealer: !!user.dealerProfile,
       dealerStatus: user.dealerProfile?.status ?? null,

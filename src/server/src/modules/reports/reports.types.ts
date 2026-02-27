@@ -33,6 +33,7 @@ export interface UserRetentionReport {
     userId: string;
     name: string;
     email: string;
+    customerType?: "USER" | "DEALER";
     orderCount: number;
     totalSpent: number;
   }[];

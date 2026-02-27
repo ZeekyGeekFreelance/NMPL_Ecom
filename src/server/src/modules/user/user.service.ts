@@ -7,6 +7,7 @@ import {
 import { DealerNotificationService } from "@/shared/services/dealerNotification.service";
 import { DealerPricingChangeRow } from "@/shared/templates/dealerNotifications";
 import { toAccountReference } from "@/shared/utils/accountReference";
+import { resolveEffectiveRoleFromUser } from "@/shared/utils/userRole";
 
 export class UserService {
   private static readonly UUID_PATTERN =
@@ -34,6 +35,22 @@ export class UserService {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  private normalizePhone(phone: string | undefined, label = "Phone number"): string {
+    const normalized = String(phone ?? "").trim();
+    if (!normalized) {
+      throw new AppError(400, `${label} is required`);
+    }
+
+    if (!/^[0-9()+\-\s]{7,20}$/.test(normalized)) {
+      throw new AppError(
+        400,
+        `${label} must be 7-20 characters and contain only valid digits/symbols`
+      );
+    }
+
+    return normalized;
   }
 
   private normalizeDisplayName(name: string | undefined, label = "name"): string {
@@ -71,10 +88,26 @@ export class UserService {
 
   private withAccountReference<T extends { id: string }>(entity: T): T & {
     accountReference: string;
+    effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
   } {
+    const candidate = entity as T & {
+      role?: unknown;
+      dealerStatus?: unknown;
+      dealerProfile?: { status?: unknown } | null;
+    };
+
     return {
       ...entity,
       accountReference: toAccountReference(entity.id),
+      ...(candidate.role !== undefined
+        ? {
+            effectiveRole: resolveEffectiveRoleFromUser({
+              role: candidate.role,
+              dealerStatus: candidate.dealerStatus,
+              dealerProfile: candidate.dealerProfile,
+            }),
+          }
+        : {}),
     };
   }
 
@@ -233,6 +266,7 @@ export class UserService {
     adminData: {
       name: string;
       email: string;
+      phone: string;
       password: string;
     },
     createdByUserId: string
@@ -250,6 +284,7 @@ export class UserService {
 
     // Check if user already exists
     const normalizedEmail = this.normalizeEmail(adminData.email);
+    const normalizedPhone = this.normalizePhone(adminData.phone);
     const existingUser = await this.userRepository.findUserByEmail(normalizedEmail);
     if (existingUser) {
       throw new AppError(400, "User with this email already exists");
@@ -259,6 +294,7 @@ export class UserService {
     const newAdmin = await this.userRepository.createUser({
       ...adminData,
       email: normalizedEmail,
+      phone: normalizedPhone,
       role: "ADMIN",
     });
 
@@ -273,6 +309,10 @@ export class UserService {
       name: dealer.name,
       email: dealer.email,
       role: dealer.role,
+      effectiveRole: resolveEffectiveRoleFromUser({
+        role: dealer.role,
+        dealerStatus: dealer.status,
+      }),
       avatar: dealer.avatar,
       createdAt: dealer.createdAt,
       updatedAt: dealer.updatedAt,
@@ -295,7 +335,7 @@ export class UserService {
       email: string;
       password: string;
       businessName?: string;
-      contactPhone?: string;
+      contactPhone: string;
     },
     createdByUserId: string
   ) {
@@ -314,6 +354,10 @@ export class UserService {
     }
 
     const normalizedEmail = this.normalizeEmail(dealerData.email);
+    const normalizedPhone = this.normalizePhone(
+      dealerData.contactPhone,
+      "Contact phone"
+    );
     const existingUser = await this.userRepository.findUserByEmail(
       normalizedEmail
     );
@@ -324,6 +368,7 @@ export class UserService {
     const newDealerUser = await this.userRepository.createUser({
       name: dealerData.name,
       email: normalizedEmail,
+      phone: normalizedPhone,
       password: dealerData.password,
       role: "USER",
     });
@@ -331,7 +376,7 @@ export class UserService {
     await this.userRepository.upsertDealerProfile({
       userId: newDealerUser.id,
       businessName: dealerData.businessName ?? null,
-      contactPhone: dealerData.contactPhone ?? null,
+      contactPhone: normalizedPhone,
       status: "APPROVED",
       approvedBy: actorUserId,
     });

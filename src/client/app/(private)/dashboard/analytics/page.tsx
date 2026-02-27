@@ -123,7 +123,12 @@ const AnalyticsDashboard = () => {
   const queryParams = useMemo(
     () => ({
       timePeriod: timePeriod || "allTime",
-      year: useCustomRange ? undefined : year ? parseInt(year, 10) : undefined,
+      year:
+        useCustomRange || timePeriod !== "allTime"
+          ? undefined
+          : year
+          ? parseInt(year, 10)
+          : undefined,
       startDate: useCustomRange && startDate ? startDate : undefined,
       endDate: useCustomRange && endDate ? endDate : undefined,
     }),
@@ -223,10 +228,13 @@ const AnalyticsDashboard = () => {
     data?.userAnalytics?.topUsers?.slice(0, 10).map((item: any) => ({
       id: item.id,
       name: item.name,
-      subtitle: item.email,
+      subtitle: `${item.email} | ${
+        item.customerType === "DEALER" ? "Dealer" : "User"
+      }`,
       primaryInfo: formatPrice(item.totalSpent),
       secondaryInfo: `${item.orderCount} orders`,
       email: item.email,
+      customerType: item.customerType,
       orderCount: item.orderCount,
       totalSpent: formatPrice(item.totalSpent),
       engagementScore: item.engagementScore,
@@ -284,7 +292,11 @@ const AnalyticsDashboard = () => {
                 value={field.value ?? null}
                 label="Year"
                 className="w-full"
-                disabled={useCustomRange || hasIncompleteCustomRange}
+                disabled={
+                  timePeriod !== "allTime" ||
+                  useCustomRange ||
+                  hasIncompleteCustomRange
+                }
               />
             )}
           />

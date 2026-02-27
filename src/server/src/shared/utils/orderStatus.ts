@@ -1,0 +1,7 @@
+export const REJECTED_ORDER_STATUS_VALUES = [
+  "REJECTED",
+  "CANCELED",
+  "CANCELLED",
+  "RETURNED",
+  "REFUNDED",
+] as const;

@@ -26,15 +26,22 @@ const OTP_MAX_VERIFY_ATTEMPTS = toPositiveInteger(
   process.env.REGISTRATION_OTP_MAX_ATTEMPTS,
   5
 );
+const REGISTRATION_PHONE_OTP_ENABLED =
+  (process.env.REGISTRATION_PHONE_OTP_ENABLED || "false")
+    .trim()
+    .toLowerCase() === "true";
 
 export interface StoredRegistrationOtp {
-  hashedOtp: string;
+  hashedEmailOtp: string;
+  hashedPhoneOtp?: string | null;
+  normalizedPhone: string;
   purpose: RegistrationPurpose;
   requestDealerAccess: boolean;
 }
 
 interface CreateRegistrationOtpInput {
   email: string;
+  phone: string;
   purpose?: RegistrationPurpose;
   requestDealerAccess?: boolean;
 }
@@ -52,12 +59,19 @@ export class RegistrationOtpRateLimitError extends Error {
 }
 
 export type VerifyRegistrationOtpResult =
-  | { status: "VERIFIED"; context: StoredRegistrationOtp }
+  | {
+      status: "VERIFIED";
+      context: Pick<
+        StoredRegistrationOtp,
+        "purpose" | "requestDealerAccess" | "normalizedPhone"
+      >;
+    }
   | { status: "INVALID"; attemptsRemaining: number }
   | { status: "LOCKED"; attemptsRemaining: 0 }
   | { status: "EXPIRED" };
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+const normalizePhone = (phone: string): string => phone.trim();
 
 const buildOtpKey = (email: string): string =>
   `${OTP_KEY_PREFIX}${normalizeEmail(email)}`;
@@ -68,10 +82,14 @@ const buildAttemptKey = (email: string): string =>
 const buildCooldownKey = (email: string): string =>
   `${OTP_COOLDOWN_KEY_PREFIX}${normalizeEmail(email)}`;
 
-const hashOtp = (email: string, otpCode: string): string =>
+const hashOtp = (
+  identifier: string,
+  otpCode: string,
+  channel: "EMAIL" | "PHONE"
+): string =>
   crypto
     .createHash("sha256")
-    .update(`${normalizeEmail(email)}:${otpCode.trim()}`)
+    .update(`${identifier}:${channel}:${otpCode.trim()}`)
     .digest("hex");
 
 const generateOtp = (): string =>
@@ -113,13 +131,17 @@ const registerFailedAttempt = async (
 
 export const createRegistrationOtp = async ({
   email,
+  phone,
   purpose = "USER_PORTAL",
   requestDealerAccess = false,
 }: CreateRegistrationOtpInput): Promise<{
-  otpCode: string;
+  emailOtpCode: string;
+  phoneOtpCode?: string;
   expiresInSeconds: number;
   resendAvailableInSeconds: number;
 }> => {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
   const cooldownKey = buildCooldownKey(email);
   const retryAfterSeconds = await redisClient.ttl(cooldownKey);
 
@@ -127,22 +149,36 @@ export const createRegistrationOtp = async ({
     throw new RegistrationOtpRateLimitError(retryAfterSeconds);
   }
 
-  const otpCode = generateOtp();
+  const emailOtpCode = generateOtp();
+  const phoneOtpCode = REGISTRATION_PHONE_OTP_ENABLED
+    ? generateOtp()
+    : undefined;
   const payload: StoredRegistrationOtp = {
-    hashedOtp: hashOtp(email, otpCode),
+    hashedEmailOtp: hashOtp(normalizedEmail, emailOtpCode, "EMAIL"),
+    hashedPhoneOtp:
+      phoneOtpCode !== undefined
+        ? hashOtp(normalizedPhone, phoneOtpCode, "PHONE")
+        : null,
+    normalizedPhone,
     purpose,
     requestDealerAccess,
   };
 
   await redisClient
     .multi()
-    .set(buildOtpKey(email), JSON.stringify(payload), "EX", OTP_EXPIRY_SECONDS)
+    .set(
+      buildOtpKey(normalizedEmail),
+      JSON.stringify(payload),
+      "EX",
+      OTP_EXPIRY_SECONDS
+    )
     .set(cooldownKey, "1", "EX", OTP_RESEND_COOLDOWN_SECONDS)
-    .del(buildAttemptKey(email))
+    .del(buildAttemptKey(normalizedEmail))
     .exec();
 
   return {
-    otpCode,
+    emailOtpCode,
+    phoneOtpCode,
     expiresInSeconds: OTP_EXPIRY_SECONDS,
     resendAvailableInSeconds: OTP_RESEND_COOLDOWN_SECONDS,
   };
@@ -158,9 +194,13 @@ export const clearRegistrationOtp = async (email: string): Promise<void> => {
 
 export const verifyAndConsumeRegistrationOtp = async (
   email: string,
-  otpCode: string
+  phone: string,
+  emailOtpCode: string,
+  phoneOtpCode?: string
 ): Promise<VerifyRegistrationOtpResult> => {
-  const otpKey = buildOtpKey(email);
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
+  const otpKey = buildOtpKey(normalizedEmail);
   const stored = await redisClient.get(otpKey);
   if (!stored) {
     return { status: "EXPIRED" };
@@ -170,16 +210,28 @@ export const verifyAndConsumeRegistrationOtp = async (
   try {
     payload = JSON.parse(stored) as StoredRegistrationOtp;
   } catch {
-    await clearRegistrationOtp(email);
+    await clearRegistrationOtp(normalizedEmail);
     return { status: "EXPIRED" };
   }
 
-  const inputHash = hashOtp(email, otpCode);
-  if (!safeHashEquals(payload.hashedOtp, inputHash)) {
-    const attemptsRemaining = await registerFailedAttempt(email, otpKey);
+  const emailOtpMatches = safeHashEquals(
+    payload.hashedEmailOtp,
+    hashOtp(normalizedEmail, emailOtpCode, "EMAIL")
+  );
+  const phoneOtpMatches = !REGISTRATION_PHONE_OTP_ENABLED ||
+    (!!payload.hashedPhoneOtp &&
+      !!phoneOtpCode &&
+      safeHashEquals(
+        payload.hashedPhoneOtp,
+        hashOtp(normalizedPhone, phoneOtpCode, "PHONE")
+      ));
+  const phoneMatchesRequest = payload.normalizedPhone === normalizedPhone;
+
+  if (!phoneMatchesRequest || !emailOtpMatches || !phoneOtpMatches) {
+    const attemptsRemaining = await registerFailedAttempt(normalizedEmail, otpKey);
 
     if (attemptsRemaining <= 0) {
-      await clearRegistrationOtp(email);
+      await clearRegistrationOtp(normalizedEmail);
       return { status: "LOCKED", attemptsRemaining: 0 };
     }
 
@@ -189,9 +241,16 @@ export const verifyAndConsumeRegistrationOtp = async (
     };
   }
 
-  await redisClient.multi().del(otpKey).del(buildAttemptKey(email)).exec();
+  await redisClient.multi().del(otpKey).del(buildAttemptKey(normalizedEmail)).exec();
   return {
     status: "VERIFIED",
-    context: payload,
+    context: {
+      purpose: payload.purpose,
+      requestDealerAccess: payload.requestDealerAccess,
+      normalizedPhone: payload.normalizedPhone,
+    },
   };
 };
+
+export const isRegistrationPhoneOtpEnabled = (): boolean =>
+  REGISTRATION_PHONE_OTP_ENABLED;

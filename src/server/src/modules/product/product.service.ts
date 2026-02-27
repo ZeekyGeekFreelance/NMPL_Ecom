@@ -5,9 +5,9 @@ import slugify from "@/shared/utils/slugify";
 import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import prisma from "@/infra/database/database.config";
-import { Prisma } from "@prisma/client";
 import { AttributeRepository } from "../attribute/attribute.repository";
 import { VariantRepository } from "../variant/variant.repository";
+import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
 
 export class ProductService {
   constructor(
@@ -15,64 +15,6 @@ export class ProductService {
     private attributeRepository: AttributeRepository,
     private variantRepository: VariantRepository
   ) {}
-
-  private isDealerTableMissing(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    return (
-      error.message.includes('relation "DealerProfile" does not exist') ||
-      error.message.includes('relation "DealerPriceMapping" does not exist')
-    );
-  }
-
-  private async getDealerPriceMap(
-    userId: string | undefined,
-    variantIds: string[]
-  ): Promise<Map<string, number>> {
-    if (!userId || !variantIds.length) {
-      return new Map();
-    }
-
-    try {
-      const dealerProfile = await prisma.$queryRaw<Array<{ status: string }>>(
-        Prisma.sql`
-          SELECT "status"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `
-      );
-
-      if (!dealerProfile.length || dealerProfile[0].status !== "APPROVED") {
-        return new Map();
-      }
-
-      const dealerPrices = await prisma.$queryRaw<
-        Array<{ variantId: string; customPrice: number }>
-      >(
-        Prisma.sql`
-          SELECT "variantId", "customPrice"
-          FROM "DealerPriceMapping"
-          WHERE "dealerId" = ${userId}
-            AND "variantId" IN (${Prisma.join(variantIds)})
-        `
-      );
-
-      return new Map(
-        dealerPrices.map((dealerPrice) => [
-          dealerPrice.variantId,
-          dealerPrice.customPrice,
-        ])
-      );
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        return new Map();
-      }
-      throw error;
-    }
-  }
 
   private async applyDealerPricingToProduct(
     product: any,
@@ -83,7 +25,7 @@ export class ProductService {
     }
 
     const variantIds = product.variants.map((variant: any) => variant.id);
-    const dealerPriceMap = await this.getDealerPriceMap(userId, variantIds);
+    const dealerPriceMap = await getDealerPriceMap(prisma, userId, variantIds);
 
     if (!dealerPriceMap.size) {
       return product;
@@ -115,7 +57,7 @@ export class ProductService {
       return products;
     }
 
-    const dealerPriceMap = await this.getDealerPriceMap(userId, variantIds);
+    const dealerPriceMap = await getDealerPriceMap(prisma, userId, variantIds);
     if (!dealerPriceMap.size) {
       return products;
     }

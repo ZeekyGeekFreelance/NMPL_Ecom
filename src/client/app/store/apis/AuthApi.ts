@@ -7,7 +7,9 @@ interface User {
   accountReference?: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: string;
+  effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
   avatar: string | null;
   isDealer?: boolean;
   dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
@@ -21,6 +23,7 @@ export const authApi = apiSlice.injectEndpoints({
       { message: string; resendAvailableInSeconds?: number },
       {
         email: string;
+        phone: string;
         purpose?: "USER_PORTAL" | "DEALER_PORTAL";
         requestDealerAccess?: boolean;
       }
@@ -54,8 +57,10 @@ export const authApi = apiSlice.injectEndpoints({
       {
         name: string;
         email: string;
+        phone: string;
         password: string;
-        otpCode: string;
+        emailOtpCode: string;
+        phoneOtpCode?: string;
         requestDealerAccess?: boolean;
         businessName?: string;
         contactPhone?: string;

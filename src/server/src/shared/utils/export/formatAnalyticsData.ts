@@ -423,12 +423,24 @@ const buildUserRetentionSections = (
   {
     key: "retention-top-users",
     title: "Top Users",
-    columns: ["SN No.", "User ID", "Name", "Email", "Order Count", "Total Spent"],
+    columns: [
+      "SN No.",
+      "User ID",
+      "Name",
+      "Email",
+      "Customer Type",
+      "Order Count",
+      "Total Spent",
+    ],
     rows: (userRetention.topUsers || []).map((user, index) => ({
       "SN No.": index + 1,
       "User ID": toExportCell("User ID", user.userId),
       Name: toExportCell("Name", user.name),
       Email: toExportCell("Email", user.email),
+      "Customer Type": toExportCell(
+        "Customer Type",
+        user.customerType ?? "UNKNOWN"
+      ),
       "Order Count": toExportCell(
         "Order Count",
         toNumber(user.orderCount) ?? EMPTY_VALUE
@@ -515,6 +527,7 @@ const buildUserAnalyticsSections = (
       "User ID",
       "Name",
       "Email",
+      "Customer Type",
       "Order Count",
       "Total Spent",
       "Engagement Score",
@@ -524,6 +537,10 @@ const buildUserAnalyticsSections = (
       "User ID": toExportCell("User ID", (user as any).userId || user.id),
       Name: toExportCell("Name", user.name),
       Email: toExportCell("Email", user.email),
+      "Customer Type": toExportCell(
+        "Customer Type",
+        (user as any).customerType ?? "UNKNOWN"
+      ),
       "Order Count": toExportCell(
         "Order Count",
         toNumber(user.orderCount) ?? EMPTY_VALUE

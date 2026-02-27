@@ -7,10 +7,14 @@ import { AlertTriangle, X, Check } from "lucide-react";
 interface ConfirmModalProps {
   isOpen: boolean;
   message: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
   title?: string;
   type?: "warning" | "danger" | "info";
+  confirmLabel?: string;
+  cancelLabel?: string;
+  isConfirming?: boolean;
+  disableCancelWhileConfirming?: boolean;
 }
 
 const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -20,6 +24,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onCancel,
   title = "Confirm Action",
   type = "warning",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  isConfirming = false,
+  disableCancelWhileConfirming = false,
 }) => {
   // Define colors based on type
   const getTypeStyles = () => {
@@ -96,18 +104,20 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
             <div className="flex justify-end space-x-4 mt-6">
               <button
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 flex items-center font-medium transition-colors"
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 flex items-center font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={onCancel}
+                disabled={isConfirming && disableCancelWhileConfirming}
               >
                 <X size={16} className="mr-1" />
-                Cancel
+                {cancelLabel}
               </button>
               <button
-                className={`px-4 py-2 text-white rounded-md flex items-center font-medium transition-colors ${confirmButton}`}
+                className={`px-4 py-2 text-white rounded-md flex items-center font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${confirmButton}`}
                 onClick={onConfirm}
+                disabled={isConfirming}
               >
                 <Check size={16} className="mr-1" />
-                Confirm
+                {isConfirming ? "Processing..." : confirmLabel}
               </button>
             </div>
           </motion.div>

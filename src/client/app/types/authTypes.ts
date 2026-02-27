@@ -3,8 +3,10 @@ export interface User {
   accountReference?: string;
   name: string;
   role: string;
+  effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
   avatar: string | null;
   email: string;
+  phone?: string | null;
   isDealer?: boolean;
   dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   dealerBusinessName?: string | null;
@@ -14,8 +16,10 @@ export interface User {
     accountReference?: string;
     name: string;
     role: string;
+    effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
     avatar: string | null;
     email: string;
+    phone?: string | null;
     isDealer?: boolean;
     dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
     dealerBusinessName?: string | null;

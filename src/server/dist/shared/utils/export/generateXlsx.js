@@ -137,6 +137,7 @@ function generateXLSX(data) {
             const sheet = workbook.addWorksheet(sheetName);
             fillSheet(sheet, section);
         });
-        return workbook.xlsx.writeBuffer();
+        const buffer = yield workbook.xlsx.writeBuffer();
+        return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
     });
 }

@@ -7,9 +7,7 @@ import { Loader2 } from "lucide-react";
 import PasswordField from "@/app/components/molecules/PasswordField";
 import { z } from "zod";
 import MainLayout from "@/app/components/templates/MainLayout";
-import {
-  useSignupMutation,
-} from "@/app/store/apis/AuthApi";
+import { useSignupMutation } from "@/app/store/apis/AuthApi";
 import GoogleIcon from "@/app/assets/icons/google.png";
 import FacebookIcon from "@/app/assets/icons/facebook.png";
 import TwitterIcon from "@/app/assets/icons/twitter.png";
@@ -22,8 +20,9 @@ import { useRegistrationOtp } from "../shared/useRegistrationOtp";
 interface InputForm {
   name: string;
   email: string;
+  phone: string;
   password: string;
-  otpCode: string;
+  emailOtpCode: string;
 }
 
 const nameSchema = (value: string) => {
@@ -36,6 +35,18 @@ const nameSchema = (value: string) => {
 
 const emailSchema = (value: string) => {
   const result = z.string().email("Invalid email address").safeParse(value);
+  return result.success || result.error.errors[0].message;
+};
+
+const phoneSchema = (value: string) => {
+  const result = z
+    .string()
+    .trim()
+    .regex(
+      /^[0-9()+\-\s]{7,20}$/,
+      "Phone number must be 7-20 characters and contain only valid digits/symbols"
+    )
+    .safeParse(value);
   return result.success || result.error.errors[0].message;
 };
 
@@ -68,8 +79,9 @@ const Signup = () => {
     defaultValues: {
       name: "",
       email: "",
+      phone: "",
       password: "",
-      otpCode: "",
+      emailOtpCode: "",
     },
   });
 
@@ -88,7 +100,8 @@ const Signup = () => {
 
   const handleSendOtp = async () => {
     const email = getValues("email");
-    await sendOtp(email);
+    const phone = getValues("phone");
+    await sendOtp(email, phone);
   };
 
   return (
@@ -133,46 +146,68 @@ const Signup = () => {
                 className="py-2.5 text-sm"
               />
 
-              <button
-                type="button"
-                onClick={handleSendOtp}
-                disabled={!canSendOtp}
-                className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
-                  !canSendOtp ? "cursor-not-allowed opacity-70" : ""
-                }`}
-              >
-                {isSendingOtp
-                  ? "Sending OTP..."
-                  : cooldownSeconds > 0
-                  ? `Resend OTP in ${cooldownSeconds}s`
-                  : "Send OTP"}
-              </button>
-
-              {otpFeedback && (
-                <p
-                  className={`text-xs text-center ${
-                    otpFeedback.type === "error" ? "text-red-600" : "text-gray-600"
-                  }`}
-                >
-                  {otpFeedback.message}
-                </p>
-              )}
-
               <Input
-                name="otpCode"
+                name="phone"
                 type="text"
-                placeholder="Enter OTP"
+                placeholder="Phone number"
                 control={control}
                 validation={{
-                  required: "OTP is required",
-                  pattern: {
-                    value: /^\d{6}$/,
-                    message: "OTP must be a valid 6-digit code",
-                  },
+                  required: "Phone number is required",
+                  validate: phoneSchema,
                 }}
-                error={errors.otpCode?.message}
+                error={errors.phone?.message}
                 className="py-2.5 text-sm"
               />
+
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Verify email</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Request OTP and enter the 6-digit email code to continue.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={!canSendOtp}
+                  className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
+                    !canSendOtp ? "cursor-not-allowed opacity-70" : ""
+                  }`}
+                >
+                  {isSendingOtp
+                    ? "Sending OTP..."
+                    : cooldownSeconds > 0
+                    ? `Resend OTP in ${cooldownSeconds}s`
+                    : "Send OTP"}
+                </button>
+
+                {otpFeedback && (
+                  <p
+                    className={`text-xs text-center ${
+                      otpFeedback.type === "error" ? "text-red-600" : "text-gray-600"
+                    }`}
+                  >
+                    {otpFeedback.message}
+                  </p>
+                )}
+
+                <Input
+                  name="emailOtpCode"
+                  type="text"
+                  placeholder="Email OTP"
+                  control={control}
+                  validation={{
+                    required: "Email OTP is required",
+                    pattern: {
+                      value: /^\d{6}$/,
+                      message: "Email OTP must be a valid 6-digit code",
+                    },
+                  }}
+                  error={errors.emailOtpCode?.message}
+                  className="py-2.5 text-sm"
+                />
+              </div>
 
               <PasswordField register={register} watch={watch} errors={errors} />
 

@@ -79,6 +79,14 @@ __decorate([
     __metadata("design:type", String)
 ], CreateAdminDto.prototype, "email", void 0);
 __decorate([
+    (0, class_validator_1.IsNotEmpty)({ message: "Phone number is required" }),
+    (0, class_validator_1.IsString)({ message: "Phone number must be a string" }),
+    (0, class_validator_1.Matches)(/^[0-9()+\-\s]{7,20}$/, {
+        message: "Phone number must be 7-20 characters and contain only valid digits/symbols",
+    }),
+    __metadata("design:type", String)
+], CreateAdminDto.prototype, "phone", void 0);
+__decorate([
     (0, class_validator_1.IsNotEmpty)({ message: "Password is required" }),
     (0, class_validator_1.MinLength)(6, { message: "Password must be at least 6 characters long" }),
     (0, class_validator_1.IsString)({ message: "Password must be a string" }),
@@ -110,8 +118,11 @@ __decorate([
     __metadata("design:type", String)
 ], CreateDealerDto.prototype, "businessName", void 0);
 __decorate([
-    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNotEmpty)({ message: "Contact phone is required" }),
     (0, class_validator_1.IsString)({ message: "Contact phone must be a string" }),
+    (0, class_validator_1.Matches)(/^[0-9()+\-\s]{7,20}$/, {
+        message: "Contact phone must be 7-20 characters and contain only valid digits/symbols",
+    }),
     __metadata("design:type", String)
 ], CreateDealerDto.prototype, "contactPhone", void 0);
 class UpdateDealerStatusDto {

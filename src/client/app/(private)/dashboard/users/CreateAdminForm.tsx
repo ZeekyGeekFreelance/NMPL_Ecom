@@ -1,10 +1,11 @@
 "use client";
 import { Controller, UseFormReturn } from "react-hook-form";
-import { UserPlus, Mail, User, Lock } from "lucide-react";
+import { UserPlus, Mail, User, Lock, Phone } from "lucide-react";
 
 export interface CreateAdminFormData {
   name: string;
   email: string;
+  phone: string;
   password: string;
   confirmPassword: string;
 }
@@ -94,6 +95,39 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
         </div>
         {errors.email && (
           <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+        )}
+      </div>
+
+      {/* Phone */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Phone Number
+        </label>
+        <div className="relative">
+          <Controller
+            name="phone"
+            control={control}
+            rules={{
+              required: "Phone number is required",
+              pattern: {
+                value: /^[0-9()+\-\s]{7,20}$/,
+                message:
+                  "Phone number must be 7-20 characters and contain only valid digits/symbols",
+              },
+            }}
+            render={({ field }) => (
+              <input
+                {...field}
+                type="text"
+                className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                placeholder="+1 (555) 123-4567"
+              />
+            )}
+          />
+          <Phone className="absolute left-3 top-3.5 text-gray-400" size={18} />
+        </div>
+        {errors.phone && (
+          <p className="text-red-500 text-sm mt-1">{errors.phone.message}</p>
         )}
       </div>
 

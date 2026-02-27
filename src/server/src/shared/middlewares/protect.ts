@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import AppError from "../errors/AppError";
 import prisma from "@/infra/database/database.config";
 import { User } from "../types/userTypes";
+import { resolveEffectiveRoleFromUser } from "@/shared/utils/userRole";
 
 const protect = async (
   req: Request,
@@ -26,14 +27,26 @@ const protect = async (
 
     const user = await prisma.user.findUnique({
       where: { id: String(decoded.id) },
-      select: { id: true, role: true },
+      select: {
+        id: true,
+        role: true,
+        dealerProfile: {
+          select: {
+            status: true,
+          },
+        },
+      },
     });
 
     if (!user) {
       return next(new AppError(401, "User no longer exists."));
     }
 
-    req.user = { id: decoded.id, role: user.role };
+    req.user = {
+      id: decoded.id,
+      role: user.role,
+      effectiveRole: resolveEffectiveRoleFromUser(user),
+    };
     next();
   } catch (error) {
     return next(new AppError(401, "Invalid access token, please log in"));

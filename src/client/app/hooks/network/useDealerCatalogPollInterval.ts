@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
+import { resolveDisplayRole } from "@/app/lib/userRole";
 
 const DEFAULT_POLL_INTERVAL_MS = 15000;
 const MIN_POLL_INTERVAL_MS = 5000;
@@ -28,9 +29,7 @@ export const useDealerCatalogPollInterval = (enabled = true): number | undefined
     }
 
     const isApprovedDealer =
-      user.role === "USER" &&
-      user.isDealer === true &&
-      user.dealerStatus === "APPROVED";
+      resolveDisplayRole(user) === "DEALER" && user.dealerStatus === "APPROVED";
 
     if (!isApprovedDealer) {
       return undefined;

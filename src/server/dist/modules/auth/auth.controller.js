@@ -54,10 +54,11 @@ class AuthController {
         this.signup = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const start = Date.now();
-            const { name, email, password, otpCode, requestDealerAccess, businessName, contactPhone, } = req.body;
+            const { name, email, phone, password, otpCode, requestDealerAccess, businessName, contactPhone, } = req.body;
             const { user, accessToken, refreshToken, requiresApproval } = yield this.authService.registerUser({
                 name,
                 email,
+                phone,
                 password,
                 otpCode,
                 requestDealerAccess,
@@ -81,6 +82,7 @@ class AuthController {
                         accountReference: user.accountReference,
                         name: user.name,
                         email: user.email,
+                        phone: user.phone || null,
                         role: user.role,
                         avatar: user.avatar || null,
                         isDealer: user.isDealer || false,
@@ -120,6 +122,7 @@ class AuthController {
                         accountReference: user.accountReference,
                         name: user.name,
                         email: user.email,
+                        phone: user.phone || null,
                         role: user.role,
                         avatar: user.avatar,
                         isDealer: user.isDealer || false,

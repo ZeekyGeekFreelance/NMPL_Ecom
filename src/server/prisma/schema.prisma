@@ -46,12 +46,18 @@ enum DEALER_STATUS {
   REJECTED
 }
 
+enum ORDER_CUSTOMER_ROLE {
+  USER
+  DEALER
+}
+
 model User {
   id                          String        @id @default(uuid())
   googleId                    String?
   twitterId                   String?
   facebookId                  String?
   email                       String        @unique
+  phone                       String?
   password                    String?
   name                        String
   avatar                      String?
@@ -76,6 +82,7 @@ model User {
   Restock                     Restock[]
 
   @@index([email])
+  @@index([phone])
 }
 
 model Product {
@@ -263,6 +270,7 @@ model Review {
 model Order {
   id          String       @id @default(uuid())
   userId      String
+  customerRoleSnapshot ORDER_CUSTOMER_ROLE @default(USER)
   amount      Float
   orderDate   DateTime     @default(now())
   status      String       @default("PLACED")
@@ -277,6 +285,7 @@ model Order {
   updatedAt   DateTime     @updatedAt
 
   @@index([userId])
+  @@index([customerRoleSnapshot])
 }
 
 model OrderItem {

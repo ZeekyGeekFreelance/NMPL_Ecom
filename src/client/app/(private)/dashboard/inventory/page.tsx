@@ -10,6 +10,7 @@ import useToast from "@/app/hooks/ui/useToast";
 import RestockModal from "./RestockModal";
 import RestockHistoryModal from "./RestockHistoryModal";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import usePageQuery from "@/app/hooks/network/usePageQuery";
 
 interface Variant {
   id: string;
@@ -33,7 +34,8 @@ const InventoryDashboard = () => {
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
-  const { data, isLoading, refetch } = useGetAllVariantsQuery({});
+  const { page, setPage } = usePageQuery();
+  const { data, isLoading, refetch } = useGetAllVariantsQuery({ page });
   const [restockVariant, { isLoading: isRestocking }] =
     useRestockVariantMutation();
   const variants = data?.variants || [];
@@ -176,6 +178,7 @@ const InventoryDashboard = () => {
         totalResults={data?.totalResults}
         resultsPerPage={data?.resultsPerPage}
         currentPage={data?.currentPage}
+        onPageChange={setPage}
         onRefresh={refetch}
       />
 

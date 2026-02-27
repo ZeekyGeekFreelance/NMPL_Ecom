@@ -4,16 +4,31 @@ import useQueryParams from "@/app/hooks/network/useQueryParams";
 
 interface PaginationComponentProps {
   totalPages: number;
+  currentPage?: number;
+  onPageChange?: (newPage: number) => void;
 }
 
 const PaginationComponent: React.FC<PaginationComponentProps> = ({
   totalPages,
+  currentPage: controlledCurrentPage,
+  onPageChange,
 }) => {
   const { query, updateQuery } = useQueryParams();
-  const currentPage = Number(query.page) || 1;
+  const currentPage =
+    typeof controlledCurrentPage === "number" &&
+    Number.isFinite(controlledCurrentPage) &&
+    controlledCurrentPage > 0
+      ? controlledCurrentPage
+      : Number(query.page) || 1;
 
   const changePage = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
+
+    if (onPageChange) {
+      onPageChange(newPage);
+      return;
+    }
+
     updateQuery({ page: newPage });
   };
 

@@ -51,8 +51,10 @@ export const useRegistrationOtp = ({
     };
   }, [cooldownSeconds]);
 
-  const sendOtp = async (emailValue: string): Promise<boolean> => {
+  const sendOtp = async (emailValue: string, phoneValue: string): Promise<boolean> => {
     const email = emailValue.trim();
+    const phone = phoneValue.trim();
+
     if (!email) {
       setFeedback({
         type: "error",
@@ -61,9 +63,18 @@ export const useRegistrationOtp = ({
       return false;
     }
 
+    if (!phone) {
+      setFeedback({
+        type: "error",
+        message: "Enter your phone number first to continue registration.",
+      });
+      return false;
+    }
+
     try {
       const response = await requestRegistrationOtp({
         email,
+        phone,
         purpose,
         requestDealerAccess,
       }).unwrap();
@@ -76,7 +87,9 @@ export const useRegistrationOtp = ({
       setCooldownSeconds(nextCooldown);
       setFeedback({
         type: "success",
-        message: response.message || "OTP sent to your email.",
+        message:
+          response.message ||
+          "Email OTP sent. Please check your inbox and enter the 6-digit code.",
       });
       return true;
     } catch (error) {
@@ -106,4 +119,3 @@ export const useRegistrationOtp = ({
     canSendOtp: !isLoading && cooldownSeconds === 0,
   };
 };
-

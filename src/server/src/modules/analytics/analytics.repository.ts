@@ -1,16 +1,18 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/infra/database/database.config";
+import { ROLE } from "@prisma/client";
+import { buildDateFilter } from "@/shared/utils/analytics";
+import { REJECTED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 export class AnalyticsRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
-
   async getOrderYearRange(): Promise<number[]> {
-    const orders = await this.prisma.order.findMany({
+    const orders = await prisma.order.findMany({
       select: { orderDate: true },
       orderBy: { orderDate: "asc" },
+      where: {
+        status: {
+          notIn: [...REJECTED_ORDER_STATUS_VALUES],
+        },
+      },
     });
     const years = [
       ...new Set(orders.map((order) => order.orderDate.getFullYear())),
@@ -24,14 +26,24 @@ export class AnalyticsRepository {
     yearStart?: Date,
     yearEnd?: Date
   ) {
-    return this.prisma.order.findMany({
+    return prisma.order.findMany({
       where: {
-        orderDate: {
-          gte: start || yearStart,
-          lte: end || yearEnd,
+        orderDate: buildDateFilter(start, end, yearStart, yearEnd),
+        status: {
+          notIn: [...REJECTED_ORDER_STATUS_VALUES],
         },
       },
-      include: { user: true },
+      include: {
+        user: {
+          include: {
+            dealerProfile: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -42,11 +54,15 @@ export class AnalyticsRepository {
     yearEnd?: Date,
     category?: string
   ) {
-    return this.prisma.orderItem.findMany({
+    const orderDateFilter = buildDateFilter(start, end, yearStart, yearEnd);
+
+    return prisma.orderItem.findMany({
       where: {
-        createdAt: {
-          gte: start || yearStart,
-          lte: end || yearEnd,
+        order: {
+          orderDate: orderDateFilter,
+          status: {
+            notIn: [...REJECTED_ORDER_STATUS_VALUES],
+          },
         },
         ...(category && {
           variant: {
@@ -59,6 +75,11 @@ export class AnalyticsRepository {
         }),
       },
       include: {
+        order: {
+          select: {
+            orderDate: true,
+          },
+        },
         variant: {
           include: {
             product: {
@@ -78,14 +99,35 @@ export class AnalyticsRepository {
     yearStart?: Date,
     yearEnd?: Date
   ) {
-    return this.prisma.user.findMany({
+    const orderDateFilter = buildDateFilter(start, end, yearStart, yearEnd);
+
+    return prisma.user.findMany({
       where: {
-        createdAt: {
-          gte: start || yearStart,
-          lte: end || yearEnd,
+        role: ROLE.USER,
+        orders: {
+          some: {
+            orderDate: orderDateFilter,
+            status: {
+              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+            },
+          },
         },
       },
-      include: { orders: true },
+      include: {
+        dealerProfile: {
+          select: {
+            status: true,
+          },
+        },
+        orders: {
+          where: {
+            orderDate: orderDateFilter,
+            status: {
+              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+            },
+          },
+        },
+      },
     });
   }
   async getInteractionsByTimePeriod(
@@ -94,12 +136,9 @@ export class AnalyticsRepository {
     yearStart?: Date,
     yearEnd?: Date
   ) {
-    return this.prisma.interaction.findMany({
+    return prisma.interaction.findMany({
       where: {
-        createdAt: {
-          gte: start || yearStart,
-          lte: end || yearEnd,
-        },
+        createdAt: buildDateFilter(start, end, yearStart, yearEnd),
       },
       include: { user: true, product: true },
     });
@@ -110,7 +149,7 @@ export class AnalyticsRepository {
     productId?: string;
     type: string;
   }) {
-    return this.prisma.interaction.create({
+    return prisma.interaction.create({
       data: {
         userId: data.userId,
         sessionId: data.sessionId,

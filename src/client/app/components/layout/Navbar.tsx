@@ -25,6 +25,11 @@ import { useSignOutMutation } from "@/app/store/apis/AuthApi";
 import { generateUserAvatar } from "@/app/utils/placeholderImage";
 import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
 import { PLATFORM_NAME } from "@/app/lib/constants/config";
+import {
+  isAdminDisplayRole,
+  isCustomerDisplayRole,
+  resolveDisplayRole,
+} from "@/app/lib/userRole";
 
 type NavLink = {
   href: string;
@@ -39,6 +44,9 @@ type NavLink = {
 const STORE_LINKS: NavLink[] = [
   { href: "/", label: "Home", hideForAdmin: true },
   { href: "/shop", label: "Shop", hideForAdmin: true },
+  { href: "/products", label: "Products", hideForAdmin: true },
+  { href: "/brands", label: "Brands", hideForAdmin: true },
+  { href: "/about-us", label: "About Us", hideForAdmin: true },
   { href: "/cart", label: "Cart", hideForAdmin: true },
   { href: "/orders", label: "Orders", authOnly: true, hideForAdmin: true },
   { href: "/profile", label: "Profile", authOnly: true },
@@ -66,8 +74,9 @@ const Navbar = () => {
   const router = useRouter();
   const { user, isLoading, isAuthenticated } = useAuth();
   const guestCartItems = useAppSelector((state) => state.guestCart.items);
-  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
-  const isCustomerUser = isAuthenticated && user?.role === "USER";
+  const displayRole = resolveDisplayRole(user);
+  const isAdmin = isAuthenticated && isAdminDisplayRole(displayRole);
+  const isCustomerUser = isAuthenticated && isCustomerDisplayRole(displayRole);
   const shouldShowCart = !isAuthenticated || isCustomerUser;
   const { data: cartData } = useGetCartCountQuery(undefined, {
     skip: !isCustomerUser,
@@ -122,7 +131,9 @@ const Navbar = () => {
 
   const getVisibleLinks = (links: NavLink[]) =>
     links.filter((link) => {
-      const currentRole = user?.role as "ADMIN" | "SUPERADMIN" | undefined;
+      const currentRole = isAdmin
+        ? (displayRole as "ADMIN" | "SUPERADMIN")
+        : undefined;
 
       if (link.adminOnly && !isAdmin) return false;
       if (link.roles && (!currentRole || !link.roles.includes(currentRole))) {

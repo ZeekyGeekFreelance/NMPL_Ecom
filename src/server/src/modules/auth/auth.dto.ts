@@ -25,6 +25,15 @@ export class RegisterDto {
   })
   email!: string;
 
+  @IsString()
+  @IsNotEmpty({
+    message: "Phone number is required",
+  })
+  @Matches(/^[0-9()+\-\s]{7,20}$/, {
+    message: "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  })
+  phone!: string;
+
   @MinLength(8, {
     message: "Password must be at least 8 characters long",
   })
@@ -45,9 +54,16 @@ export class RegisterDto {
   @IsNotEmpty()
   @IsString()
   @Matches(/^\d{6}$/, {
-    message: "OTP must be a valid 6-digit code",
+    message: "Email OTP must be a valid 6-digit code",
   })
-  otpCode!: string;
+  emailOtpCode!: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{6}$/, {
+    message: "Phone OTP must be a valid 6-digit code",
+  })
+  phoneOtpCode?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -68,6 +84,16 @@ export class RequestRegistrationOtpDto {
     message: "Email is required",
   })
   email!: string;
+
+  @IsString()
+  @IsNotEmpty({
+    message: "Phone number is required",
+  })
+  @Matches(/^[0-9()+\-\s]{7,20}$/, {
+    message:
+      "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  })
+  phone!: string;
 
   @IsOptional()
   @IsIn(["USER_PORTAL", "DEALER_PORTAL"])

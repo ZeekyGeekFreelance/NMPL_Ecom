@@ -30,11 +30,16 @@ export class LogsService {
       entry.context || ""
     );
 
-    await this.logsRepository.createLog({
-      level: entry.level,
-      message: entry.message,
-      context: entry.context,
-    });
+    try {
+      await this.logsRepository.createLog({
+        level: entry.level,
+        message: entry.message,
+        context: entry.context,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[LOG_PERSIST_FAILED] ${message}`);
+    }
   }
 
   async info(message: string, context?: Record<string, any>): Promise<void> {

@@ -32,6 +32,16 @@ __decorate([
     __metadata("design:type", String)
 ], RegisterDto.prototype, "email", void 0);
 __decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)({
+        message: "Phone number is required",
+    }),
+    (0, class_validator_1.Matches)(/^[0-9()+\-\s]{7,20}$/, {
+        message: "Phone number must be 7-20 characters and contain only valid digits/symbols",
+    }),
+    __metadata("design:type", String)
+], RegisterDto.prototype, "phone", void 0);
+__decorate([
     (0, class_validator_1.MinLength)(8, {
         message: "Password must be at least 8 characters long",
     }),

@@ -11,6 +11,10 @@ import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
 import prisma from "@/infra/database/database.config";
 import { ROLE } from "@prisma/client";
 import { formatDateTimeInIST } from "@/shared/utils/dateTime";
+import {
+  resolveCustomerTypeFromUser,
+  resolveEffectiveRoleFromUser,
+} from "@/shared/utils/userRole";
 
 type TransactionLifecycleStatus =
   | "PLACED"
@@ -47,6 +51,26 @@ export class TransactionService {
   private invoiceService = makeInvoiceService();
 
   constructor(private transactionRepository: TransactionRepository) {}
+
+  private async resolveTransactionId(identifier: string): Promise<string> {
+    const normalized = String(identifier || "").trim();
+    if (!normalized) {
+      throw new AppError(400, "Transaction ID is required");
+    }
+
+    if (!normalized.toUpperCase().startsWith("TXN-")) {
+      return normalized;
+    }
+
+    const transactionId = await this.transactionRepository.findIdByReference(
+      normalized
+    );
+    if (!transactionId) {
+      throw new AppError(404, "Transaction not found");
+    }
+
+    return transactionId;
+  }
 
   private parseStatus(value: string): TransactionLifecycleStatus {
     const normalized = value.trim().toUpperCase();
@@ -153,6 +177,7 @@ export class TransactionService {
   private async notifyOrderStatusChange(params: {
     recipientEmail?: string | null;
     recipientName?: string | null;
+    customerType: "USER" | "DEALER";
     accountReference: string;
     orderId: string;
     previousStatus: TransactionLifecycleStatus;
@@ -222,6 +247,7 @@ export class TransactionService {
             `Order ID: ${orderReference}`,
             `Customer: ${customerName}`,
             `Customer Email: ${customerEmail || "Not available"}`,
+            `Customer Type: ${params.customerType}`,
             `Account Reference: ${params.accountReference}`,
             `Previous status: ${previousLabel.toUpperCase()}`,
             `Current status: ${currentLabel.toUpperCase()}`,
@@ -240,6 +266,7 @@ export class TransactionService {
                 <strong>Customer Email:</strong> ${
                   customerEmail || "Not available"
                 }<br />
+                <strong>Customer Type:</strong> ${params.customerType}<br />
                 <strong>Account Reference:</strong> ${params.accountReference}<br />
                 <strong>Previous status:</strong> ${previousLabel.toUpperCase()}<br />
                 <strong>Current status:</strong> ${currentLabel.toUpperCase()}<br />
@@ -269,29 +296,76 @@ export class TransactionService {
     }
   }
 
-  async getAllTransactions() {
-    const transactions = await this.transactionRepository.findMany();
-    return transactions;
+  async getAllTransactions(queryString: Record<string, any> = {}) {
+    const hasExplicitPagination =
+      queryString.page !== undefined || queryString.limit !== undefined;
+
+    if (!hasExplicitPagination) {
+      const transactions = await this.transactionRepository.findMany();
+      const totalResults = transactions.length;
+      return {
+        transactions,
+        totalResults,
+        totalPages: totalResults > 0 ? 1 : 0,
+        currentPage: 1,
+        resultsPerPage: totalResults,
+      };
+    }
+
+    const parsedPage = Number(queryString.page);
+    const parsedLimit = Number(queryString.limit);
+    const currentPage = Number.isFinite(parsedPage) && parsedPage > 0
+      ? Math.floor(parsedPage)
+      : 1;
+    const resultsPerPage = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.floor(parsedLimit)
+      : 16;
+    const skip = (currentPage - 1) * resultsPerPage;
+
+    const [transactions, totalResults] = await Promise.all([
+      this.transactionRepository.findMany({
+        skip,
+        take: resultsPerPage,
+      }),
+      this.transactionRepository.countTransactions(),
+    ]);
+
+    const totalPages = Math.ceil(totalResults / resultsPerPage);
+
+    return {
+      transactions,
+      totalResults,
+      totalPages,
+      currentPage,
+      resultsPerPage,
+    };
   }
 
   async getTransactionById(id: string) {
-    const transaction = await this.transactionRepository.findById(id);
+    const resolvedId = await this.resolveTransactionId(id);
+    const transaction = await this.transactionRepository.findById(resolvedId);
     if (!transaction) {
       throw new AppError(404, "Transaction not found");
     }
 
     const userId = transaction.order?.user?.id;
-    if (!userId) {
+    if (!userId || !transaction.order?.user) {
       return transaction;
     }
+
+    const customerType =
+      transaction.order.customerRoleSnapshot ||
+      resolveCustomerTypeFromUser(transaction.order.user);
 
     return {
       ...transaction,
       order: {
         ...transaction.order,
+        customerType,
         user: {
           ...transaction.order.user,
           accountReference: toAccountReference(userId),
+          effectiveRole: resolveEffectiveRoleFromUser(transaction.order.user),
         },
       },
     };
@@ -305,7 +379,10 @@ export class TransactionService {
       confirmationToken?: string;
     }
   ) {
-    const existingTransaction = await this.transactionRepository.findById(id);
+    const resolvedId = await this.resolveTransactionId(id);
+    const existingTransaction = await this.transactionRepository.findById(
+      resolvedId
+    );
     if (!existingTransaction) {
       throw new AppError(404, "Transaction not found");
     }
@@ -335,13 +412,19 @@ export class TransactionService {
       return existingTransaction;
     }
 
-    const transaction = await this.transactionRepository.updateTransaction(id, {
-      status: nextStatus,
-    });
+    const transaction = await this.transactionRepository.updateTransaction(
+      resolvedId,
+      {
+        status: nextStatus,
+      }
+    );
 
     const recipientEmail = transaction.order?.user?.email || null;
     const recipientName = transaction.order?.user?.name || "Customer";
     const recipientUserId = transaction.order?.user?.id;
+    const customerType =
+      transaction.order?.customerRoleSnapshot ||
+      resolveCustomerTypeFromUser(transaction.order?.user);
     const accountReference = recipientUserId
       ? toAccountReference(recipientUserId)
       : "N/A";
@@ -349,6 +432,7 @@ export class TransactionService {
     await this.notifyOrderStatusChange({
       recipientEmail,
       recipientName,
+      customerType,
       accountReference,
       orderId: transaction.orderId,
       previousStatus,
@@ -358,7 +442,7 @@ export class TransactionService {
         error instanceof Error ? error.message : "Unknown email error";
 
       await this.logsService.warn("Order status notification email failed", {
-        transactionId: id,
+        transactionId: resolvedId,
         orderId: transaction.orderId,
         error: errorMessage,
       });
@@ -386,7 +470,7 @@ export class TransactionService {
             "Automated invoice generation failed after order confirmation",
             {
               orderId: transaction.orderId,
-              transactionId: id,
+              transactionId: resolvedId,
               error: errorMessage,
             }
           );
@@ -397,6 +481,7 @@ export class TransactionService {
   }
 
   async deleteTransaction(id: string) {
-    await this.transactionRepository.deleteTransaction(id);
+    const resolvedId = await this.resolveTransactionId(id);
+    await this.transactionRepository.deleteTransaction(resolvedId);
   }
 }

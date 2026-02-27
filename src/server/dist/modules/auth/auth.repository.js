@@ -50,6 +50,7 @@ class AuthRepository {
                     role: true,
                     name: true,
                     email: true,
+                    phone: true,
                     avatar: true,
                 },
             });
@@ -63,6 +64,7 @@ class AuthRepository {
                     id: true,
                     name: true,
                     email: true,
+                    phone: true,
                     role: true,
                     avatar: true,
                 },
@@ -83,6 +85,7 @@ class AuthRepository {
                     id: true,
                     name: true,
                     email: true,
+                    phone: true,
                     role: true,
                     avatar: true,
                 },

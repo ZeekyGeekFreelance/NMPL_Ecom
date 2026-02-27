@@ -113,12 +113,16 @@ class AuthService {
         });
     }
     registerUser(_a) {
-        return __awaiter(this, arguments, void 0, function* ({ name, email, password, otpCode, requestDealerAccess = false, businessName, contactPhone, }) {
+        return __awaiter(this, arguments, void 0, function* ({ name, email, phone, password, otpCode, requestDealerAccess = false, businessName, contactPhone, }) {
             var _b, _c, _d, _e, _f;
             const normalizedEmail = email.trim().toLowerCase();
+            const normalizedPhone = String(phone !== null && phone !== void 0 ? phone : "").trim();
             const existingUser = yield this.authRepository.findUserByEmail(normalizedEmail);
             if (existingUser) {
                 throw new AppError_1.default(400, "This email is already registered, please log in instead.");
+            }
+            if (!normalizedPhone) {
+                throw new BadRequestError_1.default("Phone number is required.");
             }
             if (!otpCode || !otpCode.trim()) {
                 throw new BadRequestError_1.default("Registration OTP is required. Please use the OTP sent to your email.");
@@ -135,12 +139,14 @@ class AuthService {
             }
             const otpContext = otpVerification.context;
             const shouldRequestDealerAccess = otpContext.requestDealerAccess === true;
+            const normalizedDealerContactPhone = (contactPhone === null || contactPhone === void 0 ? void 0 : contactPhone.trim()) || normalizedPhone;
             if (requestDealerAccess && !shouldRequestDealerAccess) {
                 throw new BadRequestError_1.default("Dealer signup requires an OTP requested from the dealer registration flow.");
             }
             // Registrations created through this flow always start as USER role.
             const newUser = yield this.authRepository.createUser({
                 email: normalizedEmail,
+                phone: normalizedPhone,
                 name,
                 password,
                 role: client_1.ROLE.USER,
@@ -151,7 +157,7 @@ class AuthService {
                 const dealerProfile = yield this.authRepository.upsertDealerProfile({
                     userId: newUser.id,
                     businessName: businessName !== null && businessName !== void 0 ? businessName : null,
-                    contactPhone: contactPhone !== null && contactPhone !== void 0 ? contactPhone : null,
+                    contactPhone: normalizedDealerContactPhone,
                     status: "PENDING",
                     approvedBy: null,
                 });
@@ -171,7 +177,7 @@ class AuthService {
             <p>Name: ${name}</p>
             <p>Email: ${normalizedEmail}</p>
             <p>Business Name: ${businessName || "Not provided"}</p>
-            <p>Contact Phone: ${contactPhone || "Not provided"}</p>
+            <p>Contact Phone: ${normalizedDealerContactPhone || "Not provided"}</p>
           `,
                     });
                 }
@@ -181,6 +187,7 @@ class AuthService {
                         accountReference,
                         name: newUser.name,
                         email: newUser.email,
+                        phone: newUser.phone,
                         role: newUser.role,
                         avatar: null,
                         isDealer: true,
@@ -199,6 +206,7 @@ class AuthService {
                     accountReference,
                     name: newUser.name,
                     email: newUser.email,
+                    phone: newUser.phone,
                     role: newUser.role,
                     avatar: null,
                     isDealer: false,
@@ -314,7 +322,7 @@ class AuthService {
     }
     refreshToken(oldRefreshToken) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f;
+            var _a, _b, _c, _d, _e, _f, _g;
             if (yield authUtils_1.tokenUtils.isTokenBlacklisted(oldRefreshToken)) {
                 throw new NotFoundError_1.default("Refresh token");
             }
@@ -343,12 +351,13 @@ class AuthService {
                 accountReference: (0, accountReference_1.toAccountReference)(user.id),
                 name: user.name,
                 email: user.email,
+                phone: (_a = user.phone) !== null && _a !== void 0 ? _a : null,
                 role: user.role,
                 avatar: user.avatar,
                 isDealer: !!user.dealerProfile,
-                dealerStatus: (_b = (_a = user.dealerProfile) === null || _a === void 0 ? void 0 : _a.status) !== null && _b !== void 0 ? _b : null,
-                dealerBusinessName: (_d = (_c = user.dealerProfile) === null || _c === void 0 ? void 0 : _c.businessName) !== null && _d !== void 0 ? _d : null,
-                dealerContactPhone: (_f = (_e = user.dealerProfile) === null || _e === void 0 ? void 0 : _e.contactPhone) !== null && _f !== void 0 ? _f : null,
+                dealerStatus: (_c = (_b = user.dealerProfile) === null || _b === void 0 ? void 0 : _b.status) !== null && _c !== void 0 ? _c : null,
+                dealerBusinessName: (_e = (_d = user.dealerProfile) === null || _d === void 0 ? void 0 : _d.businessName) !== null && _e !== void 0 ? _e : null,
+                dealerContactPhone: (_g = (_f = user.dealerProfile) === null || _f === void 0 ? void 0 : _f.contactPhone) !== null && _g !== void 0 ? _g : null,
             };
             const newAccessToken = authUtils_1.tokenUtils.generateAccessToken(user.id);
             const newRefreshToken = authUtils_1.tokenUtils.generateRefreshToken(user.id, absoluteExpiration);

@@ -35,6 +35,7 @@ interface TableProps {
   totalResults?: number;
   resultsPerPage?: number;
   currentPage?: number;
+  onPageChange?: (page: number) => void;
   expandable?: boolean;
   expandedRowId?: string | null;
   renderExpandedRow?: (row: any) => React.ReactNode;
@@ -158,6 +159,7 @@ const Table: React.FC<TableProps> = ({
   totalResults,
   resultsPerPage,
   currentPage,
+  onPageChange,
   expandable = false,
   expandedRowId = null,
   renderExpandedRow,
@@ -433,7 +435,11 @@ const Table: React.FC<TableProps> = ({
       </div>
       {showPaginationDetails && totalPages !== undefined && (
         <div className="p-4 border-t border-blue-100">
-          <PaginationComponent totalPages={totalPages} />
+          <PaginationComponent
+            totalPages={totalPages}
+            currentPage={currentPage}
+            onPageChange={onPageChange}
+          />
         </div>
       )}
     </div>
