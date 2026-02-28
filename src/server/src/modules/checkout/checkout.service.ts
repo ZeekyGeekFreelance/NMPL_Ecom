@@ -5,7 +5,7 @@ export class CheckoutService {
 
   async getCheckoutSummary(
     userId: string,
-    data: { addressId: string; deliveryMode: "PICKUP" | "DELIVERY" }
+    data: { addressId?: string; deliveryMode: "PICKUP" | "DELIVERY" }
   ) {
     return this.orderService.buildCheckoutSummaryFromUserCart(
       userId,
@@ -17,7 +17,7 @@ export class CheckoutService {
   async placeOrder(
     userId: string,
     cartId: string,
-    data: { addressId: string; deliveryMode: "PICKUP" | "DELIVERY" }
+    data: { addressId?: string; deliveryMode: "PICKUP" | "DELIVERY" }
   ) {
     return this.orderService.createOrderFromCart(
       userId,

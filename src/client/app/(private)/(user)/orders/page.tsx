@@ -165,10 +165,20 @@ const OrderCard = ({
                   key={index}
                   className="flex items-center justify-between text-xs sm:text-sm"
                 >
-                  <span className="text-gray-700 truncate flex-1 mr-2">
-                    {item.variant?.product?.name || "Product"}
-                    {item.quantity > 1 && ` (x${item.quantity})`}
-                  </span>
+                  {item.variant?.product?.slug ? (
+                    <Link
+                      href={`/product/${item.variant.product.slug}`}
+                      className="text-gray-700 hover:text-indigo-600 truncate flex-1 mr-2 transition-colors"
+                    >
+                      {item.variant?.product?.name || "Product"}
+                      {item.quantity > 1 && ` (x${item.quantity})`}
+                    </Link>
+                  ) : (
+                    <span className="text-gray-700 truncate flex-1 mr-2">
+                      {item.variant?.product?.name || "Product"}
+                      {item.quantity > 1 && ` (x${item.quantity})`}
+                    </span>
+                  )}
                   <span className="text-gray-500 font-medium text-xs sm:text-sm flex-shrink-0">
                     {formatPrice(item.price * item.quantity)}
                   </span>

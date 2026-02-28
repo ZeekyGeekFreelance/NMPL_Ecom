@@ -29,6 +29,7 @@ interface InvoicePdfInput {
   orderId: string;
   orderDate: Date;
   customerName: string;
+  customerPhone?: string | null;
   accountReference?: string;
   customerEmail: string;
   customerType: "DEALER" | "USER";
@@ -37,7 +38,8 @@ interface InvoicePdfInput {
   deliveryCharge: number;
   deliveryMode: string;
   totalAmount: number;
-  billingAddress?: InvoiceAddress | null;
+  locationLabel: string;
+  locationAddress?: InvoiceAddress | null;
 }
 
 const drawSectionTitle = (
@@ -50,40 +52,135 @@ const drawSectionTitle = (
   doc.moveDown(0.2);
 };
 
+const toSafeText = (value: unknown, fallback = "N/A"): string => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
+
+const drawAddressBlock = (
+  doc: PDFKit.PDFDocument,
+  address: InvoiceAddress | null | undefined,
+  fallbackName: string,
+  fallbackPhone: string,
+  contactLabel = "Receiver"
+) => {
+  if (!address) {
+    doc.fontSize(10).text("Address details are unavailable.");
+    return;
+  }
+
+  doc
+    .fontSize(10)
+    .text(`${contactLabel}: ${toSafeText(address.fullName, fallbackName)}`);
+  doc.fontSize(10).text(`Phone: ${toSafeText(address.phoneNumber, fallbackPhone)}`);
+  doc.fontSize(10).text(toSafeText(address.line1, "Address line not available"));
+
+  if (address.line2) {
+    doc.fontSize(10).text(address.line2);
+  }
+  if (address.landmark) {
+    doc.fontSize(10).text(`Landmark: ${address.landmark}`);
+  }
+
+  doc
+    .fontSize(10)
+    .text(
+      `${toSafeText(address.city)}, ${toSafeText(address.state)} ${toSafeText(
+        address.pincode
+      )}`
+    );
+  doc.fontSize(10).text(toSafeText(address.country));
+};
+
 const drawItemsTable = (
   doc: PDFKit.PDFDocument,
   items: InvoicePdfItem[],
   fonts: { regular: string; bold: string },
   formatCurrency: (value: number) => string
 ) => {
-  doc.font(fonts.bold).fontSize(10);
-  doc.text("SN No.", 50, doc.y, { width: 45 });
-  doc.text("Item", 98, doc.y, { width: 215 });
-  doc.text("Qty", 318, doc.y, { width: 40, align: "right" });
-  doc.text("Unit Price", 365, doc.y, { width: 80, align: "right" });
-  doc.text("Subtotal", 450, doc.y, { width: 95, align: "right" });
-  doc.moveDown(0.4);
-  doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#d1d5db").stroke();
-  doc.moveDown(0.4);
+  const left = 50;
+  const right = 545;
+  const pageBottom = () => doc.page.height - doc.page.margins.bottom;
+  const columns = [
+    { key: "product", label: "Product Name", x: 50, width: 205, align: "left" },
+    { key: "sku", label: "SKU", x: 260, width: 95, align: "left" },
+    { key: "qty", label: "Quantity", x: 360, width: 50, align: "right" },
+    { key: "unit", label: "Unit Price", x: 415, width: 60, align: "right" },
+    { key: "line", label: "Line Total", x: 480, width: 65, align: "right" },
+  ] as const;
 
-  doc.font(fonts.regular).fontSize(10);
-  items.forEach((item, index) => {
+  const drawTableHeader = () => {
+    doc.font(fonts.bold).fontSize(9.5);
+    columns.forEach((column) => {
+      doc.text(column.label, column.x, doc.y, {
+        width: column.width,
+        align: column.align,
+      });
+    });
+    doc.moveDown(0.35);
+    doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#d1d5db").stroke();
+    doc.moveDown(0.35);
+  };
+
+  drawTableHeader();
+
+  if (!items.length) {
+    doc
+      .font(fonts.regular)
+      .fontSize(10)
+      .text("No items available.", left, doc.y, { width: right - left });
+    return;
+  }
+
+  doc.font(fonts.regular).fontSize(9.5);
+  items.forEach((item) => {
+    const productName = toSafeText(item.productName, "Product");
+    const sku = toSafeText(item.sku, "-");
+    const quantity = String(Number(item.quantity) || 0);
+    const unitPrice = formatCurrency(Number(item.unitPrice) || 0);
+    const lineTotal = formatCurrency(Number(item.subtotal) || 0);
+
+    const productHeight = doc.heightOfString(productName, {
+      width: columns[0].width,
+      align: "left",
+    });
+    const skuHeight = doc.heightOfString(sku, {
+      width: columns[1].width,
+      align: "left",
+    });
+    const rowHeight = Math.max(productHeight, skuHeight, doc.currentLineHeight()) + 6;
+
+    if (doc.y + rowHeight > pageBottom() - 70) {
+      doc.addPage();
+      drawTableHeader();
+      doc.font(fonts.regular).fontSize(9.5);
+    }
+
     const rowY = doc.y;
-    const itemTitle = `${item.productName} (${item.sku})`;
-    doc.text(String(index + 1), 50, rowY, { width: 45 });
-    doc.text(itemTitle, 98, rowY, { width: 215 });
-    doc.text(String(item.quantity), 318, rowY, { width: 40, align: "right" });
-    doc.text(formatCurrency(item.unitPrice), 365, rowY, {
-      width: 80,
+    doc.text(productName, columns[0].x, rowY, {
+      width: columns[0].width,
+      align: "left",
+    });
+    doc.text(sku, columns[1].x, rowY, {
+      width: columns[1].width,
+      align: "left",
+    });
+    doc.text(quantity, columns[2].x, rowY, {
+      width: columns[2].width,
       align: "right",
     });
-    doc.text(formatCurrency(item.subtotal), 450, rowY, {
-      width: 95,
+    doc.text(unitPrice, columns[3].x, rowY, {
+      width: columns[3].width,
       align: "right",
     });
-    const itemHeight = doc.heightOfString(itemTitle, { width: 215 });
-    const rowHeight = Math.max(itemHeight, doc.currentLineHeight()) + 6;
+    doc.text(lineTotal, columns[4].x, rowY, {
+      width: columns[4].width,
+      align: "right",
+    });
+
     doc.y = rowY + rowHeight;
+    doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#eef2f7").stroke();
+    doc.moveDown(0.2);
   });
 };
 
@@ -107,6 +204,12 @@ export default function generateInvoicePdf(
     );
 
     try {
+      const normalizedDeliveryMode = String(invoice.deliveryMode || "DELIVERY")
+        .trim()
+        .toUpperCase();
+      const deliveryLabel =
+        normalizedDeliveryMode === "PICKUP" ? "In-Store Pickup" : "Delivery";
+
       doc.font(fonts.bold).fontSize(11).text(platformName.toUpperCase(), {
         align: "left",
       });
@@ -118,43 +221,42 @@ export default function generateInvoicePdf(
       doc.font(fonts.regular).fontSize(10);
       doc.text(`Invoice #: ${invoice.invoiceNumber}`);
       doc.text(`Order ID: ${invoice.orderId}`);
-      doc.text(`Date (IST): ${formatDateTimeInIST(invoice.orderDate)}`);
+      doc.text(`Order Date (IST): ${formatDateTimeInIST(invoice.orderDate)}`);
       doc.text(`Generated At (IST): ${formatDateTimeInIST(new Date())}`);
-      doc.text(`Customer Type: ${invoice.customerType}`);
 
-      drawSectionTitle(doc, "Bill To", fonts);
+      drawSectionTitle(doc, "Billing Identity", fonts);
       doc.font(fonts.regular).fontSize(10);
-      doc.text(invoice.customerName);
+      doc.text(`Customer Name: ${toSafeText(invoice.customerName, "Customer")}`);
+      doc.text(`Phone: ${toSafeText(invoice.customerPhone, "Not provided")}`);
+      doc.text(`Email: ${toSafeText(invoice.customerEmail)}`);
+      doc.text(`Customer Type: ${toSafeText(invoice.customerType)}`);
       if (invoice.accountReference) {
         doc.text(`Account Ref: ${invoice.accountReference}`);
       }
-      doc.text(invoice.customerEmail);
-      if (invoice.billingAddress) {
-        if (invoice.billingAddress.fullName) {
-          doc.text(invoice.billingAddress.fullName);
-        }
-        if (invoice.billingAddress.phoneNumber) {
-          doc.text(invoice.billingAddress.phoneNumber);
-        }
-        doc.text(invoice.billingAddress.line1);
-        if (invoice.billingAddress.line2) {
-          doc.text(invoice.billingAddress.line2);
-        }
-        if (invoice.billingAddress.landmark) {
-          doc.text(`Landmark: ${invoice.billingAddress.landmark}`);
-        }
-        doc.text(
-          `${invoice.billingAddress.city}, ${invoice.billingAddress.state} ${invoice.billingAddress.pincode}`
-        );
-        doc.text(invoice.billingAddress.country);
-      }
+
+      drawSectionTitle(
+        doc,
+        toSafeText(
+          invoice.locationLabel,
+          normalizedDeliveryMode === "PICKUP" ? "Pickup Location" : "Delivery To"
+        ),
+        fonts
+      );
+      drawAddressBlock(
+        doc,
+        invoice.locationAddress,
+        invoice.customerName,
+        toSafeText(invoice.customerPhone, "Not provided"),
+        normalizedDeliveryMode === "PICKUP" ? "Store" : "Receiver"
+      );
+      doc
+        .font(fonts.regular)
+        .fontSize(10)
+        .moveDown(0.2)
+        .text(`Fulfillment Mode: ${deliveryLabel}`);
 
       drawSectionTitle(doc, "Items", fonts);
-      if (!invoice.items.length) {
-        doc.font(fonts.regular).fontSize(10).text("No items available.");
-      } else {
-        drawItemsTable(doc, invoice.items, fonts, formatCurrency);
-      }
+      drawItemsTable(doc, invoice.items, fonts, formatCurrency);
 
       doc.moveDown(0.8);
       doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#d1d5db").stroke();
@@ -165,9 +267,7 @@ export default function generateInvoicePdf(
       });
       doc.moveDown(0.3);
       doc.text(
-        `Delivery (${invoice.deliveryMode}): ${formatCurrency(
-          invoice.deliveryCharge
-        )}`,
+        `${deliveryLabel}: ${formatCurrency(invoice.deliveryCharge)}`,
         50,
         doc.y,
         {
@@ -185,12 +285,9 @@ export default function generateInvoicePdf(
         .font(fonts.regular)
         .fontSize(9)
         .fillColor("#6b7280")
-        .text(
-          `${platformName} system generated invoice. No signature required.`,
-          {
-            align: "left",
-          }
-        );
+        .text(`${platformName} system generated invoice. No signature required.`, {
+          align: "left",
+        });
 
       doc.end();
     } catch (error: unknown) {

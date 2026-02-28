@@ -200,7 +200,10 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
 
   const requestCheckoutSummary = useCallback(
     async (force = false) => {
-      if (!selectedAddressId || totalItems <= 0) {
+      const requiresAddress = deliveryMode === "DELIVERY";
+      const effectiveAddressId = requiresAddress ? selectedAddressId : undefined;
+
+      if (totalItems <= 0 || (requiresAddress && !effectiveAddressId)) {
         setCheckoutSummary(null);
         setSummaryError(null);
         latestSummaryRequestRef.current = "";
@@ -208,7 +211,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       }
 
       const requestKey = [
-        selectedAddressId,
+        effectiveAddressId || "PICKUP",
         deliveryMode,
         subtotal,
         totalItems,
@@ -226,10 +229,16 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       setSummaryError(null);
 
       try {
-        const response = await getCheckoutSummary({
-          addressId: selectedAddressId,
-          deliveryMode,
-        }).unwrap();
+        const response = await getCheckoutSummary(
+          effectiveAddressId
+            ? {
+                addressId: effectiveAddressId,
+                deliveryMode,
+              }
+            : {
+                deliveryMode,
+              }
+        ).unwrap();
         const parsedSummary = parseCheckoutSummary(response);
 
         if (!parsedSummary) {
@@ -259,10 +268,11 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
   );
 
   useEffect(() => {
+    const requiresAddress = deliveryMode === "DELIVERY";
     if (
       !isAuthenticated ||
-      addressInputMode !== "saved" ||
-      !selectedAddressId ||
+      (requiresAddress && addressInputMode !== "saved") ||
+      (requiresAddress && !selectedAddressId) ||
       totalItems <= 0
     ) {
       return;
@@ -271,6 +281,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     void requestCheckoutSummary();
   }, [
     addressInputMode,
+    deliveryMode,
     isAuthenticated,
     requestCheckoutSummary,
     selectedAddressId,
@@ -352,7 +363,8 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       return;
     }
 
-    if (!selectedAddressId) {
+    const requiresAddress = deliveryMode === "DELIVERY";
+    if (requiresAddress && !selectedAddressId) {
       showToast("Please select an address before checkout.", "error");
       return;
     }
@@ -371,14 +383,21 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     setIsSubmittingCheckout(true);
 
     try {
-      const res = await initiateCheckout({
-        addressId: selectedAddressId,
-        deliveryMode,
-      }).unwrap();
-      const payload = (res as any)?.data ?? res;
-      const orderId = payload?.orderId;
+      const checkoutPayload = requiresAddress
+        ? {
+            addressId: selectedAddressId,
+            deliveryMode,
+          }
+        : {
+            deliveryMode,
+          };
+
+      const res = await initiateCheckout(checkoutPayload).unwrap();
+      const responsePayload = (res as any)?.data ?? res;
+      const orderId = responsePayload?.orderId;
       const orderReference =
-        payload?.orderReference || (orderId ? toOrderReference(orderId) : null);
+        responsePayload?.orderReference ||
+        (orderId ? toOrderReference(orderId) : null);
       showToast(
         orderReference
           ? `Order ${orderReference} submitted. Stock will be verified and quotation will be shared before payment.`
@@ -406,7 +425,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       return;
     }
 
-    if (!selectedAddressId) {
+    if (deliveryMode === "DELIVERY" && !selectedAddressId) {
       showToast("Please select an address before checkout.", "error");
       return;
     }
@@ -469,263 +488,10 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
           </div>
         </div>
         <p className="mt-2 text-xs text-gray-500">
-          Select delivery mode and address to calculate final payable amount.
+          {deliveryMode === "DELIVERY"
+            ? "Select delivery mode and address to calculate final payable amount."
+            : "In-store pickup selected. No delivery address is required."}
         </p>
-
-        <div className="mt-4 border-t border-gray-200 pt-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-2">
-            Delivery Address
-          </h3>
-
-          <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setAddressInputMode("saved");
-                setSummaryError(null);
-                latestSummaryRequestRef.current = "";
-                if (!selectedAddressId && defaultAddressId) {
-                  setSelectedAddressId(defaultAddressId);
-                }
-              }}
-              className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                addressInputMode === "saved"
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Choose Saved Address
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAddressInputMode("new");
-                setSelectedAddressId("");
-                setCheckoutSummary(null);
-                setSummaryError(null);
-                latestSummaryRequestRef.current = "";
-              }}
-              className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                addressInputMode === "new"
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Deliver to New Address
-            </button>
-          </div>
-
-          {addressInputMode === "saved" ? (
-            isAddressesLoading ? (
-              <p className="text-xs text-gray-500">Loading addresses...</p>
-            ) : addresses.length > 0 ? (
-              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                {addresses.map((address) => {
-                  const isSelected = selectedAddressId === address.id;
-
-                  return (
-                    <label
-                      key={address.id}
-                      className={`block rounded-md border p-3 cursor-pointer transition-colors ${
-                        isSelected
-                          ? "border-indigo-500 bg-indigo-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <input
-                          type="radio"
-                          name="checkout-address"
-                          className="mt-1"
-                          checked={isSelected}
-                          onChange={() => {
-                            setSelectedAddressId(address.id);
-                            setSummaryError(null);
-                            latestSummaryRequestRef.current = "";
-                          }}
-                        />
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-medium text-gray-800">
-                              {address.fullName}
-                            </p>
-                            {address.isDefault ? (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                                Default
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="text-xs text-gray-600 mt-1">
-                            {address.line1}
-                            {address.line2 ? `, ${address.line2}` : ""}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            {[address.city, address.state, address.country]
-                              .filter(Boolean)
-                              .join(", ")}{" "}
-                            - {address.pincode}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            Phone: {address.phoneNumber}
-                          </p>
-                        </div>
-
-                        {!address.isDefault ? (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              void handleSetDefaultAddress(address.id);
-                            }}
-                            disabled={isSettingDefaultAddress}
-                            className="text-xs text-indigo-600 hover:text-indigo-700 disabled:text-gray-400"
-                          >
-                            Set default
-                          </button>
-                        ) : null}
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                No saved address found. Choose "Deliver to New Address" to continue.
-              </p>
-            )
-          ) : (
-            <form onSubmit={handleCreateAddress} className="mt-3 space-y-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Address Type
-                </label>
-                <select
-                  value={addressForm.type}
-                  onChange={(event) =>
-                    handleAddressInputChange(
-                      "type",
-                      event.target.value as AddressType
-                    )
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="HOME">Home</option>
-                  <option value="OFFICE">Office</option>
-                  <option value="WAREHOUSE">Warehouse</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  value={addressForm.fullName}
-                  onChange={(event) =>
-                    handleAddressInputChange("fullName", event.target.value)
-                  }
-                  placeholder="Full Name *"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                />
-                <input
-                  value={addressForm.phoneNumber}
-                  onChange={(event) =>
-                    handleAddressInputChange("phoneNumber", event.target.value)
-                  }
-                  placeholder="Phone Number *"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-
-              <input
-                value={addressForm.line1}
-                onChange={(event) =>
-                  handleAddressInputChange("line1", event.target.value)
-                }
-                placeholder="Address Line 1 *"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                required
-              />
-
-              <input
-                value={addressForm.line2}
-                onChange={(event) =>
-                  handleAddressInputChange("line2", event.target.value)
-                }
-                placeholder="Address Line 2 (optional)"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              />
-
-              <input
-                value={addressForm.landmark}
-                onChange={(event) =>
-                  handleAddressInputChange("landmark", event.target.value)
-                }
-                placeholder="Landmark (optional)"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  value={addressForm.city}
-                  onChange={(event) =>
-                    handleAddressInputChange("city", event.target.value)
-                  }
-                  placeholder="City *"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                />
-                <input
-                  value={addressForm.state}
-                  onChange={(event) =>
-                    handleAddressInputChange("state", event.target.value)
-                  }
-                  placeholder="State *"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                />
-                <input
-                  value={addressForm.country}
-                  onChange={(event) =>
-                    handleAddressInputChange("country", event.target.value)
-                  }
-                  placeholder="Country *"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                />
-                <input
-                  value={addressForm.pincode}
-                  onChange={(event) =>
-                    handleAddressInputChange("pincode", event.target.value)
-                  }
-                  placeholder="Pincode *"
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-
-              <label className="inline-flex items-center gap-2 text-xs text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={addressForm.isDefault}
-                  onChange={(event) =>
-                    handleAddressInputChange("isDefault", event.target.checked)
-                  }
-                />
-                Set as default address
-              </label>
-
-              <button
-                type="submit"
-                disabled={isCreatingAddress}
-                className="w-full rounded-md bg-gray-900 text-white py-2 text-sm font-medium hover:bg-black disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {isCreatingAddress ? "Saving..." : "Save Address and Use for Checkout"}
-              </button>
-            </form>
-          )}
-        </div>
 
         <div className="mt-4 border-t border-gray-200 pt-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-2">
@@ -771,13 +537,276 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
               </span>
             </label>
           </div>
+        </div>
+
+        {deliveryMode === "DELIVERY" ? (
+          <div className="mt-4 border-t border-gray-200 pt-4">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">
+              Delivery Address
+            </h3>
+
+            <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddressInputMode("saved");
+                  setSummaryError(null);
+                  latestSummaryRequestRef.current = "";
+                  if (!selectedAddressId && defaultAddressId) {
+                    setSelectedAddressId(defaultAddressId);
+                  }
+                }}
+                className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                  addressInputMode === "saved"
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                Choose Saved Address
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddressInputMode("new");
+                  setSelectedAddressId("");
+                  setCheckoutSummary(null);
+                  setSummaryError(null);
+                  latestSummaryRequestRef.current = "";
+                }}
+                className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                  addressInputMode === "new"
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                Deliver to New Address
+              </button>
+            </div>
+
+            {addressInputMode === "saved" ? (
+              isAddressesLoading ? (
+                <p className="text-xs text-gray-500">Loading addresses...</p>
+              ) : addresses.length > 0 ? (
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                  {addresses.map((address) => {
+                    const isSelected = selectedAddressId === address.id;
+
+                    return (
+                      <label
+                        key={address.id}
+                        className={`block rounded-md border p-3 cursor-pointer transition-colors ${
+                          isSelected
+                            ? "border-indigo-500 bg-indigo-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="radio"
+                            name="checkout-address"
+                            className="mt-1"
+                            checked={isSelected}
+                            onChange={() => {
+                              setSelectedAddressId(address.id);
+                              setSummaryError(null);
+                              latestSummaryRequestRef.current = "";
+                            }}
+                          />
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium text-gray-800">
+                                {address.fullName}
+                              </p>
+                              {address.isDefault ? (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                                  Default
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1">
+                              {address.line1}
+                              {address.line2 ? `, ${address.line2}` : ""}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {[address.city, address.state, address.country]
+                                .filter(Boolean)
+                                .join(", ")}{" "}
+                              - {address.pincode}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Phone: {address.phoneNumber}
+                            </p>
+                          </div>
+
+                          {!address.isDefault ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                void handleSetDefaultAddress(address.id);
+                              }}
+                              disabled={isSettingDefaultAddress}
+                              className="text-xs text-indigo-600 hover:text-indigo-700 disabled:text-gray-400"
+                            >
+                              Set default
+                            </button>
+                          ) : null}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  No saved address found. Choose "Deliver to New Address" to continue.
+                </p>
+              )
+            ) : (
+              <form onSubmit={handleCreateAddress} className="mt-3 space-y-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Address Type
+                  </label>
+                  <select
+                    value={addressForm.type}
+                    onChange={(event) =>
+                      handleAddressInputChange(
+                        "type",
+                        event.target.value as AddressType
+                      )
+                    }
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="HOME">Home</option>
+                    <option value="OFFICE">Office</option>
+                    <option value="WAREHOUSE">Warehouse</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    value={addressForm.fullName}
+                    onChange={(event) =>
+                      handleAddressInputChange("fullName", event.target.value)
+                    }
+                    placeholder="Full Name *"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    required
+                  />
+                  <input
+                    value={addressForm.phoneNumber}
+                    onChange={(event) =>
+                      handleAddressInputChange("phoneNumber", event.target.value)
+                    }
+                    placeholder="Phone Number *"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    required
+                  />
+                </div>
+
+                <input
+                  value={addressForm.line1}
+                  onChange={(event) =>
+                    handleAddressInputChange("line1", event.target.value)
+                  }
+                  placeholder="Address Line 1 *"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  required
+                />
+
+                <input
+                  value={addressForm.line2}
+                  onChange={(event) =>
+                    handleAddressInputChange("line2", event.target.value)
+                  }
+                  placeholder="Address Line 2 (optional)"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+
+                <input
+                  value={addressForm.landmark}
+                  onChange={(event) =>
+                    handleAddressInputChange("landmark", event.target.value)
+                  }
+                  placeholder="Landmark (optional)"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    value={addressForm.city}
+                    onChange={(event) =>
+                      handleAddressInputChange("city", event.target.value)
+                    }
+                    placeholder="City *"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    required
+                  />
+                  <input
+                    value={addressForm.state}
+                    onChange={(event) =>
+                      handleAddressInputChange("state", event.target.value)
+                    }
+                    placeholder="State *"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    required
+                  />
+                  <input
+                    value={addressForm.country}
+                    onChange={(event) =>
+                      handleAddressInputChange("country", event.target.value)
+                    }
+                    placeholder="Country *"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    required
+                  />
+                  <input
+                    value={addressForm.pincode}
+                    onChange={(event) =>
+                      handleAddressInputChange("pincode", event.target.value)
+                    }
+                    placeholder="Pincode *"
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    required
+                  />
+                </div>
+
+                <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={addressForm.isDefault}
+                    onChange={(event) =>
+                      handleAddressInputChange("isDefault", event.target.checked)
+                    }
+                  />
+                  Set as default address
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={isCreatingAddress}
+                  className="w-full rounded-md bg-gray-900 text-white py-2 text-sm font-medium hover:bg-black disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {isCreatingAddress ? "Saving..." : "Save Address and Use for Checkout"}
+                </button>
+              </form>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 border-t border-gray-200 pt-4">
+            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+              In-store pickup selected. Delivery address is not required for this order.
+            </p>
+          </div>
+        )}
 
           {summaryError ? (
             <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
               {summaryError}
             </p>
           ) : null}
-        </div>
 
         {isAddressesFetching ? (
           <p className="mt-3 text-xs text-gray-500">Refreshing addresses...</p>
@@ -797,7 +826,11 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
           </button>
         ) : isAuthenticated ? (
           <button
-            disabled={isBusy || totalItems === 0 || !selectedAddressId}
+            disabled={
+              isBusy ||
+              totalItems === 0 ||
+              (deliveryMode === "DELIVERY" && !selectedAddressId)
+            }
             onClick={handleCheckoutClick}
             className="mt-4 w-full bg-indigo-600 text-white py-2.5 rounded-md font-medium text-sm hover:bg-indigo-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
           >

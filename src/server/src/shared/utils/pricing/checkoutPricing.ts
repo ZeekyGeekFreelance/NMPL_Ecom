@@ -1,6 +1,7 @@
 import prisma from "@/infra/database/database.config";
 import AppError from "@/shared/errors/AppError";
-import { DELIVERY_MODE, type Address } from "@prisma/client";
+import { getPlatformName } from "@/shared/utils/branding";
+import { ADDRESS_TYPE, DELIVERY_MODE } from "@prisma/client";
 
 type LineItem = {
   quantity: number;
@@ -12,6 +13,21 @@ type DeliveryQuote = {
   deliveryCharge: number;
   deliveryLabel: string;
   serviceArea: string | null;
+};
+
+export type CheckoutAddressSnapshot = {
+  id: string;
+  sourceAddressId?: string | null;
+  type: ADDRESS_TYPE;
+  fullName: string;
+  phoneNumber: string;
+  line1: string;
+  line2?: string | null;
+  landmark?: string | null;
+  city: string;
+  state: string;
+  country: string;
+  pincode: string;
 };
 
 const parseNumber = (value: unknown, fallback: number) => {
@@ -64,7 +80,7 @@ export const calculateItemsSubtotal = (items: LineItem[]): number => {
 export const getAddressForCheckout = async (
   userId: string,
   addressId: string
-): Promise<Address> => {
+): Promise<CheckoutAddressSnapshot> => {
   const normalizedAddressId = String(addressId || "").trim();
   if (!normalizedAddressId) {
     throw new AppError(400, "Address selection is required.");
@@ -80,17 +96,54 @@ export const getAddressForCheckout = async (
     throw new AppError(404, "Selected address was not found for this account.");
   }
 
-  return address;
+  return {
+    id: address.id,
+    sourceAddressId: address.id,
+    type: address.type,
+    fullName: address.fullName,
+    phoneNumber: address.phoneNumber,
+    line1: address.line1,
+    line2: address.line2,
+    landmark: address.landmark,
+    city: address.city,
+    state: address.state,
+    country: address.country,
+    pincode: address.pincode,
+  };
+};
+
+export const getPickupLocationSnapshot = (): CheckoutAddressSnapshot => {
+  const platformName = getPlatformName();
+
+  return {
+    id: "PICKUP_LOCATION",
+    sourceAddressId: null,
+    type: ADDRESS_TYPE.OTHER,
+    fullName:
+      String(process.env.PICKUP_STORE_NAME || "").trim() ||
+      `${platformName} Pickup Desk`,
+    phoneNumber:
+      String(process.env.PICKUP_STORE_PHONE || "").trim() || "Not Available",
+    line1:
+      String(process.env.PICKUP_STORE_LINE1 || "").trim() ||
+      `${platformName} Store Pickup Counter`,
+    line2: String(process.env.PICKUP_STORE_LINE2 || "").trim() || null,
+    landmark: String(process.env.PICKUP_STORE_LANDMARK || "").trim() || null,
+    city: String(process.env.PICKUP_STORE_CITY || "").trim() || "Bangalore",
+    state: String(process.env.PICKUP_STORE_STATE || "").trim() || "Karnataka",
+    country: String(process.env.PICKUP_STORE_COUNTRY || "").trim() || "India",
+    pincode: String(process.env.PICKUP_STORE_PINCODE || "").trim() || "560001",
+  };
 };
 
 export const resolveDeliveryQuote = async (params: {
   deliveryMode: unknown;
-  address: Address;
+  address?: Pick<CheckoutAddressSnapshot, "city" | "pincode"> | null;
 }): Promise<DeliveryQuote> => {
   const mode = normalizeDeliveryMode(params.deliveryMode);
-  const city = String(params.address.city || "").trim();
+  const city = String(params.address?.city || "").trim();
   const normalizedCity = normalizeText(city);
-  const normalizedPincode = String(params.address.pincode || "").trim();
+  const normalizedPincode = String(params.address?.pincode || "").trim();
 
   if (mode === DELIVERY_MODE.PICKUP) {
     return {
@@ -99,6 +152,10 @@ export const resolveDeliveryQuote = async (params: {
       deliveryLabel: "In-Store Pickup",
       serviceArea: city || null,
     };
+  }
+
+  if (!params.address) {
+    throw new AppError(400, "Address selection is required for delivery.");
   }
 
   if (!normalizedPincode) {

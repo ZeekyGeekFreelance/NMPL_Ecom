@@ -3,6 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { ShoppingCart } from "lucide-react";
 
@@ -32,40 +33,51 @@ const OrderItems = ({ order }) => {
       </div>
 
       <div className="space-y-6">
-        {order.orderItems.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center border-b border-gray-100 pb-4 last:border-0 last:pb-0"
-          >
-            {/* Variant Image */}
-            <div className="flex items-center justify-center mr-4 overflow-hidden shadow-sm">
-              <Image
-                src={item.variant.images[0]}
-                alt={formatVariantName(item)}
-                width={50}
-                height={50}
-                className="object-cover"
-              />
-            </div>
+        {order.orderItems.map((item) => {
+          const productSlug = item?.variant?.product?.slug;
+          const productHref = productSlug ? `/product/${productSlug}` : "/shop";
 
-            {/* Variant Details */}
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800 text-sm">
-                {formatVariantName(item)}
-              </p>
-            </div>
+          return (
+            <div
+              key={item.id}
+              className="flex items-center border-b border-gray-100 pb-4 last:border-0 last:pb-0"
+            >
+              {/* Variant Image */}
+              <Link
+                href={productHref}
+                className="flex items-center justify-center mr-4 overflow-hidden shadow-sm"
+              >
+                <Image
+                  src={item.variant.images[0]}
+                  alt={formatVariantName(item)}
+                  width={50}
+                  height={50}
+                  className="object-cover"
+                />
+              </Link>
 
-            {/* Price */}
-            <div className="text-right">
-              <p className="font-medium text-gray-800">
-                {formatPrice(item.variant.price * item.quantity)}
-              </p>
-              <p className="text-xs text-gray-500">
-                {item.quantity} x {formatPrice(item.variant.price)}
-              </p>
+              {/* Variant Details */}
+              <div className="flex-1">
+                <Link
+                  href={productHref}
+                  className="font-semibold text-gray-800 text-sm hover:text-indigo-600 transition-colors"
+                >
+                  {formatVariantName(item)}
+                </Link>
+              </div>
+
+              {/* Price */}
+              <div className="text-right">
+                <p className="font-medium text-gray-800">
+                  {formatPrice(item.variant.price * item.quantity)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {item.quantity} x {formatPrice(item.variant.price)}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </motion.div>
   );

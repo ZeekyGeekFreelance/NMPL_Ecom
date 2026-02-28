@@ -26,6 +26,7 @@ import { TransactionRepository } from "../transaction/transaction.repository";
 import {
   buildCheckoutPricing,
   getAddressForCheckout,
+  getPickupLocationSnapshot,
   resolveDeliveryQuote,
 } from "@/shared/utils/pricing/checkoutPricing";
 
@@ -45,6 +46,21 @@ export class OrderService {
       "http://localhost:3000";
 
     return configuredUrl.replace(/\/+$/, "");
+  }
+
+  private isMockPaymentEnabled(): boolean {
+    const flag = String(process.env.ENABLE_MOCK_PAYMENT || "")
+      .trim()
+      .toLowerCase();
+    return flag === "true" && process.env.NODE_ENV !== "production";
+  }
+
+  private buildMockCheckoutUrl(orderReference: string): string {
+    const params = new URLSearchParams({
+      orderId: orderReference,
+      mockPayment: "1",
+    });
+    return `${this.resolvePortalUrl()}/payment-success?${params.toString()}`;
   }
 
   private buildQuotationLogLineItems(orderItems: any[] = []) {
@@ -133,13 +149,6 @@ export class OrderService {
   }
 
   async acceptQuotationForOrder(orderId: string, userId: string) {
-    if (!isStripeConfigured || !stripe) {
-      throw new AppError(
-        503,
-        "Payment gateway is not configured. Please contact support."
-      );
-    }
-
     const resolvedOrderId = await this.resolveOrderIdForUser(orderId, userId);
     const order = await this.orderRepository.findOrderById(resolvedOrderId);
     if (!order) {
@@ -191,6 +200,76 @@ export class OrderService {
       throw new AppError(
         409,
         "Quoted amount is invalid for online payment processing."
+      );
+    }
+
+    const mockPaymentEnabled = this.isMockPaymentEnabled();
+    if (mockPaymentEnabled) {
+      const orderReference = toOrderReference(order.id);
+      const mockCheckoutSessionId = `mock_${Date.now()}_${order.id.slice(0, 8)}`;
+
+      if (order.payment?.id) {
+        await prisma.payment.update({
+          where: {
+            id: order.payment.id,
+          },
+          data: {
+            method: "MOCK_GATEWAY",
+            amount: Number(order.amount),
+            status: PAYMENT_STATUS.PENDING,
+          },
+        });
+      } else {
+        await prisma.payment.create({
+          data: {
+            orderId: order.id,
+            userId: order.userId,
+            method: "MOCK_GATEWAY",
+            amount: Number(order.amount),
+            status: PAYMENT_STATUS.PENDING,
+          },
+        });
+      }
+
+      await this.createQuotationLog({
+        orderId: order.id,
+        event: ORDER_QUOTATION_LOG_EVENT.CUSTOMER_ACCEPTED,
+        previousTotal: Number(order.amount),
+        updatedTotal: Number(order.amount),
+        actorUserId: userId,
+        actorRole: order.customerRoleSnapshot,
+        message:
+          "Customer accepted quotation and initiated mock payment for testing.",
+        lineItems: this.buildQuotationLogLineItems(order.orderItems),
+      });
+
+      await this.transactionService.updateTransactionStatus(order.transaction.id, {
+        status: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+        actorUserId: userId,
+        actorRole: "SYSTEM",
+      });
+
+      await this.logsService.info("Mock payment flow confirmed order", {
+        orderId: order.id,
+        orderReference,
+        userId,
+        checkoutSessionId: mockCheckoutSessionId,
+      });
+
+      return {
+        orderId: order.id,
+        orderReference,
+        checkoutUrl: this.buildMockCheckoutUrl(orderReference),
+        checkoutSessionId: mockCheckoutSessionId,
+        reservationExpiresAt: reservationExpiry,
+        isMockPayment: true,
+      };
+    }
+
+    if (!isStripeConfigured || !stripe) {
+      throw new AppError(
+        503,
+        "Payment gateway is not configured. Please contact support."
       );
     }
 
@@ -342,7 +421,7 @@ export class OrderService {
   private async buildCheckoutOrderDraft(params: {
     userId: string;
     cartId?: string;
-    addressId: string;
+    addressId?: string;
     deliveryMode: "PICKUP" | "DELIVERY";
   }) {
     const orderingUser = await prisma.user.findUnique({
@@ -402,12 +481,18 @@ export class OrderService {
       price: dealerPriceMap.get(item.variantId) ?? item.variant.price,
     }));
 
-    const selectedAddress = await getAddressForCheckout(
-      params.userId,
-      params.addressId
-    );
+    const normalizedDeliveryMode =
+      String(params.deliveryMode || "").toUpperCase() === DELIVERY_MODE.PICKUP
+        ? DELIVERY_MODE.PICKUP
+        : DELIVERY_MODE.DELIVERY;
+
+    const selectedAddress =
+      normalizedDeliveryMode === DELIVERY_MODE.PICKUP
+        ? getPickupLocationSnapshot()
+        : await getAddressForCheckout(params.userId, params.addressId || "");
+
     const deliveryQuote = await resolveDeliveryQuote({
-      deliveryMode: params.deliveryMode,
+      deliveryMode: normalizedDeliveryMode,
       address: selectedAddress,
     });
     const pricing = buildCheckoutPricing({
@@ -429,7 +514,7 @@ export class OrderService {
 
   async buildCheckoutSummaryFromUserCart(
     userId: string,
-    addressId: string,
+    addressId: string | undefined,
     deliveryMode: "PICKUP" | "DELIVERY"
   ) {
     const draft = await this.buildCheckoutOrderDraft({
@@ -465,7 +550,7 @@ export class OrderService {
   async createOrderFromCart(
     userId: string,
     cartId: string,
-    addressId: string,
+    addressId: string | undefined,
     deliveryMode: "PICKUP" | "DELIVERY"
   ) {
     const draft = await this.buildCheckoutOrderDraft({
@@ -488,7 +573,7 @@ export class OrderService {
         serviceArea: draft.pricing.serviceArea,
       },
       addressSnapshot: {
-        sourceAddressId: draft.selectedAddress.id,
+        sourceAddressId: draft.selectedAddress.sourceAddressId || undefined,
         addressType: draft.selectedAddress.type,
         fullName: draft.selectedAddress.fullName,
         phoneNumber: draft.selectedAddress.phoneNumber,

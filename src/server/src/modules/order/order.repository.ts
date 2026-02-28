@@ -145,7 +145,7 @@ export class OrderRepository {
       serviceArea?: string | null;
     };
     addressSnapshot: {
-      sourceAddressId: string;
+      sourceAddressId?: string;
       addressType: ADDRESS_TYPE;
       fullName: string;
       phoneNumber: string;

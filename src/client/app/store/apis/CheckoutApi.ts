@@ -3,7 +3,7 @@ import { apiSlice } from "../slices/ApiSlice";
 export type CheckoutDeliveryMode = "PICKUP" | "DELIVERY";
 
 export type CheckoutSelectionPayload = {
-  addressId: string;
+  addressId?: string;
   deliveryMode: CheckoutDeliveryMode;
 };
 

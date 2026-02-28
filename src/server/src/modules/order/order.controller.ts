@@ -51,10 +51,13 @@ export class OrderController {
       orderId,
       userId
     );
+    const message = paymentSession?.isMockPayment
+      ? "Quotation accepted. Mock payment confirmed for testing."
+      : "Quotation accepted. Redirect to payment gateway.";
 
     sendResponse(res, 200, {
       data: paymentSession,
-      message: "Quotation accepted. Redirect to payment gateway.",
+      message,
     });
   });
 
@@ -85,11 +88,11 @@ export class OrderController {
     if (!cartId) {
       throw new AppError(400, "Cart ID is required");
     }
-    if (!addressId) {
-      throw new AppError(400, "Address selection is required");
-    }
     if (deliveryMode !== "PICKUP" && deliveryMode !== "DELIVERY") {
       throw new AppError(400, "Delivery mode must be PICKUP or DELIVERY");
+    }
+    if (deliveryMode === "DELIVERY" && !addressId) {
+      throw new AppError(400, "Address selection is required for delivery");
     }
     const order = await this.orderService.createOrderFromCart(
       userId,

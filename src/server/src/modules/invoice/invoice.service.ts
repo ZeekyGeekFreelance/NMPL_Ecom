@@ -11,6 +11,7 @@ import {
 import { InvoiceRepository, InvoiceWithDetails } from "./invoice.repository";
 import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
 import { ORDER_LIFECYCLE_STATUS } from "@/shared/utils/orderLifecycle";
+import { getPickupLocationSnapshot } from "@/shared/utils/pricing/checkoutPricing";
 
 interface RequesterContext {
   id: string;
@@ -275,33 +276,55 @@ export class InvoiceService {
     }));
 
     const customerType = this.resolveCustomerType(invoice);
+    const normalizedDeliveryMode = String(
+      invoice.order.deliveryMode || "DELIVERY"
+    )
+      .trim()
+      .toUpperCase();
+    const isPickup = normalizedDeliveryMode === "PICKUP";
+    const pickupLocation = isPickup ? getPickupLocationSnapshot() : null;
+    const locationAddress = isPickup
+      ? {
+          fullName: pickupLocation?.fullName,
+          phoneNumber: pickupLocation?.phoneNumber,
+          line1: pickupLocation?.line1 || "",
+          line2: pickupLocation?.line2 || null,
+          landmark: pickupLocation?.landmark || null,
+          city: pickupLocation?.city || "",
+          state: pickupLocation?.state || "",
+          pincode: pickupLocation?.pincode || "",
+          country: pickupLocation?.country || "",
+        }
+      : invoice.order.address
+      ? {
+          fullName: invoice.order.address.fullName,
+          phoneNumber: invoice.order.address.phoneNumber,
+          line1: invoice.order.address.line1,
+          line2: invoice.order.address.line2,
+          landmark: invoice.order.address.landmark,
+          city: invoice.order.address.city,
+          state: invoice.order.address.state,
+          pincode: invoice.order.address.pincode,
+          country: invoice.order.address.country,
+        }
+      : null;
 
     return generateInvoicePdf({
       invoiceNumber: invoice.invoiceNumber,
       orderId: toOrderReference(invoice.orderId),
       orderDate: invoice.order.orderDate,
       customerName: invoice.user.name,
+      customerPhone: invoice.user.phone || invoice.order.address?.phoneNumber || null,
       accountReference: toAccountReference(invoice.user.id),
       customerEmail: invoice.customerEmail,
       customerType,
       items,
       subtotalAmount: Number(invoice.order.subtotalAmount || 0),
       deliveryCharge: Number(invoice.order.deliveryCharge || 0),
-      deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
+      deliveryMode: normalizedDeliveryMode,
       totalAmount: invoice.order.amount,
-      billingAddress: invoice.order.address
-        ? {
-            fullName: invoice.order.address.fullName,
-            phoneNumber: invoice.order.address.phoneNumber,
-            line1: invoice.order.address.line1,
-            line2: invoice.order.address.line2,
-            landmark: invoice.order.address.landmark,
-            city: invoice.order.address.city,
-            state: invoice.order.address.state,
-            pincode: invoice.order.address.pincode,
-            country: invoice.order.address.country,
-          }
-        : null,
+      locationLabel: isPickup ? "Pickup Location" : "Delivery To",
+      locationAddress,
     });
   }
 
