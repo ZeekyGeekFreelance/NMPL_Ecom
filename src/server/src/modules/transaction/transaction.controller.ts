@@ -55,12 +55,72 @@ export class TransactionController {
           status: rawStatus.trim().toUpperCase(),
           forceConfirmedRejection,
           confirmationToken,
+          actorUserId: req.user?.id,
+          actorRole: req.user?.effectiveRole || req.user?.role,
         }
       );
 
       sendResponse(res, 200, {
         data: { updatedTransaction },
         message: "Updated transaction successfully",
+      });
+    }
+  );
+
+  updateTransactionQuotation = asyncHandler(
+    async (req: Request, res: Response) => {
+      const { id } = req.params;
+      const rawQuotationItems = req.body?.quotationItems;
+
+      if (!Array.isArray(rawQuotationItems) || rawQuotationItems.length === 0) {
+        throw new AppError(
+          400,
+          "quotationItems is required and must be a non-empty array."
+        );
+      }
+
+      const quotationItems = rawQuotationItems.map((item: any) => {
+        const orderItemId = String(item?.orderItemId || "").trim();
+        const quantity = Number(item?.quantity);
+        const price = Number(item?.price);
+
+        if (!orderItemId) {
+          throw new AppError(400, "Each quotation item must include orderItemId.");
+        }
+
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          throw new AppError(
+            400,
+            `Invalid quotation quantity for order item ${orderItemId}.`
+          );
+        }
+
+        if (!Number.isFinite(price) || price < 0) {
+          throw new AppError(
+            400,
+            `Invalid quotation price for order item ${orderItemId}.`
+          );
+        }
+
+        return {
+          orderItemId,
+          quantity,
+          price: Number(price.toFixed(2)),
+        };
+      });
+
+      const updatedTransaction = await this.transactionService.issueQuotation(
+        id,
+        quotationItems,
+        {
+          actorUserId: req.user?.id,
+          actorRole: req.user?.effectiveRole || req.user?.role,
+        }
+      );
+
+      sendResponse(res, 200, {
+        data: { updatedTransaction },
+        message: "Quotation updated and issued successfully",
       });
     }
   );

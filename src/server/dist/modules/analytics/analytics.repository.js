@@ -8,18 +8,26 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AnalyticsRepository = void 0;
+const database_config_1 = __importDefault(require("@/infra/database/database.config"));
 const client_1 = require("@prisma/client");
+const analytics_1 = require("@/shared/utils/analytics");
+const orderStatus_1 = require("@/shared/utils/orderStatus");
 class AnalyticsRepository {
-    constructor() {
-        this.prisma = new client_1.PrismaClient();
-    }
     getOrderYearRange() {
         return __awaiter(this, void 0, void 0, function* () {
-            const orders = yield this.prisma.order.findMany({
+            const orders = yield database_config_1.default.order.findMany({
                 select: { orderDate: true },
                 orderBy: { orderDate: "asc" },
+                where: {
+                    status: {
+                        in: [...orderStatus_1.CONFIRMED_ORDER_STATUS_VALUES],
+                    },
+                },
             });
             const years = [
                 ...new Set(orders.map((order) => order.orderDate.getFullYear())),
@@ -29,23 +37,36 @@ class AnalyticsRepository {
     }
     getOrdersByTimePeriod(start, end, yearStart, yearEnd) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.prisma.order.findMany({
+            return database_config_1.default.order.findMany({
                 where: {
-                    orderDate: {
-                        gte: start || yearStart,
-                        lte: end || yearEnd,
+                    orderDate: (0, analytics_1.buildDateFilter)(start, end, yearStart, yearEnd),
+                    status: {
+                        in: [...orderStatus_1.CONFIRMED_ORDER_STATUS_VALUES],
                     },
                 },
-                include: { user: true },
+                include: {
+                    user: {
+                        include: {
+                            dealerProfile: {
+                                select: {
+                                    status: true,
+                                },
+                            },
+                        },
+                    },
+                },
             });
         });
     }
     getOrderItemsByTimePeriod(start, end, yearStart, yearEnd, category) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.prisma.orderItem.findMany({
-                where: Object.assign({ createdAt: {
-                        gte: start || yearStart,
-                        lte: end || yearEnd,
+            const orderDateFilter = (0, analytics_1.buildDateFilter)(start, end, yearStart, yearEnd);
+            return database_config_1.default.orderItem.findMany({
+                where: Object.assign({ order: {
+                        orderDate: orderDateFilter,
+                        status: {
+                            in: [...orderStatus_1.CONFIRMED_ORDER_STATUS_VALUES],
+                        },
                     } }, (category && {
                     variant: {
                         product: {
@@ -56,6 +77,11 @@ class AnalyticsRepository {
                     },
                 })),
                 include: {
+                    order: {
+                        select: {
+                            orderDate: true,
+                        },
+                    },
                     variant: {
                         include: {
                             product: {
@@ -71,25 +97,42 @@ class AnalyticsRepository {
     }
     getUsersByTimePeriod(start, end, yearStart, yearEnd) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.prisma.user.findMany({
+            const orderDateFilter = (0, analytics_1.buildDateFilter)(start, end, yearStart, yearEnd);
+            return database_config_1.default.user.findMany({
                 where: {
-                    createdAt: {
-                        gte: start || yearStart,
-                        lte: end || yearEnd,
+                    role: client_1.ROLE.USER,
+                    orders: {
+                        some: {
+                            orderDate: orderDateFilter,
+                            status: {
+                                in: [...orderStatus_1.CONFIRMED_ORDER_STATUS_VALUES],
+                            },
+                        },
                     },
                 },
-                include: { orders: true },
+                include: {
+                    dealerProfile: {
+                        select: {
+                            status: true,
+                        },
+                    },
+                    orders: {
+                        where: {
+                            orderDate: orderDateFilter,
+                            status: {
+                                in: [...orderStatus_1.CONFIRMED_ORDER_STATUS_VALUES],
+                            },
+                        },
+                    },
+                },
             });
         });
     }
     getInteractionsByTimePeriod(start, end, yearStart, yearEnd) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.prisma.interaction.findMany({
+            return database_config_1.default.interaction.findMany({
                 where: {
-                    createdAt: {
-                        gte: start || yearStart,
-                        lte: end || yearEnd,
-                    },
+                    createdAt: (0, analytics_1.buildDateFilter)(start, end, yearStart, yearEnd),
                 },
                 include: { user: true, product: true },
             });
@@ -97,7 +140,7 @@ class AnalyticsRepository {
     }
     createInteraction(data) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.prisma.interaction.create({
+            return database_config_1.default.interaction.create({
                 data: {
                     userId: data.userId,
                     sessionId: data.sessionId,

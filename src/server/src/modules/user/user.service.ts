@@ -196,6 +196,7 @@ export class UserService {
     data: Partial<{
       name?: string;
       email?: string;
+      phone?: string;
       avatar?: string;
     }>
   ) {
@@ -208,6 +209,7 @@ export class UserService {
     const payload: Partial<{
       name?: string;
       email?: string;
+      phone?: string;
       avatar?: string;
     }> = {
       ...data,
@@ -217,20 +219,42 @@ export class UserService {
       payload.name = this.normalizeDisplayName(data.name, "Name");
     }
 
+    if (data.phone !== undefined) {
+      payload.phone = this.normalizePhone(data.phone, "Phone number");
+    }
+
     const updatedUser = await this.userRepository.updateUser(userId, payload);
     return this.withAccountReference(updatedUser);
   }
 
-  async updateCurrentUserProfile(id: string, data: { name: string }) {
+  async updateCurrentUserProfile(
+    id: string,
+    data: { name?: string; phone?: string }
+  ) {
     const userId = this.assertUuid(id, "user id");
     const user = await this.userRepository.findUserById(userId);
     if (!user) {
       throw new AppError(404, "User not found");
     }
 
-    const updatedUser = await this.userRepository.updateUser(userId, {
-      name: this.normalizeDisplayName(data.name, "Name"),
-    });
+    const payload: {
+      name?: string;
+      phone?: string;
+    } = {};
+
+    if (data.name !== undefined) {
+      payload.name = this.normalizeDisplayName(data.name, "Name");
+    }
+
+    if (data.phone !== undefined) {
+      payload.phone = this.normalizePhone(data.phone, "Phone number");
+    }
+
+    if (Object.keys(payload).length === 0) {
+      throw new AppError(400, "At least one profile field is required");
+    }
+
+    const updatedUser = await this.userRepository.updateUser(userId, payload);
 
     return this.withAccountReference(updatedUser);
   }
@@ -308,6 +332,7 @@ export class UserService {
       accountReference: toAccountReference(dealer.id),
       name: dealer.name,
       email: dealer.email,
+      phone: dealer.phone,
       role: dealer.role,
       effectiveRole: resolveEffectiveRoleFromUser({
         role: dealer.role,

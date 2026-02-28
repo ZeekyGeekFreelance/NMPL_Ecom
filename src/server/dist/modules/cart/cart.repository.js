@@ -109,16 +109,17 @@ class CartRepository {
                 // Validate stock
                 const variant = yield database_config_1.default.productVariant.findUnique({
                     where: { id: data.variantId },
-                    select: { stock: true },
+                    select: { stock: true, reservedStock: true },
                 });
                 debugLog("🔍 [CART REPOSITORY] Variant found for stock check:", variant);
                 if (!variant) {
                     debugLog("🔍 [CART REPOSITORY] ERROR: Variant not found");
                     throw new Error("Variant not found");
                 }
-                if (variant.stock < data.quantity) {
+                const availableStock = variant.stock - (variant.reservedStock || 0);
+                if (availableStock < data.quantity) {
                     debugLog("🔍 [CART REPOSITORY] ERROR: Insufficient stock");
-                    throw new Error(`Insufficient stock: only ${variant.stock} available`);
+                    throw new Error(`Insufficient stock: only ${Math.max(availableStock, 0)} available`);
                 }
                 const item = yield database_config_1.default.cartItem.create({ data });
                 debugLog("🔍 [CART REPOSITORY] Cart item created:", item);
@@ -150,9 +151,10 @@ class CartRepository {
                 debugLog("🔍 [CART REPOSITORY] ERROR: Cart item not found");
                 throw new Error("Cart item not found");
             }
-            if (cartItem.variant.stock < quantity) {
+            const availableStock = cartItem.variant.stock - (cartItem.variant.reservedStock || 0);
+            if (availableStock < quantity) {
                 debugLog("🔍 [CART REPOSITORY] ERROR: Insufficient stock for update");
-                throw new Error(`Insufficient stock: only ${cartItem.variant.stock} available`);
+                throw new Error(`Insufficient stock: only ${Math.max(availableStock, 0)} available`);
             }
             const updatedItem = yield database_config_1.default.cartItem.update({
                 where: { id: itemId },
@@ -189,9 +191,10 @@ class CartRepository {
                 if (existingItem) {
                     const newQuantity = existingItem.quantity + item.quantity;
                     debugLog("🔍 [CART REPOSITORY] Merging quantities:", newQuantity);
-                    if (item.variant.stock < newQuantity) {
+                    const availableStock = item.variant.stock - (item.variant.reservedStock || 0);
+                    if (availableStock < newQuantity) {
                         debugLog("🔍 [CART REPOSITORY] ERROR: Insufficient stock after merge");
-                        throw new Error(`Insufficient stock for variant ${item.variantId}: only ${item.variant.stock} available`);
+                        throw new Error(`Insufficient stock for variant ${item.variantId}: only ${Math.max(availableStock, 0)} available`);
                     }
                     yield database_config_1.default.cartItem.update({
                         where: { id: existingItem.id },
@@ -201,9 +204,10 @@ class CartRepository {
                 }
                 else {
                     debugLog("🔍 [CART REPOSITORY] Adding new item to user cart");
-                    if (item.variant.stock < item.quantity) {
+                    const availableStock = item.variant.stock - (item.variant.reservedStock || 0);
+                    if (availableStock < item.quantity) {
                         debugLog("🔍 [CART REPOSITORY] ERROR: Insufficient stock for new item");
-                        throw new Error(`Insufficient stock for variant ${item.variantId}: only ${item.variant.stock} available`);
+                        throw new Error(`Insufficient stock for variant ${item.variantId}: only ${Math.max(availableStock, 0)} available`);
                     }
                     yield database_config_1.default.cartItem.create({
                         data: {

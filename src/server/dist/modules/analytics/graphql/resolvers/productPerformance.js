@@ -10,6 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const analytics_1 = require("@/shared/utils/analytics");
+const orderStatus_1 = require("@/shared/utils/orderStatus");
 const productPerformance = {
     Query: {
         productPerformance: (_1, _a, _b) => __awaiter(void 0, [_1, _a, _b], void 0, function* (_, { params }, { prisma }) {
@@ -21,12 +22,28 @@ const productPerformance = {
                 startDate,
                 endDate,
             });
+            const currentOrderDateFilter = (0, analytics_1.buildDateFilter)(currentStartDate, endDate, yearStart, yearEnd);
             const orderItems = yield prisma.orderItem.findMany({
-                where: {
-                    createdAt: Object.assign(Object.assign(Object.assign(Object.assign({}, (currentStartDate && { gte: currentStartDate })), (endDate && { lte: new Date(endDate) })), (yearStart && { gte: yearStart })), (yearEnd && { lte: yearEnd })),
-                    // category filter commented out; adjust if needed
-                },
+                where: Object.assign({ order: {
+                        orderDate: currentOrderDateFilter,
+                        status: {
+                            in: [...orderStatus_1.CONFIRMED_ORDER_STATUS_VALUES],
+                        },
+                    } }, (category && {
+                    variant: {
+                        product: {
+                            category: {
+                                name: category,
+                            },
+                        },
+                    },
+                })),
                 include: {
+                    order: {
+                        select: {
+                            orderDate: true,
+                        },
+                    },
                     variant: {
                         include: {
                             product: {
@@ -64,7 +81,7 @@ const productPerformance = {
                 }
                 productSales[productId].quantity += item.quantity;
                 productSales[productId].revenue +=
-                    item.quantity * (item.variant.price || 0);
+                    item.quantity * (item.price || 0);
             }
             return Object.values(productSales)
                 .map((product) => {

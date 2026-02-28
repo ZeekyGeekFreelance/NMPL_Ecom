@@ -8,16 +8,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReportsRepository = void 0;
-const client_1 = require("@prisma/client");
+const database_config_1 = __importDefault(require("@/infra/database/database.config"));
 class ReportsRepository {
-    constructor() {
-        this.prisma = new client_1.PrismaClient();
-    }
     createReport(data) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.prisma.report.create({
+            return database_config_1.default.report.create({
                 data: {
                     type: data.type,
                     format: data.format,

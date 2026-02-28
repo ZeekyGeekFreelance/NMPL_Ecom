@@ -56,10 +56,13 @@ class CartController {
             yield this.logAction("Item added to cart", req, startedAt);
         }));
         this.updateCartItem = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const startedAt = Date.now();
             const { itemId } = req.params;
             const { quantity } = req.body;
-            const updatedItem = yield this.cartService.updateCartItemQuantity(itemId, quantity);
+            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            const sessionId = req.session.id;
+            const updatedItem = yield this.cartService.updateCartItemQuantity(itemId, quantity, userId, sessionId);
             (0, sendResponse_1.default)(res, 200, {
                 data: { item: updatedItem },
                 message: "Item quantity updated successfully",
@@ -67,9 +70,12 @@ class CartController {
             yield this.logAction("Item quantity updated", req, startedAt);
         }));
         this.removeFromCart = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const startedAt = Date.now();
             const { itemId } = req.params;
-            yield this.cartService.removeFromCart(itemId);
+            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            const sessionId = req.session.id;
+            yield this.cartService.removeFromCart(itemId, userId, sessionId);
             (0, sendResponse_1.default)(res, 200, {
                 message: "Item removed from cart successfully",
             });

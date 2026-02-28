@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { Loader2 } from "lucide-react";
 import { useSignInMutation } from "@/app/store/apis/AuthApi";
@@ -23,6 +23,7 @@ interface InputForm {
 const SignIn = () => {
   const [signIn, { error, isLoading }] = useSignInMutation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const apiErrorMessage = getApiErrorMessage(error);
   const showDevCredentials = process.env.NODE_ENV !== "production";
 
@@ -40,10 +41,15 @@ const SignIn = () => {
   const onSubmit = async (formData: InputForm) => {
     try {
       const response = await signIn(formData).unwrap();
+      const requestedNextPath = searchParams.get("next");
+      const nextPath =
+        requestedNextPath && requestedNextPath.startsWith("/")
+          ? requestedNextPath
+          : null;
       const destination =
         response.user?.role === "ADMIN" || response.user?.role === "SUPERADMIN"
           ? "/dashboard"
-          : "/";
+          : nextPath || "/";
       router.push(destination);
     } catch {
       // Mutation error state is already handled by RTK Query.

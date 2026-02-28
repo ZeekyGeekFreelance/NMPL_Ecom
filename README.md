@@ -98,6 +98,12 @@ REFRESH_TOKEN_SECRET=change_me
 SMS_PROVIDER=LOG
 ```
 
+If Docker Postgres is used from host tools, use `127.0.0.1:5433` to avoid collision with local Windows Postgres service:
+
+```env
+DATABASE_URL=postgresql://jhaecom:jhaecom27@127.0.0.1:5433/b2c_ecommerce
+```
+
 Install dependencies:
 
 ```bash

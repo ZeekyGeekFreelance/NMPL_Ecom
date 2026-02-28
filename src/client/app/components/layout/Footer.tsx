@@ -20,15 +20,16 @@ type FooterLink = {
   href: string;
   label: string;
   hideForAdmin?: boolean;
+  authOnly?: boolean;
 };
 
 const FOOTER_LINKS: FooterLink[] = [
   { href: "/", label: "Home", hideForAdmin: true },
   { href: "/shop", label: "Shop", hideForAdmin: true },
-  { href: "/cart", label: "Cart", hideForAdmin: true },
-  { href: "/orders", label: "My Orders", hideForAdmin: true },
-  { href: "/profile", label: "Profile" },
-  { href: "/support", label: "Support", hideForAdmin: true },
+  { href: "/cart", label: "Cart", authOnly: true, hideForAdmin: true },
+  { href: "/orders", label: "My Orders", authOnly: true, hideForAdmin: true },
+  { href: "/profile", label: "Profile", authOnly: true },
+  { href: "/support", label: "Support", authOnly: true, hideForAdmin: true },
 ];
 
 const AUTH_LINKS = [
@@ -38,15 +39,23 @@ const AUTH_LINKS = [
 ];
 
 const Footer = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { data: categoriesData } = useQuery(GET_CATEGORIES);
   const categories = (categoriesData?.categories || []).slice(0, 6);
   const year = new Date().getFullYear();
   const isAdminOrSuperAdmin =
     user?.role === "ADMIN" || user?.role === "SUPERADMIN";
-  const visibleFooterLinks = FOOTER_LINKS.filter(
-    (link) => !isAdminOrSuperAdmin || !link.hideForAdmin
-  );
+  const visibleFooterLinks = FOOTER_LINKS.filter((link) => {
+    if (isAdminOrSuperAdmin && link.hideForAdmin) {
+      return false;
+    }
+
+    if (link.authOnly && !isAuthenticated) {
+      return false;
+    }
+
+    return true;
+  });
   const supportHref = isAdminOrSuperAdmin ? "/dashboard/chats" : "/support";
   const supportDescription = isAdminOrSuperAdmin
     ? "Use dashboard chats to manage incoming dealer and customer requests."

@@ -1,7 +1,7 @@
 import prisma from "@/infra/database/database.config";
 import { ROLE } from "@prisma/client";
 import { buildDateFilter } from "@/shared/utils/analytics";
-import { REJECTED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 export class AnalyticsRepository {
   async getOrderYearRange(): Promise<number[]> {
@@ -10,7 +10,7 @@ export class AnalyticsRepository {
       orderBy: { orderDate: "asc" },
       where: {
         status: {
-          notIn: [...REJECTED_ORDER_STATUS_VALUES],
+          in: [...CONFIRMED_ORDER_STATUS_VALUES],
         },
       },
     });
@@ -30,7 +30,7 @@ export class AnalyticsRepository {
       where: {
         orderDate: buildDateFilter(start, end, yearStart, yearEnd),
         status: {
-          notIn: [...REJECTED_ORDER_STATUS_VALUES],
+          in: [...CONFIRMED_ORDER_STATUS_VALUES],
         },
       },
       include: {
@@ -61,7 +61,7 @@ export class AnalyticsRepository {
         order: {
           orderDate: orderDateFilter,
           status: {
-            notIn: [...REJECTED_ORDER_STATUS_VALUES],
+            in: [...CONFIRMED_ORDER_STATUS_VALUES],
           },
         },
         ...(category && {
@@ -108,7 +108,7 @@ export class AnalyticsRepository {
           some: {
             orderDate: orderDateFilter,
             status: {
-              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+              in: [...CONFIRMED_ORDER_STATUS_VALUES],
             },
           },
         },
@@ -123,7 +123,7 @@ export class AnalyticsRepository {
           where: {
             orderDate: orderDateFilter,
             status: {
-              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+              in: [...CONFIRMED_ORDER_STATUS_VALUES],
             },
           },
         },

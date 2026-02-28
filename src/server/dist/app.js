@@ -41,6 +41,7 @@ const http_1 = require("http");
 const socket_1 = require("@/infra/socket/socket");
 const database_config_1 = require("./infra/database/database.config");
 const swagger_1 = require("./docs/swagger");
+const quotationExpiry_worker_1 = require("./modules/transaction/quotationExpiry.worker");
 const defaultDevOrigins = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -96,6 +97,7 @@ const createApp = () => __awaiter(void 0, void 0, void 0, function* () {
         console.error("Failed to connect to DB:", err);
         process.exit(1);
     });
+    (0, quotationExpiry_worker_1.startQuotationExpiryWorker)();
     const httpServer = new http_1.Server(app);
     // Initialize Socket.IO
     const socketManager = new socket_1.SocketManager(httpServer);

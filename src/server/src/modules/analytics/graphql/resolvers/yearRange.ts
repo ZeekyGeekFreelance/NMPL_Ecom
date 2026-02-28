@@ -1,5 +1,5 @@
 import { Context } from "../resolver";
-import { REJECTED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const yearRange = {
   Query: {
@@ -7,7 +7,7 @@ const yearRange = {
       const orders = await prisma.order.aggregate({
         where: {
           status: {
-            notIn: [...REJECTED_ORDER_STATUS_VALUES],
+            in: [...CONFIRMED_ORDER_STATUS_VALUES],
           },
         },
         _min: { orderDate: true },

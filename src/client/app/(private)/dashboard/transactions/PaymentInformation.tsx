@@ -47,6 +47,8 @@ const PaymentInformation = ({ payment }) => {
             className={`px-2 py-1 rounded-full text-xs font-medium ${
               payment.status === "PAID"
                 ? "bg-green-100 text-green-800"
+                : payment.status === "PENDING"
+                ? "bg-amber-100 text-amber-800"
                 : "bg-red-100 text-red-800"
             }`}
           >

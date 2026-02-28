@@ -37,39 +37,16 @@ export class CartService {
     return cart;
   }
 
-  async getOrCreateCart(userId?: string, sessionId?: string) {
-    debugLog("[CART SERVICE] getOrCreateCart called", { userId, sessionId });
+  async getOrCreateCart(userId?: string) {
+    debugLog("[CART SERVICE] getOrCreateCart called", { userId });
 
-    let cart;
+    if (!userId) {
+      throw new AppError(401, "Authentication required for cart access");
+    }
 
-    if (userId) {
-      cart = await this.cartRepository.getCartByUserId(userId);
-
-      if (!cart) {
-        cart = await this.cartRepository.createCart({ userId });
-      }
-
-      if (sessionId) {
-        const sessionCart = await this.cartRepository.getCartBySessionId(
-          sessionId
-        );
-
-        if (sessionCart && sessionCart.id !== cart.id) {
-          await this.cartRepository.mergeCarts(sessionCart.id, cart.id);
-          cart = await this.cartRepository.getCartByUserId(userId);
-          if (!cart) {
-            throw new AppError(500, "Failed to load merged cart");
-          }
-        }
-      }
-    } else if (sessionId) {
-      cart = await this.cartRepository.getCartBySessionId(sessionId);
-
-      if (!cart) {
-        cart = await this.cartRepository.createCart({ sessionId });
-      }
-    } else {
-      throw new AppError(400, "User ID or Session ID is required");
+    let cart = await this.cartRepository.getCartByUserId(userId);
+    if (!cart) {
+      cart = await this.cartRepository.createCart({ userId });
     }
 
     return this.applyDealerPricingToCart(cart, userId);
@@ -162,22 +139,21 @@ export class CartService {
     };
   }
 
-  async getCartCount(userId?: string, sessionId?: string) {
-    const cart = await this.getOrCreateCart(userId, sessionId);
+  async getCartCount(userId?: string) {
+    const cart = await this.getOrCreateCart(userId);
     return cart.cartItems.length;
   }
 
   async addToCart(
     variantId: string,
     quantity: number,
-    userId?: string,
-    sessionId?: string
+    userId?: string
   ) {
     if (quantity <= 0) {
       throw new AppError(400, "Quantity must be greater than 0");
     }
 
-    const cart = await this.getOrCreateCart(userId, sessionId);
+    const cart = await this.getOrCreateCart(userId);
 
     const existingItem = await this.cartRepository.findCartItem(
       cart.id,
@@ -207,18 +183,18 @@ export class CartService {
 
   private async assertCartItemOwnership(
     itemId: string,
-    userId?: string,
-    sessionId?: string
+    userId?: string
   ) {
+    if (!userId) {
+      throw new AppError(401, "Authentication required for cart access");
+    }
+
     const cartItem = await this.cartRepository.findCartItemById(itemId);
     if (!cartItem) {
       throw new AppError(404, "Cart item not found");
     }
 
-    const isUserCart = !!userId && cartItem.cart.userId === userId;
-    const isSessionCart = !!sessionId && cartItem.cart.sessionId === sessionId;
-
-    if (!isUserCart && !isSessionCart) {
+    if (cartItem.cart.userId !== userId) {
       throw new AppError(403, "You are not authorized to access this cart");
     }
   }
@@ -226,37 +202,35 @@ export class CartService {
   async updateCartItemQuantity(
     itemId: string,
     quantity: number,
-    userId?: string,
-    sessionId?: string
+    userId?: string
   ) {
     if (quantity <= 0) {
       throw new AppError(400, "Quantity must be greater than 0");
     }
 
-    await this.assertCartItemOwnership(itemId, userId, sessionId);
+    await this.assertCartItemOwnership(itemId, userId);
     return this.cartRepository.updateCartItemQuantity(itemId, quantity);
   }
 
-  async removeFromCart(itemId: string, userId?: string, sessionId?: string) {
-    await this.assertCartItemOwnership(itemId, userId, sessionId);
+  async removeFromCart(itemId: string, userId?: string) {
+    await this.assertCartItemOwnership(itemId, userId);
     return this.cartRepository.removeCartItem(itemId);
   }
 
   async mergeCartsOnLogin(sessionId: string, userId: string | undefined) {
+    if (!userId || !sessionId) {
+      return;
+    }
+
+    // Cart now uses authenticated user ownership as the single source of truth.
+    await this.getOrCreateCart(userId);
+  }
+
+  async clearCartOnSignOut(userId?: string) {
     if (!userId) {
       return;
     }
 
-    const sessionCart = await this.cartRepository.getCartBySessionId(sessionId);
-    if (!sessionCart) {
-      return;
-    }
-
-    const userCart = await this.getOrCreateCart(userId);
-    if (sessionCart.id === userCart.id) {
-      return;
-    }
-
-    await this.cartRepository.mergeCarts(sessionCart.id, userCart.id);
+    await this.cartRepository.clearCart(userId);
   }
 }

@@ -1,6 +1,6 @@
 import express from "express";
 import { makeCartController } from "./cart.factory";
-import optionalAuth from "@/shared/middlewares/optionalAuth";
+import protect from "@/shared/middlewares/protect";
 
 const router = express.Router();
 const cartController = makeCartController();
@@ -19,7 +19,7 @@ const cartController = makeCartController();
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/", optionalAuth, cartController.getCart);
+router.get("/", protect, cartController.getCart);
 
 /**
  * @swagger
@@ -35,7 +35,7 @@ router.get("/", optionalAuth, cartController.getCart);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/count", optionalAuth, cartController.getCartCount);
+router.get("/count", protect, cartController.getCartCount);
 
 /**
  * @swagger
@@ -62,7 +62,7 @@ router.get("/count", optionalAuth, cartController.getCartCount);
  *       400:
  *         description: Invalid input data.
  */
-router.post("/", optionalAuth, cartController.addToCart);
+router.post("/", protect, cartController.addToCart);
 
 /**
  * @swagger
@@ -96,7 +96,7 @@ router.post("/", optionalAuth, cartController.addToCart);
  *       404:
  *         description: Cart item not found.
  */
-router.put("/item/:itemId", optionalAuth, cartController.updateCartItem);
+router.put("/item/:itemId", protect, cartController.updateCartItem);
 
 /**
  * @swagger
@@ -119,7 +119,7 @@ router.put("/item/:itemId", optionalAuth, cartController.updateCartItem);
  *       404:
  *         description: Cart item not found.
  */
-router.delete("/item/:itemId", optionalAuth, cartController.removeFromCart);
+router.delete("/item/:itemId", protect, cartController.removeFromCart);
 
 /**
  * @swagger
@@ -135,6 +135,6 @@ router.delete("/item/:itemId", optionalAuth, cartController.removeFromCart);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.post("/merge", optionalAuth, cartController.mergeCarts);
+router.post("/merge", protect, cartController.mergeCarts);
 
 export default router;

@@ -1,7 +1,14 @@
 import AppError from "@/shared/errors/AppError";
 import { OrderRepository } from "./order.repository";
 import prisma from "@/infra/database/database.config";
-import { CART_STATUS, ROLE } from "@prisma/client";
+import {
+  CART_STATUS,
+  ORDER_QUOTATION_LOG_EVENT,
+  PAYMENT_STATUS,
+  ROLE,
+  DELIVERY_MODE,
+  type Prisma,
+} from "@prisma/client";
 import sendEmail from "@/shared/utils/sendEmail";
 import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
 import {
@@ -12,11 +19,73 @@ import { formatDateTimeInIST } from "@/shared/utils/dateTime";
 import { makeLogsService } from "../logs/logs.factory";
 import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
 import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
+import { ORDER_LIFECYCLE_STATUS } from "@/shared/utils/orderLifecycle";
+import stripe, { isStripeConfigured } from "@/infra/payment/stripe";
+import { TransactionService } from "../transaction/transaction.service";
+import { TransactionRepository } from "../transaction/transaction.repository";
+import {
+  buildCheckoutPricing,
+  getAddressForCheckout,
+  resolveDeliveryQuote,
+} from "@/shared/utils/pricing/checkoutPricing";
 
 export class OrderService {
   private logsService = makeLogsService();
+  private transactionService = new TransactionService(
+    new TransactionRepository()
+  );
 
   constructor(private orderRepository: OrderRepository) {}
+
+  private resolvePortalUrl(): string {
+    const configuredUrl =
+      process.env.CLIENT_URL ||
+      process.env.CLIENT_URL_DEV ||
+      process.env.CLIENT_URL_PROD ||
+      "http://localhost:3000";
+
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  private buildQuotationLogLineItems(orderItems: any[] = []) {
+    return orderItems.map((item) => ({
+      orderItemId: item.id,
+      variantId: item.variantId,
+      sku: item.variant?.sku || null,
+      productName: item.variant?.product?.name || "Product",
+      quantity: Number(item.quantity) || 0,
+      unitPrice: Number(item.price) || 0,
+      lineTotal: Number(
+        ((Number(item.quantity) || 0) * (Number(item.price) || 0)).toFixed(2)
+      ),
+    }));
+  }
+
+  private async createQuotationLog(params: {
+    orderId: string;
+    event: ORDER_QUOTATION_LOG_EVENT;
+    previousTotal?: number | null;
+    updatedTotal: number;
+    actorUserId?: string | null;
+    actorRole?: string | null;
+    message?: string | null;
+    lineItems: ReturnType<OrderService["buildQuotationLogLineItems"]>;
+  }) {
+    await prisma.orderQuotationLog.create({
+      data: {
+        orderId: params.orderId,
+        event: params.event,
+        previousTotal:
+          params.previousTotal === undefined ? null : params.previousTotal,
+        updatedTotal: Number(params.updatedTotal.toFixed(2)),
+        currency: "INR",
+        actorUserId: params.actorUserId || null,
+        actorRole: params.actorRole || null,
+        message: params.message || null,
+        lineItems: params.lineItems as Prisma.InputJsonValue,
+      },
+    });
+  }
 
   async getAllOrders() {
     return this.orderRepository.findAllOrders();
@@ -63,9 +132,221 @@ export class OrderService {
     return order;
   }
 
-  async createOrderFromCart(userId: string, cartId: string) {
+  async acceptQuotationForOrder(orderId: string, userId: string) {
+    if (!isStripeConfigured || !stripe) {
+      throw new AppError(
+        503,
+        "Payment gateway is not configured. Please contact support."
+      );
+    }
+
+    const resolvedOrderId = await this.resolveOrderIdForUser(orderId, userId);
+    const order = await this.orderRepository.findOrderById(resolvedOrderId);
+    if (!order) {
+      throw new AppError(404, "Order not found");
+    }
+
+    if (order.userId !== userId) {
+      throw new AppError(403, "You are not authorized to update this order");
+    }
+
+    if (!order.transaction) {
+      throw new AppError(
+        409,
+        "Quotation workflow is not initialized for this order."
+      );
+    }
+
+    const normalizedStatus = String(
+      order.transaction.status || order.status
+    ).toUpperCase();
+
+    if (normalizedStatus !== ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT) {
+      throw new AppError(
+        409,
+        `Payment can start only for AWAITING_PAYMENT orders. Current status: ${normalizedStatus}`
+      );
+    }
+
+    const reservationExpiry =
+      order.reservation?.expiresAt || order.reservationExpiresAt || null;
+    if (reservationExpiry && new Date(reservationExpiry).getTime() <= Date.now()) {
+      await this.transactionService
+        .updateTransactionStatus(order.transaction.id, {
+          status: ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
+        })
+        .catch(() => null);
+
+      throw new AppError(
+        409,
+        "Quotation has expired. Please contact support for next steps."
+      );
+    }
+
+    if (!Array.isArray(order.orderItems) || order.orderItems.length === 0) {
+      throw new AppError(409, "Order has no line items to bill.");
+    }
+
+    if (!Number.isFinite(order.amount) || Number(order.amount) <= 0) {
+      throw new AppError(
+        409,
+        "Quoted amount is invalid for online payment processing."
+      );
+    }
+
+    const currency = (process.env.STRIPE_CURRENCY || "inr").toLowerCase();
+    const lineItems = order.orderItems.map((item) => ({
+      quantity: item.quantity,
+      price_data: {
+        currency,
+        unit_amount: Math.round(item.price * 100),
+        product_data: {
+          name: item.variant?.product?.name || item.variant?.sku || "Product",
+          metadata: {
+            orderId: order.id,
+            orderItemId: item.id,
+            variantId: item.variantId,
+          },
+        },
+      },
+    }));
+
+    const hasInvalidLineItem = lineItems.some(
+      (line) =>
+        !Number.isFinite(line.quantity) ||
+        line.quantity <= 0 ||
+        !Number.isFinite(line.price_data.unit_amount) ||
+        line.price_data.unit_amount <= 0
+    );
+
+    if (hasInvalidLineItem) {
+      throw new AppError(
+        409,
+        "Quoted line items contain invalid quantity or price."
+      );
+    }
+
+    const portalUrl = this.resolvePortalUrl();
+    const orderReference = toOrderReference(order.id);
+    const now = Date.now();
+    const reservationExpiryTimestamp = reservationExpiry
+      ? new Date(reservationExpiry).getTime()
+      : null;
+    const maxStripeCheckoutExpiry = now + 23 * 60 * 60 * 1000;
+    const checkoutSessionExpiry =
+      reservationExpiryTimestamp && reservationExpiryTimestamp > now + 5 * 60 * 1000
+        ? Math.floor(
+            Math.min(reservationExpiryTimestamp, maxStripeCheckoutExpiry) / 1000
+          )
+        : undefined;
+
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: order.user?.email || undefined,
+      line_items: lineItems,
+      metadata: {
+        orderId: order.id,
+        orderReference,
+        userId,
+      },
+      success_url: `${portalUrl}/payment-success?orderId=${orderReference}`,
+      cancel_url: `${portalUrl}/cancel?orderId=${orderReference}`,
+      ...(checkoutSessionExpiry ? { expires_at: checkoutSessionExpiry } : {}),
+    });
+
+    if (!checkoutSession.url) {
+      throw new AppError(
+        500,
+        "Unable to initialize payment session. Please try again."
+      );
+    }
+
+    if (order.payment?.id) {
+      await prisma.payment.update({
+        where: {
+          id: order.payment.id,
+        },
+        data: {
+          method: "STRIPE_CHECKOUT",
+          amount: Number(order.amount),
+        },
+      });
+    } else {
+      await prisma.payment.create({
+        data: {
+          orderId: order.id,
+          userId: order.userId,
+          method: "STRIPE_CHECKOUT",
+          amount: Number(order.amount),
+          status: PAYMENT_STATUS.PENDING,
+        },
+      });
+    }
+
+    await this.createQuotationLog({
+      orderId: order.id,
+      event: ORDER_QUOTATION_LOG_EVENT.CUSTOMER_ACCEPTED,
+      previousTotal: Number(order.amount),
+      updatedTotal: Number(order.amount),
+      actorUserId: userId,
+      actorRole: order.customerRoleSnapshot,
+      message: "Customer accepted quotation and initiated payment.",
+      lineItems: this.buildQuotationLogLineItems(order.orderItems),
+    });
+
+    return {
+      orderId: order.id,
+      orderReference,
+      checkoutUrl: checkoutSession.url,
+      checkoutSessionId: checkoutSession.id,
+      reservationExpiresAt: reservationExpiry,
+    };
+  }
+
+  async rejectQuotationForOrder(orderId: string, userId: string) {
+    const resolvedOrderId = await this.resolveOrderIdForUser(orderId, userId);
+    const order = await this.orderRepository.findOrderById(resolvedOrderId);
+    if (!order) {
+      throw new AppError(404, "Order not found");
+    }
+
+    if (order.userId !== userId) {
+      throw new AppError(403, "You are not authorized to update this order");
+    }
+
+    if (!order.transaction) {
+      throw new AppError(
+        409,
+        "Quotation workflow is not initialized for this order."
+      );
+    }
+
+    const normalizedStatus = String(
+      order.transaction.status || order.status
+    ).toUpperCase();
+
+    if (normalizedStatus !== ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT) {
+      throw new AppError(
+        409,
+        `Only AWAITING_PAYMENT quotations can be rejected. Current status: ${normalizedStatus}`
+      );
+    }
+
+    return this.transactionService.updateTransactionStatus(order.transaction.id, {
+      status: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      actorUserId: userId,
+      actorRole: order.customerRoleSnapshot,
+    });
+  }
+
+  private async buildCheckoutOrderDraft(params: {
+    userId: string;
+    cartId?: string;
+    addressId: string;
+    deliveryMode: "PICKUP" | "DELIVERY";
+  }) {
     const orderingUser = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: params.userId },
       select: {
         role: true,
         dealerProfile: {
@@ -79,53 +360,152 @@ export class OrderService {
       throw new AppError(404, "User not found");
     }
 
-    const cart = await prisma.cart.findUnique({
-      where: { id: cartId },
-      include: { cartItems: { include: { variant: { include: { product: true } } } } },
-    });
+    const cart = params.cartId
+      ? await prisma.cart.findUnique({
+          where: { id: params.cartId },
+          include: {
+            cartItems: { include: { variant: { include: { product: true } } } },
+          },
+        })
+      : await prisma.cart.findFirst({
+          where: {
+            userId: params.userId,
+            status: CART_STATUS.ACTIVE,
+          },
+          include: {
+            cartItems: { include: { variant: { include: { product: true } } } },
+          },
+          orderBy: {
+            updatedAt: "desc",
+          },
+        });
+
     if (!cart || cart.cartItems.length === 0) {
       throw new AppError(400, "Cart is empty or not found");
     }
     if (cart.status !== CART_STATUS.ACTIVE) {
       throw new AppError(400, "Cart is not active");
     }
-    if (cart.userId !== userId) {
+    if (cart.userId !== params.userId) {
       throw new AppError(403, "You are not authorized to access this cart");
     }
 
     const dealerPriceMap = await getDealerPriceMap(
       prisma,
-      userId,
+      params.userId,
       cart.cartItems.map((item) => item.variantId)
     );
     const customerRoleSnapshot = resolveCustomerTypeFromUser(orderingUser);
-
-    const amount = cart.cartItems.reduce(
-      (sum, item) =>
-        sum +
-        item.quantity *
-          (dealerPriceMap.get(item.variantId) ?? item.variant.price),
-      0
-    );
-
     const orderItems = cart.cartItems.map((item) => ({
       variantId: item.variantId,
       quantity: item.quantity,
       price: dealerPriceMap.get(item.variantId) ?? item.variant.price,
     }));
 
+    const selectedAddress = await getAddressForCheckout(
+      params.userId,
+      params.addressId
+    );
+    const deliveryQuote = await resolveDeliveryQuote({
+      deliveryMode: params.deliveryMode,
+      address: selectedAddress,
+    });
+    const pricing = buildCheckoutPricing({
+      items: orderItems.map((item) => ({
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      deliveryQuote,
+    });
+
+    return {
+      cart,
+      customerRoleSnapshot,
+      orderItems,
+      selectedAddress,
+      pricing,
+    };
+  }
+
+  async buildCheckoutSummaryFromUserCart(
+    userId: string,
+    addressId: string,
+    deliveryMode: "PICKUP" | "DELIVERY"
+  ) {
+    const draft = await this.buildCheckoutOrderDraft({
+      userId,
+      addressId,
+      deliveryMode,
+    });
+
+    return {
+      cartId: draft.cart.id,
+      subtotalAmount: draft.pricing.subtotalAmount,
+      deliveryMode: draft.pricing.deliveryMode,
+      deliveryLabel: draft.pricing.deliveryLabel,
+      deliveryCharge: draft.pricing.deliveryCharge,
+      finalTotal: draft.pricing.finalTotal,
+      serviceArea: draft.pricing.serviceArea,
+      selectedAddress: {
+        id: draft.selectedAddress.id,
+        type: draft.selectedAddress.type,
+        fullName: draft.selectedAddress.fullName,
+        phoneNumber: draft.selectedAddress.phoneNumber,
+        line1: draft.selectedAddress.line1,
+        line2: draft.selectedAddress.line2,
+        landmark: draft.selectedAddress.landmark,
+        city: draft.selectedAddress.city,
+        state: draft.selectedAddress.state,
+        country: draft.selectedAddress.country,
+        pincode: draft.selectedAddress.pincode,
+      },
+    };
+  }
+
+  async createOrderFromCart(
+    userId: string,
+    cartId: string,
+    addressId: string,
+    deliveryMode: "PICKUP" | "DELIVERY"
+  ) {
+    const draft = await this.buildCheckoutOrderDraft({
+      userId,
+      cartId,
+      addressId,
+      deliveryMode,
+    });
+
     const order = await this.orderRepository.createOrder({
       userId,
-      amount,
-      customerRoleSnapshot,
-      cartId,
-      orderItems,
+      customerRoleSnapshot: draft.customerRoleSnapshot,
+      cartId: draft.cart.id,
+      orderItems: draft.orderItems,
+      pricing: {
+        subtotalAmount: draft.pricing.subtotalAmount,
+        deliveryCharge: draft.pricing.deliveryCharge,
+        deliveryMode: draft.pricing.deliveryMode as DELIVERY_MODE,
+        deliveryLabel: draft.pricing.deliveryLabel,
+        serviceArea: draft.pricing.serviceArea,
+      },
+      addressSnapshot: {
+        sourceAddressId: draft.selectedAddress.id,
+        addressType: draft.selectedAddress.type,
+        fullName: draft.selectedAddress.fullName,
+        phoneNumber: draft.selectedAddress.phoneNumber,
+        line1: draft.selectedAddress.line1,
+        line2: draft.selectedAddress.line2,
+        landmark: draft.selectedAddress.landmark,
+        city: draft.selectedAddress.city,
+        state: draft.selectedAddress.state,
+        country: draft.selectedAddress.country,
+        pincode: draft.selectedAddress.pincode,
+      },
     });
 
     await this.sendOrderPlacedNotifications(
       userId,
       order.id,
-      customerRoleSnapshot
+      draft.customerRoleSnapshot
     ).catch(
       async (error: unknown) => {
         const errorMessage =
@@ -183,41 +563,74 @@ export class OrderService {
       return;
     }
 
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        subtotalAmount: true,
+        deliveryCharge: true,
+        deliveryMode: true,
+        amount: true,
+        address: {
+          select: {
+            deliveryLabel: true,
+          },
+        },
+      },
+    });
+    if (!order) {
+      return;
+    }
+
     const platformName = getPlatformName();
     const supportEmail = getSupportEmail();
     const accountReference = toAccountReference(user.id);
     const orderReference = toOrderReference(orderId);
     const actionTime = formatDateTimeInIST(new Date());
+    const formatCurrency = (value: number) =>
+      new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+      }).format(Number(value || 0));
     const notificationPromises: Promise<boolean>[] = [];
 
     if (user.email) {
       notificationPromises.push(
         sendEmail({
           to: user.email,
-          subject: `${platformName} | Your Order Has Been Placed`,
+          subject: `${platformName} | Order Received - Verification Pending`,
           text: [
             `Hello ${user.name},`,
             "",
-            `Your order has been placed on ${platformName}.`,
+            `Your order has been received on ${platformName}.`,
             `Order ID: ${orderReference}`,
             `Account Reference: ${accountReference}`,
-            `Current status: PLACED`,
+            `Current status: ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}`,
             `Action Time (IST): ${actionTime}`,
+            `Subtotal: ${formatCurrency(order.subtotalAmount)}`,
+            `Delivery (${order.address?.deliveryLabel || order.deliveryMode}): ${formatCurrency(
+              order.deliveryCharge
+            )}`,
+            `Final Total: ${formatCurrency(order.amount)}`,
             "",
-            "We will confirm your order after stock verification.",
+            "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
             `Need help? Contact ${supportEmail}.`,
           ].join("\n"),
           html: `
             <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
               <p>Hello <strong>${user.name}</strong>,</p>
-              <p>Your order has been placed on <strong>${platformName}</strong>.</p>
+              <p>Your order has been received on <strong>${platformName}</strong>.</p>
               <p>
                 <strong>Order ID:</strong> ${orderReference}<br />
                 <strong>Account Reference:</strong> ${accountReference}<br />
-                <strong>Current status:</strong> PLACED<br />
-                <strong>Action Time (IST):</strong> ${actionTime}
+                <strong>Current status:</strong> ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}<br />
+                <strong>Action Time (IST):</strong> ${actionTime}<br />
+                <strong>Subtotal:</strong> ${formatCurrency(order.subtotalAmount)}<br />
+                <strong>Delivery (${order.address?.deliveryLabel || order.deliveryMode}):</strong> ${formatCurrency(
+                  order.deliveryCharge
+                )}<br />
+                <strong>Final Total:</strong> ${formatCurrency(order.amount)}
               </p>
-              <p>We will confirm your order after stock verification.</p>
+              <p>Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.</p>
               <p>
                 Need help? Contact
                 <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
@@ -233,7 +646,7 @@ export class OrderService {
       notificationPromises.push(
         sendEmail({
           to: adminEmail,
-          subject: `${platformName} | New Order Arrived`,
+          subject: `${platformName} | New Order Awaiting Verification`,
           text: [
             "New order received.",
             "",
@@ -242,10 +655,15 @@ export class OrderService {
             `Customer Email: ${user.email || "Not available"}`,
             `Customer Type: ${customerType}`,
             `Account Reference: ${accountReference}`,
-            "Current status: PLACED",
+            `Current status: ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}`,
             `Action Time (IST): ${actionTime}`,
+            `Subtotal: ${formatCurrency(order.subtotalAmount)}`,
+            `Delivery (${order.address?.deliveryLabel || order.deliveryMode}): ${formatCurrency(
+              order.deliveryCharge
+            )}`,
+            `Final Total: ${formatCurrency(order.amount)}`,
             "",
-            `Please review and update status from the admin panel.`,
+            `Please verify stock and send quotation from the admin panel.`,
           ].join("\n"),
           html: `
             <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
@@ -258,10 +676,15 @@ export class OrderService {
                 }<br />
                 <strong>Customer Type:</strong> ${customerType}<br />
                 <strong>Account Reference:</strong> ${accountReference}<br />
-                <strong>Current status:</strong> PLACED<br />
-                <strong>Action Time (IST):</strong> ${actionTime}
+                <strong>Current status:</strong> ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}<br />
+                <strong>Action Time (IST):</strong> ${actionTime}<br />
+                <strong>Subtotal:</strong> ${formatCurrency(order.subtotalAmount)}<br />
+                <strong>Delivery (${order.address?.deliveryLabel || order.deliveryMode}):</strong> ${formatCurrency(
+                  order.deliveryCharge
+                )}<br />
+                <strong>Final Total:</strong> ${formatCurrency(order.amount)}
               </p>
-              <p>Please review and update status from the admin panel.</p>
+              <p>Please verify stock and send quotation from the admin panel.</p>
             </div>
           `,
         })

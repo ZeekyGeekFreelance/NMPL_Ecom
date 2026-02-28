@@ -8,7 +8,7 @@ import {
   buildDateFilter,
 } from "@/shared/utils/analytics";
 import { Context } from "../resolver";
-import { REJECTED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const revenueAnalytics = {
   Query: {
@@ -40,7 +40,7 @@ const revenueAnalytics = {
         undefined,
         {
           status: {
-            notIn: [...REJECTED_ORDER_STATUS_VALUES],
+            in: [...CONFIRMED_ORDER_STATUS_VALUES],
           },
         }
       );
@@ -49,7 +49,7 @@ const revenueAnalytics = {
           order: {
             orderDate: currentOrderDateFilter,
             status: {
-              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+              in: [...CONFIRMED_ORDER_STATUS_VALUES],
             },
           },
         },
@@ -83,7 +83,7 @@ const revenueAnalytics = {
             undefined,
             {
               status: {
-                notIn: [...REJECTED_ORDER_STATUS_VALUES],
+                in: [...CONFIRMED_ORDER_STATUS_VALUES],
               },
             }
           )
@@ -94,7 +94,7 @@ const revenueAnalytics = {
               order: {
                 orderDate: previousOrderDateFilter,
                 status: {
-                  notIn: [...REJECTED_ORDER_STATUS_VALUES],
+                  in: [...CONFIRMED_ORDER_STATUS_VALUES],
                 },
               },
             },
@@ -129,7 +129,7 @@ const revenueAnalytics = {
         undefined,
         {
           status: {
-            notIn: [...REJECTED_ORDER_STATUS_VALUES],
+            in: [...CONFIRMED_ORDER_STATUS_VALUES],
           },
         }
       );
@@ -144,7 +144,7 @@ const revenueAnalytics = {
           order: {
             orderDate: trendOrderDateFilter,
             status: {
-              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+              in: [...CONFIRMED_ORDER_STATUS_VALUES],
             },
           },
         },

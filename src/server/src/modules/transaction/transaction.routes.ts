@@ -89,6 +89,13 @@ router.get(
  *         description: Transaction not found.
  */
 router.put(
+  "/quotation/:id",
+  protect,
+  authorizeRole("ADMIN", "SUPERADMIN"),
+  transactionController.updateTransactionQuotation
+);
+
+router.put(
   "/status/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),

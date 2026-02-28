@@ -3,6 +3,7 @@ import asyncHandler from "@/shared/utils/asyncHandler";
 import sendResponse from "@/shared/utils/sendResponse";
 import { CartService } from "./cart.service";
 import { makeLogsService } from "../logs/logs.factory";
+import AppError from "@/shared/errors/AppError";
 
 export class CartController {
   private logsService = makeLogsService();
@@ -17,11 +18,19 @@ export class CartController {
     });
   }
 
+  private getRequiredUserId(req: Request) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new AppError(401, "Authentication required for cart access");
+    }
+
+    return userId;
+  }
+
   getCart = asyncHandler(async (req: Request, res: Response) => {
     const startedAt = Date.now();
-    const userId = req.user?.id;
-    const sessionId = req.session.id;
-    const cart = await this.cartService.getOrCreateCart(userId, sessionId);
+    const userId = this.getRequiredUserId(req);
+    const cart = await this.cartService.getOrCreateCart(userId);
 
     sendResponse(res, 200, {
       data: { cart },
@@ -32,9 +41,8 @@ export class CartController {
   });
 
   getCartCount = asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    const sessionId = req.session.id;
-    const cartCount = await this.cartService.getCartCount(userId, sessionId);
+    const userId = this.getRequiredUserId(req);
+    const cartCount = await this.cartService.getCartCount(userId);
 
     sendResponse(res, 200, {
       data: { cartCount },
@@ -44,16 +52,10 @@ export class CartController {
 
   addToCart = asyncHandler(async (req: Request, res: Response) => {
     const startedAt = Date.now();
-    const userId = req.user?.id;
-    const sessionId = req.session.id;
+    const userId = this.getRequiredUserId(req);
     const { variantId, quantity } = req.body;
 
-    const item = await this.cartService.addToCart(
-      variantId,
-      quantity,
-      userId,
-      sessionId
-    );
+    const item = await this.cartService.addToCart(variantId, quantity, userId);
 
     sendResponse(res, 200, {
       data: { item },
@@ -67,10 +69,12 @@ export class CartController {
     const startedAt = Date.now();
     const { itemId } = req.params;
     const { quantity } = req.body;
+    const userId = this.getRequiredUserId(req);
 
     const updatedItem = await this.cartService.updateCartItemQuantity(
       itemId,
-      quantity
+      quantity,
+      userId
     );
 
     sendResponse(res, 200, {
@@ -84,7 +88,8 @@ export class CartController {
   removeFromCart = asyncHandler(async (req: Request, res: Response) => {
     const startedAt = Date.now();
     const { itemId } = req.params;
-    await this.cartService.removeFromCart(itemId);
+    const userId = this.getRequiredUserId(req);
+    await this.cartService.removeFromCart(itemId, userId);
 
     sendResponse(res, 200, {
       message: "Item removed from cart successfully",

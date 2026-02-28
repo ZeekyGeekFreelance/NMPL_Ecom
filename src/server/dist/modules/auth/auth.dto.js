@@ -63,10 +63,18 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^\d{6}$/, {
-        message: "OTP must be a valid 6-digit code",
+        message: "Email OTP must be a valid 6-digit code",
     }),
     __metadata("design:type", String)
-], RegisterDto.prototype, "otpCode", void 0);
+], RegisterDto.prototype, "emailOtpCode", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(/^\d{6}$/, {
+        message: "Phone OTP must be a valid 6-digit code",
+    }),
+    __metadata("design:type", String)
+], RegisterDto.prototype, "phoneOtpCode", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
@@ -92,6 +100,16 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], RequestRegistrationOtpDto.prototype, "email", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)({
+        message: "Phone number is required",
+    }),
+    (0, class_validator_1.Matches)(/^[0-9()+\-\s]{7,20}$/, {
+        message: "Phone number must be 7-20 characters and contain only valid digits/symbols",
+    }),
+    __metadata("design:type", String)
+], RequestRegistrationOtpDto.prototype, "phone", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsIn)(["USER_PORTAL", "DEALER_PORTAL"]),

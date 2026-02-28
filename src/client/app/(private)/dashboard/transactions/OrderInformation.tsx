@@ -5,6 +5,43 @@ import formatDate from "@/app/utils/formatDate";
 import { ShoppingBag } from "lucide-react";
 import { toOrderReference } from "@/app/lib/utils/accountReference";
 
+const quotationEventLabel: Record<string, string> = {
+  ORIGINAL_ORDER: "Original Order",
+  ADMIN_QUOTATION: "Admin Quotation",
+  CUSTOMER_ACCEPTED: "Customer Accepted",
+  CUSTOMER_REJECTED: "Customer Rejected",
+  QUOTATION_EXPIRED: "Quotation Expired",
+  PAYMENT_CONFIRMED: "Payment Confirmed",
+};
+
+const getAmountContextLabel = (event: string) => {
+  if (event === "ORIGINAL_ORDER") {
+    return {
+      previousLabel: "Actual Order Price",
+      updatedLabel: "Actual Order Price",
+    };
+  }
+
+  if (event === "ADMIN_QUOTATION") {
+    return {
+      previousLabel: "Previous Quotation",
+      updatedLabel: "Updated Quotation",
+    };
+  }
+
+  if (event === "CUSTOMER_ACCEPTED" || event === "PAYMENT_CONFIRMED") {
+    return {
+      previousLabel: "Quoted Price",
+      updatedLabel: "Accepted At Price",
+    };
+  }
+
+  return {
+    previousLabel: "Previous Price",
+    updatedLabel: "Updated Price",
+  };
+};
+
 const OrderInformation = ({ order, className = "" }) => {
   const format = useFormatPrice();
 
@@ -23,6 +60,9 @@ const OrderInformation = ({ order, className = "" }) => {
   }
 
   const orderItems = Array.isArray(order.orderItems) ? order.orderItems : [];
+  const quotationLogs = Array.isArray(order.quotationLogs)
+    ? order.quotationLogs
+    : [];
 
   return (
     <div
@@ -52,6 +92,18 @@ const OrderInformation = ({ order, className = "" }) => {
         <div>
           <p className="text-sm text-gray-500">Updated At</p>
           <p>{formatDate(order.updatedAt)}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Reservation Status</p>
+          <p>{order.reservation?.status || "NONE"}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">Reservation Expires</p>
+          <p>
+            {order.reservation?.expiresAt || order.reservationExpiresAt
+              ? formatDate(order.reservation?.expiresAt || order.reservationExpiresAt)
+              : "N/A"}
+          </p>
         </div>
       </div>
 
@@ -121,6 +173,114 @@ const OrderInformation = ({ order, className = "" }) => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <h3 className="text-md font-semibold mb-3">Quotation History</h3>
+        {quotationLogs.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            No quotation revisions recorded yet.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {quotationLogs.map((log: any) => {
+              const amountLabels = getAmountContextLabel(String(log.event || ""));
+              const lineItems = Array.isArray(log.lineItems) ? log.lineItems : [];
+              const showPreviousAmount =
+                String(log.event || "") !== "ORIGINAL_ORDER" &&
+                log.previousTotal !== null &&
+                log.previousTotal !== undefined;
+
+              return (
+                <div
+                  key={log.id}
+                  className="rounded-md border border-gray-200 bg-gray-50 p-3"
+                >
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-semibold text-gray-800">
+                      {quotationEventLabel[String(log.event || "")] ||
+                        String(log.event || "Quotation Update")}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatDate(log.createdAt)}
+                    </p>
+                  </div>
+                  <div
+                    className={`mt-2 grid grid-cols-1 gap-2 text-sm ${
+                      showPreviousAmount ? "sm:grid-cols-2" : "sm:grid-cols-1"
+                    }`}
+                  >
+                    {showPreviousAmount ? (
+                      <p>
+                        <span className="text-gray-500">
+                          {amountLabels.previousLabel}:
+                        </span>{" "}
+                        <span className="font-medium">
+                          {format(Number(log.previousTotal))}
+                        </span>
+                      </p>
+                    ) : null}
+                    <p>
+                      <span className="text-gray-500">
+                        {amountLabels.updatedLabel}:
+                      </span>{" "}
+                      <span className="font-semibold text-gray-900">
+                        {format(Number(log.updatedTotal || 0))}
+                      </span>
+                    </p>
+                  </div>
+                  {log.message ? (
+                    <p className="mt-2 text-xs text-gray-600">{log.message}</p>
+                  ) : null}
+                  {lineItems.length > 0 ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 text-xs">
+                        <thead className="bg-white">
+                          <tr>
+                            <th className="px-2 py-1 text-left font-medium text-gray-500">
+                              Product
+                            </th>
+                            <th className="px-2 py-1 text-left font-medium text-gray-500">
+                              SKU
+                            </th>
+                            <th className="px-2 py-1 text-left font-medium text-gray-500">
+                              Qty
+                            </th>
+                            <th className="px-2 py-1 text-left font-medium text-gray-500">
+                              Unit
+                            </th>
+                            <th className="px-2 py-1 text-left font-medium text-gray-500">
+                              Total
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                          {lineItems.map((line: any) => (
+                            <tr key={`${log.id}-${line.orderItemId || line.variantId}`}>
+                              <td className="px-2 py-1">
+                                {line.productName || "Product"}
+                              </td>
+                              <td className="px-2 py-1 font-mono">
+                                {line.sku || line.variantId || "N/A"}
+                              </td>
+                              <td className="px-2 py-1">{line.quantity}</td>
+                              <td className="px-2 py-1">
+                                {format(Number(line.unitPrice || 0))}
+                              </td>
+                              <td className="px-2 py-1 font-medium">
+                                {format(Number(line.lineTotal || 0))}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -40,6 +40,31 @@ export const transactionApi = apiSlice.injectEndpoints({
       ],
     }),
 
+    issueQuotation: builder.mutation({
+      query: ({
+        id,
+        quotationItems,
+      }: {
+        id: string;
+        quotationItems: Array<{
+          orderItemId: string;
+          quantity: number;
+          price: number;
+        }>;
+      }) => ({
+        url: `/transactions/quotation/${id}`,
+        method: "PUT",
+        body: {
+          quotationItems,
+        },
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Transactions", id },
+        "Transactions",
+        "Order",
+      ],
+    }),
+
     deleteTransaction: builder.mutation({
       query: (id) => ({
         url: `/transactions/${id}`,
@@ -57,5 +82,6 @@ export const {
   useGetAllTransactionsQuery,
   useGetTransactionQuery,
   useUpdateTransactionStatusMutation,
+  useIssueQuotationMutation,
   useDeleteTransactionMutation,
 } = transactionApi;

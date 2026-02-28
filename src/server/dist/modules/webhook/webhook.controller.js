@@ -33,7 +33,7 @@ class WebhookController {
             event = stripe_1.default.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
             if (event.type === "checkout.session.completed") {
                 const session = event.data.object;
-                const { order, payment, shipment, address } = yield this.webhookService.handleCheckoutCompletion(session);
+                yield this.webhookService.handleCheckoutCompletion(session);
             }
             (0, sendResponse_1.default)(res, 200, { message: "Webhook received successfully" });
         }));

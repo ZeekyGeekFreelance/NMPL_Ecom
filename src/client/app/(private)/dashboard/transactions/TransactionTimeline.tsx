@@ -20,8 +20,10 @@ const TimelineEvent = ({ date, title, description, isActive }) => {
 };
 
 const TransactionTimeline = ({ transaction, payment }) => {
-  const currentStatus = normalizeOrderStatus(transaction?.status || "PLACED");
-  const isPlaced = currentStatus === "PLACED";
+  const currentStatus = normalizeOrderStatus(
+    transaction?.status || "PENDING_VERIFICATION"
+  );
+  const isPendingVerification = currentStatus === "PENDING_VERIFICATION";
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
@@ -32,15 +34,15 @@ const TransactionTimeline = ({ transaction, payment }) => {
       <div className="border-l-2 border-gray-200 pl-4 ml-2">
         <TimelineEvent
           date={formatDate(transaction.createdAt || transaction.transactionDate)}
-          title="Transaction created"
-          description={`Initial status: ${currentStatus}`}
+          title="Order submitted"
+          description="Order entered stock verification queue."
           isActive={true}
         />
 
         {payment ? (
           <TimelineEvent
             date={formatDate(payment.createdAt)}
-            title="Payment processed"
+            title={payment.status === "PAID" ? "Payment processed" : "Payment pending"}
             description={`Status: ${payment.status}`}
             isActive={false}
           />
@@ -48,12 +50,12 @@ const TransactionTimeline = ({ transaction, payment }) => {
           <TimelineEvent
             date={formatDate(transaction.createdAt || transaction.transactionDate)}
             title="Payment pending"
-            description="Payment record is not available yet."
+            description="Quotation approval is required before payment."
             isActive={false}
           />
         )}
 
-        {!isPlaced && (
+        {!isPendingVerification && (
           <TimelineEvent
             date={formatDate(transaction.updatedAt)}
             title="Status updated"

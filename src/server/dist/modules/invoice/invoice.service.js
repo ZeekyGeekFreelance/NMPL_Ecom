@@ -20,6 +20,8 @@ const invoiceEmail_1 = require("@/shared/templates/invoiceEmail");
 const generateInvoicePdf_1 = __importDefault(require("@/shared/utils/invoice/generateInvoicePdf"));
 const branding_1 = require("@/shared/utils/branding");
 const accountReference_1 = require("@/shared/utils/accountReference");
+const userRole_1 = require("@/shared/utils/userRole");
+const orderLifecycle_1 = require("@/shared/utils/orderLifecycle");
 class InvoiceService {
     constructor(invoiceRepository) {
         this.invoiceRepository = invoiceRepository;
@@ -63,13 +65,18 @@ class InvoiceService {
         return Array.from(new Set(recipients.filter((email) => email.toLowerCase() !== customerEmailLower)));
     }
     getCustomerCopyLabel(invoice) {
-        var _a;
-        const isDealer = ((_a = invoice.user.dealerProfile) === null || _a === void 0 ? void 0 : _a.status) === "APPROVED";
-        return isDealer ? "Dealer Copy" : "User Copy";
+        return this.resolveCustomerType(invoice) === "DEALER"
+            ? "Dealer Copy"
+            : "User Copy";
     }
     resolveCustomerType(invoice) {
-        var _a;
-        return ((_a = invoice.user.dealerProfile) === null || _a === void 0 ? void 0 : _a.status) === "APPROVED" ? "DEALER" : "USER";
+        if (invoice.order.customerRoleSnapshot === "DEALER") {
+            return "DEALER";
+        }
+        if (invoice.order.customerRoleSnapshot === "USER") {
+            return "USER";
+        }
+        return (0, userRole_1.resolveCustomerTypeFromUser)(invoice.user);
     }
     sendInvoiceEmails(invoice) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -164,21 +171,25 @@ class InvoiceService {
             if (!order) {
                 throw new AppError_1.default(404, "Order not found");
             }
-            const transactionStatus = (((_a = order.transaction) === null || _a === void 0 ? void 0 : _a.status) || order.status || "")
-                .toString()
+            const transactionStatus = String(((_a = order.transaction) === null || _a === void 0 ? void 0 : _a.status) || order.status || "")
+                .trim()
                 .toUpperCase();
             const normalizedStatusByLegacyValue = {
-                PENDING: "PLACED",
-                PROCESSING: "CONFIRMED",
-                SHIPPED: "CONFIRMED",
-                IN_TRANSIT: "CONFIRMED",
-                CANCELED: "REJECTED",
-                RETURNED: "REJECTED",
-                REFUNDED: "REJECTED",
+                PLACED: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+                PENDING: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+                PROCESSING: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.CONFIRMED,
+                SHIPPED: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.CONFIRMED,
+                IN_TRANSIT: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.CONFIRMED,
+                DELIVERED: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.DELIVERED,
+                REJECTED: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+                CANCELED: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+                RETURNED: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+                REFUNDED: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
             };
             const normalizedStatus = normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
-            if (!["CONFIRMED", "DELIVERED"].includes(normalizedStatus)) {
-                throw new AppError_1.default(409, "Invoice is available only after admin confirms the order.");
+            if (normalizedStatus !== orderLifecycle_1.ORDER_LIFECYCLE_STATUS.CONFIRMED &&
+                normalizedStatus !== orderLifecycle_1.ORDER_LIFECYCLE_STATUS.DELIVERED) {
+                throw new AppError_1.default(409, "Invoice is available only after payment confirmation.");
             }
             const invoice = (yield this.invoiceRepository.findInvoiceByOrderId(orderId)) ||
                 (yield this.invoiceRepository.ensureInvoiceRecord({

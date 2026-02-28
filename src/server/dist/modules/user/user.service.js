@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const accountReference_1 = require("@/shared/utils/accountReference");
+const userRole_1 = require("@/shared/utils/userRole");
 class UserService {
     constructor(userRepository, dealerNotificationService) {
         this.userRepository = userRepository;
@@ -72,7 +73,16 @@ class UserService {
         return ((_a = actor.name) === null || _a === void 0 ? void 0 : _a.trim()) || ((_b = actor.email) === null || _b === void 0 ? void 0 : _b.trim()) || "Admin Team";
     }
     withAccountReference(entity) {
-        return Object.assign(Object.assign({}, entity), { accountReference: (0, accountReference_1.toAccountReference)(entity.id) });
+        const candidate = entity;
+        return Object.assign(Object.assign(Object.assign({}, entity), { accountReference: (0, accountReference_1.toAccountReference)(entity.id) }), (candidate.role !== undefined
+            ? {
+                effectiveRole: (0, userRole_1.resolveEffectiveRoleFromUser)({
+                    role: candidate.role,
+                    dealerStatus: candidate.dealerStatus,
+                    dealerProfile: candidate.dealerProfile,
+                }),
+            }
+            : {}));
     }
     buildDealerPricingDiff(previous, next) {
         const previousByVariant = new Map(previous.map((row) => [row.variantId, row]));
@@ -216,6 +226,10 @@ class UserService {
                 name: dealer.name,
                 email: dealer.email,
                 role: dealer.role,
+                effectiveRole: (0, userRole_1.resolveEffectiveRoleFromUser)({
+                    role: dealer.role,
+                    dealerStatus: dealer.status,
+                }),
                 avatar: dealer.avatar,
                 createdAt: dealer.createdAt,
                 updatedAt: dealer.updatedAt,

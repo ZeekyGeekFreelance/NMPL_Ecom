@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const AppError_1 = __importDefault(require("../errors/AppError"));
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
+const userRole_1 = require("@/shared/utils/userRole");
 const protect = (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
@@ -28,12 +29,24 @@ const protect = (req, _res, next) => __awaiter(void 0, void 0, void 0, function*
         const decoded = jsonwebtoken_1.default.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
         const user = yield database_config_1.default.user.findUnique({
             where: { id: String(decoded.id) },
-            select: { id: true, role: true },
+            select: {
+                id: true,
+                role: true,
+                dealerProfile: {
+                    select: {
+                        status: true,
+                    },
+                },
+            },
         });
         if (!user) {
             return next(new AppError_1.default(401, "User no longer exists."));
         }
-        req.user = { id: decoded.id, role: user.role };
+        req.user = {
+            id: decoded.id,
+            role: user.role,
+            effectiveRole: (0, userRole_1.resolveEffectiveRoleFromUser)(user),
+        };
         next();
     }
     catch (error) {

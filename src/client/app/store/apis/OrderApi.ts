@@ -57,6 +57,24 @@ export const orderApi = apiSlice.injectEndpoints({
       }),
       providesTags: ["Order"],
     }),
+
+    acceptQuotation: builder.mutation({
+      query: (orderId) => ({
+        url: `/orders/${orderId}/quotation/accept`,
+        method: "POST",
+        credentials: "include",
+      }),
+      invalidatesTags: ["Order", "Transactions"],
+    }),
+
+    rejectQuotation: builder.mutation({
+      query: (orderId) => ({
+        url: `/orders/${orderId}/quotation/reject`,
+        method: "POST",
+        credentials: "include",
+      }),
+      invalidatesTags: ["Order", "Transactions"],
+    }),
   }),
 });
 
@@ -67,4 +85,6 @@ export const {
   useDeleteOrderMutation,
   useUpdateOrderMutation,
   useGetOrderQuery,
+  useAcceptQuotationMutation,
+  useRejectQuotationMutation,
 } = orderApi;

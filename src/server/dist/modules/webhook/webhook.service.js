@@ -46,26 +46,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WebhookService = void 0;
-const client_1 = require("@prisma/client");
 const stripe_1 = __importStar(require("@/infra/payment/stripe"));
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
-const redis_1 = __importDefault(require("@/infra/cache/redis"));
 const logs_factory_1 = require("../logs/logs.factory");
-const cart_service_1 = require("../cart/cart.service");
-const cart_repository_1 = require("../cart/cart.repository");
-const invoice_factory_1 = require("../invoice/invoice.factory");
-const prisma = new client_1.PrismaClient();
+const database_config_1 = __importDefault(require("@/infra/database/database.config"));
+const transaction_repository_1 = require("../transaction/transaction.repository");
+const transaction_service_1 = require("../transaction/transaction.service");
+const orderLifecycle_1 = require("@/shared/utils/orderLifecycle");
 class WebhookService {
     constructor() {
         this.logsService = (0, logs_factory_1.makeLogsService)();
-        this.repo = new cart_repository_1.CartRepository();
-        this.cartService = new cart_service_1.CartService(this.repo);
-        this.invoiceService = (0, invoice_factory_1.makeInvoiceService)();
-    }
-    calculateOrderAmount(cart) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return cart.cartItems.reduce((sum, item) => sum + item.variant.price * item.quantity, 0);
-        });
+        this.transactionService = new transaction_service_1.TransactionService(new transaction_repository_1.TransactionRepository());
     }
     handleCheckoutCompletion(session) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -76,155 +67,67 @@ class WebhookService {
             const fullSession = yield stripe_1.default.checkout.sessions.retrieve(session.id, {
                 expand: ["customer_details", "line_items"],
             });
-            const existingOrder = yield prisma.order.findFirst({
-                where: { id: fullSession.id },
+            const orderId = (_a = fullSession === null || fullSession === void 0 ? void 0 : fullSession.metadata) === null || _a === void 0 ? void 0 : _a.orderId;
+            if (!orderId) {
+                throw new AppError_1.default(400, "Missing orderId in checkout metadata. Direct payment confirmation is not allowed.");
+            }
+            const transaction = yield database_config_1.default.transaction.findUnique({
+                where: {
+                    orderId,
+                },
+                include: {
+                    order: {
+                        select: {
+                            id: true,
+                            amount: true,
+                        },
+                    },
+                },
             });
-            if (existingOrder) {
-                this.logsService.info("Webhook - Duplicate event ignored", {
+            if (!transaction) {
+                throw new AppError_1.default(404, "Transaction not found for this order.");
+            }
+            const currentStatus = String(transaction.status || "").toUpperCase();
+            if (currentStatus === orderLifecycle_1.ORDER_LIFECYCLE_STATUS.CONFIRMED ||
+                currentStatus === orderLifecycle_1.ORDER_LIFECYCLE_STATUS.DELIVERED) {
+                yield this.logsService.info("Webhook - Duplicate confirmation ignored", {
                     sessionId: session.id,
+                    orderId,
+                    transactionId: transaction.id,
                 });
                 return {
-                    order: existingOrder,
-                    payment: null,
-                    transaction: null,
-                    shipment: null,
-                    address: null,
+                    transaction,
                 };
             }
-            const userId = (_a = fullSession === null || fullSession === void 0 ? void 0 : fullSession.metadata) === null || _a === void 0 ? void 0 : _a.userId;
-            const cartId = (_b = fullSession === null || fullSession === void 0 ? void 0 : fullSession.metadata) === null || _b === void 0 ? void 0 : _b.cartId;
-            if (!userId || !cartId) {
-                throw new AppError_1.default(400, "Missing userId or cartId in session metadata");
+            if (currentStatus !== orderLifecycle_1.ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT) {
+                throw new AppError_1.default(409, `Payment cannot confirm order in ${currentStatus} status.`);
             }
-            const cart = yield prisma.cart.findUnique({
-                where: { id: cartId },
-                include: { cartItems: { include: { variant: { include: { product: true } } } } },
+            const amountInSession = ((_b = fullSession.amount_total) !== null && _b !== void 0 ? _b : 0) / 100;
+            if (transaction.order &&
+                Math.abs(transaction.order.amount - amountInSession) > 0.01) {
+                throw new AppError_1.default(400, "Amount mismatch between quotation and payment.");
+            }
+            yield database_config_1.default.payment.updateMany({
+                where: {
+                    orderId,
+                },
+                data: {
+                    method: ((_c = fullSession.payment_method_types) === null || _c === void 0 ? void 0 : _c[0]) || "STRIPE",
+                },
             });
-            if (!cart || cart.cartItems.length === 0) {
-                throw new AppError_1.default(400, "Cart is empty or not found");
-            }
-            const amount = yield this.calculateOrderAmount(cart);
-            if (Math.abs(amount - ((_c = fullSession.amount_total) !== null && _c !== void 0 ? _c : 0) / 100) > 0.01) {
-                throw new AppError_1.default(400, "Amount mismatch between cart and session");
-            }
-            const result = yield prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
-                var _a, _b;
-                // Validate stock
-                for (const item of cart.cartItems) {
-                    if (item.variant.stock < item.quantity) {
-                        throw new AppError_1.default(400, `Insufficient stock for variant ${item.variant.sku}: only ${item.variant.stock} available`);
-                    }
-                }
-                // Create Order and OrderItems
-                const order = yield tx.order.create({
-                    data: {
-                        id: fullSession.id,
-                        userId,
-                        amount,
-                        orderItems: {
-                            create: cart.cartItems.map((item) => ({
-                                variantId: item.variantId,
-                                quantity: item.quantity,
-                                price: item.variant.price,
-                            })),
-                        },
-                    },
-                });
-                // Create Address
-                let address;
-                const customerAddress = (_a = fullSession.customer_details) === null || _a === void 0 ? void 0 : _a.address;
-                if (customerAddress) {
-                    address = yield tx.address.create({
-                        data: {
-                            orderId: order.id,
-                            userId,
-                            city: customerAddress.city || "N/A",
-                            state: customerAddress.state || "N/A",
-                            country: customerAddress.country || "N/A",
-                            zip: customerAddress.postal_code || "N/A",
-                            street: customerAddress.line1 || "N/A",
-                        },
-                    });
-                }
-                // Create Payment
-                const payment = yield tx.payment.create({
-                    data: {
-                        orderId: order.id,
-                        userId,
-                        method: ((_b = fullSession.payment_method_types) === null || _b === void 0 ? void 0 : _b[0]) || "unknown",
-                        amount,
-                        status: client_1.PAYMENT_STATUS.PAID,
-                    },
-                });
-                // Create Transaction
-                const transaction = yield tx.transaction.create({
-                    data: {
-                        orderId: order.id,
-                        status: client_1.TRANSACTION_STATUS.PLACED,
-                        transactionDate: new Date(),
-                    },
-                });
-                // Create Shipment
-                const shipment = yield tx.shipment.create({
-                    data: {
-                        orderId: order.id,
-                        carrier: "Carrier_" + Math.random().toString(36).substring(2, 10),
-                        trackingNumber: Math.random().toString(36).substring(2),
-                        shippedDate: new Date(),
-                        deliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                    },
-                });
-                // Update Variant Stock and Product Sales Count
-                for (const item of cart.cartItems) {
-                    const variant = yield tx.productVariant.findUnique({
-                        where: { id: item.variantId },
-                        select: { stock: true, product: { select: { id: true, salesCount: true } } },
-                    });
-                    if (!variant) {
-                        throw new AppError_1.default(404, `Variant not found: ${item.variantId}`);
-                    }
-                    yield tx.productVariant.update({
-                        where: { id: item.variantId },
-                        data: { stock: variant.stock - item.quantity },
-                    });
-                    yield tx.product.update({
-                        where: { id: variant.product.id },
-                        data: { salesCount: variant.product.salesCount + item.quantity },
-                    });
-                }
-                // Clear the Cart
-                yield tx.cartItem.deleteMany({ where: { cartId: cart.id } });
-                yield tx.cart.update({
-                    where: { id: cart.id },
-                    data: { status: client_1.CART_STATUS.CONVERTED },
-                });
-                return { order, payment, transaction, shipment, address };
-            }));
-            // Post-transaction actions
-            yield redis_1.default.del("dashboard:year-range");
-            const keys = yield redis_1.default.keys("dashboard:stats:*");
-            if (keys.length > 0)
-                yield redis_1.default.del(keys);
-            this.cartService.logCartEvent(cart.id, "CHECKOUT_COMPLETED", userId);
-            this.logsService.info("Webhook - Order processed successfully", {
-                userId,
-                orderId: result.order.id,
-                amount,
+            const updatedTransaction = yield this.transactionService.updateTransactionStatus(transaction.id, {
+                status: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.CONFIRMED,
+                actorRole: "SYSTEM",
             });
-            this.invoiceService
-                .generateAndSendInvoiceForOrder(result.order.id)
-                .catch((error) => __awaiter(this, void 0, void 0, function* () {
-                if (this.invoiceService.isInvoiceTableMissing(error)) {
-                    yield this.logsService.warn("Invoice table is missing. Skipping automated billing from webhook.", { orderId: result.order.id });
-                    return;
-                }
-                const errorMessage = error instanceof Error ? error.message : "Unknown invoice error";
-                yield this.logsService.error("Webhook invoice generation failed", {
-                    orderId: result.order.id,
-                    error: errorMessage,
-                });
-            }));
-            return result;
+            yield this.logsService.info("Webhook - Payment confirmed order", {
+                sessionId: session.id,
+                orderId,
+                transactionId: transaction.id,
+                finalStatus: updatedTransaction.status,
+            });
+            return {
+                transaction: updatedTransaction,
+            };
         });
     }
 }

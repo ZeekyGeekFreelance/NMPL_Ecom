@@ -157,6 +157,7 @@ export class UserRepository {
     data: Partial<{
       name?: string;
       email?: string;
+      phone?: string | null;
       password?: string;
       avatar?: string;
       role?: ROLE;
@@ -316,6 +317,7 @@ export class UserRepository {
           id: string;
           name: string;
           email: string;
+          phone: string | null;
           role: ROLE;
           avatar: string | null;
           createdAt: Date;
@@ -335,6 +337,7 @@ export class UserRepository {
             u."id",
             u."name",
             u."email",
+            u."phone",
             u."role",
             u."avatar",
             u."createdAt",

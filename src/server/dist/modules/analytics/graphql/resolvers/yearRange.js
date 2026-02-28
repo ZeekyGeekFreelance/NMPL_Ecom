@@ -9,11 +9,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const orderStatus_1 = require("@/shared/utils/orderStatus");
 const yearRange = {
     Query: {
         yearRange: (_1, __1, _a) => __awaiter(void 0, [_1, __1, _a], void 0, function* (_, __, { prisma }) {
             var _b, _c;
             const orders = yield prisma.order.aggregate({
+                where: {
+                    status: {
+                        in: [...orderStatus_1.CONFIRMED_ORDER_STATUS_VALUES],
+                    },
+                },
                 _min: { orderDate: true },
                 _max: { orderDate: true },
             });

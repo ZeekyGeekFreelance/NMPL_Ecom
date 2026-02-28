@@ -26,6 +26,7 @@ import { Server as HTTPServer } from "http";
 import { SocketManager } from "@/infra/socket/socket";
 import { connectDB } from "./infra/database/database.config";
 import { setupSwagger } from "./docs/swagger";
+import { startQuotationExpiryWorker } from "./modules/transaction/quotationExpiry.worker";
 
 const defaultDevOrigins = [
   "http://localhost:3000",
@@ -88,10 +89,16 @@ export const createApp = async () => {
     throw new Error("SESSION_SECRET is required");
   }
 
-  await connectDB().catch((err) => {
-    console.error("Failed to connect to DB:", err);
-    process.exit(1);
-  });
+  try {
+    await connectDB();
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Database bootstrap failed. Verify DATABASE_URL and database availability. Details: ${errorMessage}`
+    );
+  }
+
+  startQuotationExpiryWorker();
 
   const httpServer = new HTTPServer(app);
 

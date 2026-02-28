@@ -132,6 +132,14 @@ const UsersDashboard = () => {
       sortable: true,
     },
     {
+      key: "phone",
+      label: "Phone",
+      render: (row: any) => (
+        <span className="text-sm text-gray-700">{row?.phone || "Not provided"}</span>
+      ),
+      sortable: true,
+    },
+    {
       key: "role",
       label: "Role",
       sortable: true,

@@ -2,10 +2,9 @@ import express from "express";
 import { makeAuthController } from "./auth.factory";
 import passport from "passport";
 import { cookieOptions } from "@/shared/constants";
-import { CartService } from "../cart/cart.service";
-import { CartRepository } from "../cart/cart.repository";
 import handleSocialLogin from "@/shared/utils/auth/handleSocialLogin";
 import AppError from "@/shared/errors/AppError";
+import optionalAuth from "@/shared/middlewares/optionalAuth";
 import {
   authRateLimiter,
   passwordResetLimiter,
@@ -22,7 +21,6 @@ import {
 
 const router = express.Router();
 const authController = makeAuthController();
-const cartService = new CartService(new CartRepository());
 const CLIENT_URL_DEV = process.env.CLIENT_URL_DEV;
 const CLIENT_URL_PROD = process.env.CLIENT_URL_PROD;
 const env = process.env.NODE_ENV;
@@ -100,12 +98,6 @@ router.get(
     res.cookie("refreshToken", refreshToken, cookieOptions);
     res.cookie("accessToken", accessToken, cookieOptions);
 
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
-
     res.redirect(clientRedirectUrl);
   }
 );
@@ -147,12 +139,6 @@ router.get(
 
     res.cookie("refreshToken", refreshToken, cookieOptions);
     res.cookie("accessToken", accessToken, cookieOptions);
-
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
 
     res.redirect(clientRedirectUrl);
   }
@@ -198,12 +184,6 @@ router.get(
 
     res.cookie("refreshToken", refreshToken, cookieOptions);
     res.cookie("accessToken", accessToken, cookieOptions);
-
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
 
     res.redirect(clientRedirectUrl);
   }
@@ -422,6 +402,6 @@ router.post(
  *       200:
  *         description: User successfully signed out.
  */
-router.get("/sign-out", authController.signout);
+router.get("/sign-out", optionalAuth, authController.signout);
 
 export default router;

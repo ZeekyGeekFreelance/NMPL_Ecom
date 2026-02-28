@@ -534,7 +534,13 @@ const DealersDashboard = () => {
                       {dealer.dealerProfile?.businessName || "Not set"}
                     </td>
                     <td className="px-4 py-3 text-gray-700">
-                      {dealer.dealerProfile?.contactPhone || "Not set"}
+                      <div className="space-y-1">
+                        <p>Account: {dealer.phone || "Not set"}</p>
+                        <p className="text-xs text-gray-500">
+                          Dealer Contact:{" "}
+                          {dealer.dealerProfile?.contactPhone || dealer.phone || "Not set"}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span

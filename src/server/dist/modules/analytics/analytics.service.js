@@ -8,12 +8,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AnalyticsService = void 0;
-const database_config_1 = __importDefault(require("@/infra/database/database.config"));
+const date_fns_1 = require("date-fns");
+const analytics_1 = require("@/shared/utils/analytics");
 class AnalyticsService {
     constructor(analyticsRepository) {
         this.analyticsRepository = analyticsRepository;
@@ -28,67 +26,125 @@ class AnalyticsService {
             });
         });
     }
+    round(value) {
+        return Number(value.toFixed(2));
+    }
+    roundNullable(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+        return this.round(value);
+    }
+    shouldComparePreviousPeriod(range) {
+        return Boolean(range.previousStartDate && range.previousEndDate);
+    }
+    resolveDateRange(query) {
+        const now = new Date();
+        let currentStartDate;
+        let currentEndDate = now;
+        let previousStartDate;
+        let previousEndDate;
+        let yearStart;
+        let yearEnd;
+        if (query.year !== undefined) {
+            if (!Number.isInteger(query.year) ||
+                query.year < 1900 ||
+                query.year > now.getFullYear()) {
+                throw new Error("Invalid year range.");
+            }
+            yearStart = (0, date_fns_1.startOfYear)(new Date(query.year, 0, 1));
+            yearEnd = (0, date_fns_1.endOfYear)(new Date(query.year, 0, 1));
+        }
+        if (query.startDate || query.endDate) {
+            if (!query.startDate || !query.endDate) {
+                throw new Error("Both startDate and endDate must be provided.");
+            }
+            if (query.startDate > query.endDate) {
+                throw new Error("startDate must be before endDate.");
+            }
+            currentStartDate = query.startDate;
+            currentEndDate = query.endDate;
+            previousStartDate = undefined;
+            previousEndDate = undefined;
+        }
+        else {
+            switch (query.timePeriod) {
+                case "last7days":
+                    currentStartDate = (0, date_fns_1.subDays)(now, 7);
+                    previousStartDate = (0, date_fns_1.subDays)(now, 14);
+                    previousEndDate = (0, date_fns_1.subDays)(now, 7);
+                    break;
+                case "lastMonth":
+                    currentStartDate = (0, date_fns_1.subMonths)(now, 1);
+                    previousStartDate = (0, date_fns_1.subMonths)(now, 2);
+                    previousEndDate = (0, date_fns_1.subMonths)(now, 1);
+                    break;
+                case "lastYear":
+                    currentStartDate = (0, date_fns_1.subYears)(now, 1);
+                    previousStartDate = (0, date_fns_1.subYears)(now, 2);
+                    previousEndDate = (0, date_fns_1.subYears)(now, 1);
+                    break;
+                case "allTime":
+                case undefined:
+                    currentStartDate = undefined;
+                    currentEndDate = undefined;
+                    previousStartDate = undefined;
+                    previousEndDate = undefined;
+                    break;
+                case "custom":
+                    throw new Error("Custom range requires startDate and endDate.");
+                default:
+                    throw new Error("Invalid timePeriod");
+            }
+        }
+        return {
+            currentStartDate,
+            currentEndDate,
+            previousStartDate,
+            previousEndDate,
+            yearStart,
+            yearEnd,
+        };
+    }
     getAnalyticsOverview(query) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { startDate, endDate } = this.getDateRange(query);
-            // Fetch orders within the date range
-            const orders = yield database_config_1.default.order.findMany({
-                where: {
-                    createdAt: {
-                        gte: startDate,
-                        lte: endDate,
-                    },
-                },
-                include: { orderItems: true },
-            });
-            const totalRevenue = orders.reduce((sum, order) => sum + order.amount, 0);
-            const totalOrders = orders.length;
-            const totalSales = orders.reduce((sum, order) => sum + order.orderItems.length, 0);
-            const totalUsers = new Set(orders.map((order) => order.userId)).size;
-            const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-            // Calculate changes (example: compare to previous period)
-            const prevPeriod = this.getPreviousPeriod(query);
-            const prevOrders = yield database_config_1.default.order.findMany({
-                where: {
-                    createdAt: {
-                        gte: prevPeriod.startDate,
-                        lte: prevPeriod.endDate,
-                    },
-                },
-                include: { orderItems: true },
-            });
-            const prevTotalRevenue = prevOrders.reduce((sum, order) => sum + order.amount, 0);
-            const prevTotalOrders = prevOrders.length;
-            const prevTotalSales = prevOrders.reduce((sum, order) => sum + order.orderItems.length, 0);
-            const prevTotalUsers = new Set(prevOrders.map((order) => order.userId))
-                .size;
-            const prevAverageOrderValue = prevTotalOrders > 0 ? prevTotalRevenue / prevTotalOrders : 0;
-            // Monthly trends (example: group by month)
-            const monthlyTrends = yield this.getMonthlyTrends(startDate, endDate);
+            var _a, _b;
+            const range = this.resolveDateRange(query);
+            const shouldCompare = this.shouldComparePreviousPeriod(range);
+            const [orders, orderItems, users] = yield Promise.all([
+                this.analyticsRepository.getOrdersByTimePeriod(range.currentStartDate, range.currentEndDate, range.yearStart, range.yearEnd),
+                this.analyticsRepository.getOrderItemsByTimePeriod(range.currentStartDate, range.currentEndDate, range.yearStart, range.yearEnd),
+                this.analyticsRepository.getUsersByTimePeriod(range.currentStartDate, range.currentEndDate, range.yearStart, range.yearEnd),
+            ]);
+            const currentMetrics = (0, analytics_1.calculateMetrics)(orders, orderItems, users);
+            const [previousOrders, previousOrderItems, previousUsers] = shouldCompare
+                ? yield Promise.all([
+                    this.analyticsRepository.getOrdersByTimePeriod(range.previousStartDate, range.previousEndDate, range.yearStart, range.yearEnd),
+                    this.analyticsRepository.getOrderItemsByTimePeriod(range.previousStartDate, range.previousEndDate, range.yearStart, range.yearEnd),
+                    this.analyticsRepository.getUsersByTimePeriod(range.previousStartDate, range.previousEndDate, range.yearStart, range.yearEnd),
+                ])
+                : [[], [], []];
+            const previousMetrics = (0, analytics_1.calculateMetrics)(previousOrders, previousOrderItems, previousUsers);
+            const changes = (0, analytics_1.calculateChanges)(currentMetrics, previousMetrics, shouldCompare);
+            const trendStartDate = (_a = range.yearStart) !== null && _a !== void 0 ? _a : range.currentStartDate;
+            const trendEndDate = (_b = range.yearEnd) !== null && _b !== void 0 ? _b : range.currentEndDate;
+            const [trendOrders, trendOrderItems] = yield Promise.all([
+                this.analyticsRepository.getOrdersByTimePeriod(trendStartDate, trendEndDate),
+                this.analyticsRepository.getOrderItemsByTimePeriod(trendStartDate, trendEndDate),
+            ]);
+            const monthlyTrends = (0, analytics_1.aggregateMonthlyTrends)(trendOrders, trendOrderItems, []);
             return {
-                totalRevenue,
-                totalOrders,
-                totalSales,
-                totalUsers,
-                averageOrderValue,
+                totalRevenue: this.round(currentMetrics.totalRevenue),
+                totalOrders: currentMetrics.totalOrders,
+                totalSales: currentMetrics.totalSales,
+                totalUsers: currentMetrics.totalUsers,
+                averageOrderValue: this.round(currentMetrics.averageOrderValue),
                 changes: {
-                    revenue: prevTotalRevenue > 0
-                        ? ((totalRevenue - prevTotalRevenue) / prevTotalRevenue) * 100
-                        : null,
-                    orders: prevTotalOrders > 0
-                        ? ((totalOrders - prevTotalOrders) / prevTotalOrders) * 100
-                        : null,
-                    sales: prevTotalSales > 0
-                        ? ((totalSales - prevTotalSales) / prevTotalSales) * 100
-                        : null,
-                    users: prevTotalUsers > 0
-                        ? ((totalUsers - prevTotalUsers) / prevTotalUsers) * 100
-                        : null,
-                    averageOrderValue: prevAverageOrderValue > 0
-                        ? ((averageOrderValue - prevAverageOrderValue) /
-                            prevAverageOrderValue) *
-                            100
-                        : null,
+                    revenue: this.roundNullable(changes.revenue),
+                    orders: this.roundNullable(changes.orders),
+                    sales: this.roundNullable(changes.sales),
+                    users: this.roundNullable(changes.users),
+                    averageOrderValue: this.roundNullable(changes.averageOrderValue),
                 },
                 monthlyTrends,
             };
@@ -96,122 +152,74 @@ class AnalyticsService {
     }
     getProductPerformance(query) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const { startDate, endDate } = this.getDateRange(query);
-            const orderItems = yield database_config_1.default.orderItem.findMany({
-                where: {
-                    order: {
-                        createdAt: {
-                            gte: startDate,
-                            lte: endDate,
-                        },
-                    },
-                },
-                include: {
-                    variant: {
-                        include: {
-                            product: {
-                                select: {
-                                    name: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
-            const productMap = new Map();
+            var _a, _b;
+            const range = this.resolveDateRange(query);
+            const orderItems = yield this.analyticsRepository.getOrderItemsByTimePeriod(range.currentStartDate, range.currentEndDate, range.yearStart, range.yearEnd, query.category);
+            const productSales = {};
             for (const item of orderItems) {
-                const productId = item.variantId;
-                const existing = productMap.get(productId) || {
-                    id: productId,
-                    sku: item.variant.sku || "N/A",
-                    name: ((_a = item.variant.product) === null || _a === void 0 ? void 0 : _a.name) || item.variant.sku,
-                    quantity: 0,
-                    revenue: 0,
-                };
-                existing.quantity += item.quantity;
-                existing.revenue += item.quantity * item.price;
-                productMap.set(productId, existing);
+                const productId = ((_a = item.variant.product) === null || _a === void 0 ? void 0 : _a.id) || item.variantId;
+                const productName = ((_b = item.variant.product) === null || _b === void 0 ? void 0 : _b.name) || item.variant.sku || "Unknown";
+                const sku = item.variant.sku || "N/A";
+                if (!productSales[productId]) {
+                    productSales[productId] = {
+                        id: productId,
+                        name: productName,
+                        sku,
+                        quantity: 0,
+                        revenue: 0,
+                        skuSales: {},
+                    };
+                }
+                productSales[productId].skuSales[sku] =
+                    (productSales[productId].skuSales[sku] || 0) + item.quantity;
+                productSales[productId].quantity += item.quantity;
+                productSales[productId].revenue += item.quantity * item.price;
             }
-            return Array.from(productMap.values());
+            return Object.values(productSales)
+                .map((product) => {
+                var _a;
+                const topSku = (_a = Object.entries(product.skuSales).sort((first, second) => second[1] - first[1])[0]) === null || _a === void 0 ? void 0 : _a[0];
+                return {
+                    id: product.id,
+                    sku: topSku || product.sku,
+                    name: product.name,
+                    quantity: product.quantity,
+                    revenue: this.round(product.revenue),
+                };
+            })
+                .sort((first, second) => second.quantity - first.quantity);
         });
     }
     getUserAnalytics(query) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { startDate, endDate } = this.getDateRange(query);
-            const orders = yield database_config_1.default.order.findMany({
-                where: {
-                    createdAt: {
-                        gte: startDate,
-                        lte: endDate,
-                    },
-                },
-                include: { user: true, orderItems: true },
-            });
-            const totalUsers = new Set(orders.map((order) => order.userId)).size;
-            const totalRevenue = orders.reduce((sum, order) => sum + order.amount, 0);
-            const uniqueUsers = new Set(orders.map((order) => order.userId));
-            const repeatUsers = new Set(orders
-                .filter((order) => orders.filter((o) => o.userId === order.userId).length > 1)
-                .map((order) => order.userId));
-            const retentionRate = uniqueUsers.size > 0 ? (repeatUsers.size / uniqueUsers.size) * 100 : 0;
-            const lifetimeValue = uniqueUsers.size > 0 ? totalRevenue / uniqueUsers.size : 0;
-            const repeatPurchaseRate = uniqueUsers.size > 0 ? (repeatUsers.size / uniqueUsers.size) * 100 : 0;
-            // Engagement score (example: based on interactions)
-            const interactions = yield database_config_1.default.interaction.findMany({
-                where: {
-                    createdAt: {
-                        gte: startDate,
-                        lte: endDate,
-                    },
-                },
-            });
-            const engagementScore = interactions.length / (uniqueUsers.size || 1);
-            // Changes
-            const prevPeriod = this.getPreviousPeriod(query);
-            const prevOrders = yield database_config_1.default.order.findMany({
-                where: {
-                    createdAt: {
-                        gte: prevPeriod.startDate,
-                        lte: prevPeriod.endDate,
-                    },
-                },
-            });
-            const prevTotalUsers = new Set(prevOrders.map((order) => order.userId))
-                .size;
-            const usersChange = prevTotalUsers > 0
-                ? ((totalUsers - prevTotalUsers) / prevTotalUsers) * 100
-                : null;
-            // Top users
-            const userOrders = orders.reduce((map, order) => {
-                const userId = order.userId;
-                const existing = map.get(userId) || {
-                    id: userId,
-                    name: order.user.name,
-                    email: order.user.email,
-                    orderCount: 0,
-                    totalSpent: 0,
-                    engagementScore: 0,
-                };
-                existing.orderCount += 1;
-                existing.totalSpent += order.amount;
-                existing.engagementScore += interactions.filter((i) => i.userId === userId).length;
-                map.set(userId, existing);
-                return map;
-            }, new Map());
-            const topUsers = Array.from(userOrders.values())
-                .sort((a, b) => b.totalSpent - a.totalSpent)
-                .slice(0, 5);
-            // Interaction trends
-            const interactionTrends = yield this.getInteractionTrends(startDate, endDate);
+            const range = this.resolveDateRange(query);
+            const shouldCompare = this.shouldComparePreviousPeriod(range);
+            const [users, interactions] = yield Promise.all([
+                this.analyticsRepository.getUsersByTimePeriod(range.currentStartDate, range.currentEndDate, range.yearStart, range.yearEnd),
+                this.analyticsRepository.getInteractionsByTimePeriod(range.currentStartDate, range.currentEndDate, range.yearStart, range.yearEnd),
+            ]);
+            const customerMetrics = (0, analytics_1.calculateCustomerMetrics)(users);
+            const previousUsers = shouldCompare
+                ? yield this.analyticsRepository.getUsersByTimePeriod(range.previousStartDate, range.previousEndDate, range.yearStart, range.yearEnd)
+                : [];
+            const previousMetrics = (0, analytics_1.calculateCustomerMetrics)(previousUsers);
+            const retentionRate = shouldCompare
+                ? (0, analytics_1.calculateRetentionRate)(users, previousUsers)
+                : 0;
+            const { scores: engagementScores, averageScore: engagementScore } = (0, analytics_1.calculateEngagementScores)(interactions);
+            const topUsers = (0, analytics_1.generateTopCustomers)(users, engagementScores);
+            const interactionTrends = (0, analytics_1.aggregateInteractionTrends)(interactions);
+            const changes = (0, analytics_1.calculateChanges)({ totalUsers: customerMetrics.totalCustomers }, { totalUsers: previousMetrics.totalCustomers }, shouldCompare);
             return {
-                totalUsers,
-                totalRevenue,
-                retentionRate,
-                lifetimeValue,
-                repeatPurchaseRate,
-                engagementScore,
-                changes: { users: usersChange },
+                totalUsers: customerMetrics.totalCustomers,
+                totalRevenue: this.round(customerMetrics.totalRevenue),
+                retentionRate: this.round(retentionRate),
+                lifetimeValue: this.round(customerMetrics.lifetimeValue),
+                repeatPurchaseRate: this.round(customerMetrics.repeatPurchaseRate),
+                engagementScore: this.round(engagementScore),
+                changes: {
+                    users: this.roundNullable(changes.users),
+                },
                 topUsers,
                 interactionTrends,
             };
@@ -219,112 +227,18 @@ class AnalyticsService {
     }
     getYearRange() {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            const orders = yield database_config_1.default.order.aggregate({
-                _min: { createdAt: true },
-                _max: { createdAt: true },
-            });
-            const minYear = ((_a = orders._min.createdAt) === null || _a === void 0 ? void 0 : _a.getFullYear()) || new Date().getFullYear();
-            const maxYear = ((_b = orders._max.createdAt) === null || _b === void 0 ? void 0 : _b.getFullYear()) || new Date().getFullYear();
-            return { minYear, maxYear };
-        });
-    }
-    getDateRange(query) {
-        const now = new Date();
-        let startDate;
-        let endDate = now;
-        switch (query.timePeriod) {
-            case "last7days":
-                startDate = new Date(now.setDate(now.getDate() - 7));
-                break;
-            case "lastMonth":
-                startDate = new Date(now.setMonth(now.getMonth() - 1));
-                break;
-            case "lastYear":
-                startDate = new Date(now.setFullYear(now.getFullYear() - 1));
-                break;
-            case "allTime":
-                startDate = new Date(0);
-                break;
-            case "custom":
-                if (!query.startDate || !query.endDate) {
-                    throw new Error("Custom range requires startDate and endDate");
-                }
-                startDate = query.startDate;
-                endDate = query.endDate;
-                break;
-            default:
-                throw new Error("Invalid timePeriod");
-        }
-        return { startDate, endDate };
-    }
-    getPreviousPeriod(query) {
-        const { startDate, endDate } = this.getDateRange(query);
-        const duration = endDate.getTime() - startDate.getTime();
-        return {
-            startDate: new Date(startDate.getTime() - duration),
-            endDate: new Date(startDate.getTime() - 1),
-        };
-    }
-    getMonthlyTrends(startDate, endDate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const months = {
-                labels: [],
-                revenue: [],
-                orders: [],
-                sales: [],
-                users: [],
-            };
-            let current = new Date(startDate);
-            while (current <= endDate) {
-                const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
-                const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
-                const orders = yield database_config_1.default.order.findMany({
-                    where: {
-                        createdAt: {
-                            gte: monthStart,
-                            lte: monthEnd,
-                        },
-                    },
-                    include: { orderItems: true },
-                });
-                months.labels.push(`${monthStart.getFullYear()}-${monthStart.getMonth() + 1}`);
-                months.revenue.push(orders.reduce((sum, order) => sum + order.amount, 0));
-                months.orders.push(orders.length);
-                months.sales.push(orders.reduce((sum, order) => sum + order.orderItems.length, 0));
-                months.users.push(new Set(orders.map((order) => order.userId)).size);
-                current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+            const years = yield this.analyticsRepository.getOrderYearRange();
+            const currentYear = new Date().getFullYear();
+            if (!years.length) {
+                return {
+                    minYear: currentYear,
+                    maxYear: currentYear,
+                };
             }
-            return months;
-        });
-    }
-    getInteractionTrends(startDate, endDate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const trends = {
-                labels: [],
-                views: [],
-                clicks: [],
-                others: [],
+            return {
+                minYear: Math.min(...years),
+                maxYear: Math.max(...years),
             };
-            let current = new Date(startDate);
-            while (current <= endDate) {
-                const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
-                const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
-                const interactions = yield database_config_1.default.interaction.findMany({
-                    where: {
-                        createdAt: {
-                            gte: monthStart,
-                            lte: monthEnd,
-                        },
-                    },
-                });
-                trends.labels.push(`${monthStart.getFullYear()}-${monthStart.getMonth() + 1}`);
-                trends.views.push(interactions.filter((i) => i.type === "view").length);
-                trends.clicks.push(interactions.filter((i) => i.type === "click").length);
-                trends.others.push(interactions.filter((i) => i.type === "other").length);
-                current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
-            }
-            return trends;
         });
     }
 }

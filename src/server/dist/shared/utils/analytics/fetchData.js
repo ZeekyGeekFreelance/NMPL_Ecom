@@ -11,10 +11,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchData = void 0;
 const _1 = require(".");
-const fetchData = (prisma, model, dateField, startDate, endDate, yearStart, yearEnd, role, include) => __awaiter(void 0, void 0, void 0, function* () {
-    const where = {
-        [dateField]: (0, _1.buildDateFilter)(startDate, endDate, yearStart, yearEnd),
-    };
+const fetchData = (prisma, model, dateField, startDate, endDate, yearStart, yearEnd, role, include, additionalWhere) => __awaiter(void 0, void 0, void 0, function* () {
+    const where = Object.assign(Object.assign({}, (additionalWhere || {})), { [dateField]: (0, _1.buildDateFilter)(startDate, endDate, yearStart, yearEnd) });
     if (role)
         where.role = role;
     return prisma[model].findMany({ where, include });

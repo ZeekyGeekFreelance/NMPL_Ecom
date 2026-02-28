@@ -51,6 +51,32 @@ class OrderController {
                 message: "Order details retrieved successfully",
             });
         }));
+        this.acceptQuotation = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            const { orderId } = req.params;
+            if (!userId) {
+                throw new AppError_1.default(400, "User not found");
+            }
+            const paymentSession = yield this.orderService.acceptQuotationForOrder(orderId, userId);
+            (0, sendResponse_1.default)(res, 200, {
+                data: paymentSession,
+                message: "Quotation accepted. Redirect to payment gateway.",
+            });
+        }));
+        this.rejectQuotation = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            const { orderId } = req.params;
+            if (!userId) {
+                throw new AppError_1.default(400, "User not found");
+            }
+            const updatedTransaction = yield this.orderService.rejectQuotationForOrder(orderId, userId);
+            (0, sendResponse_1.default)(res, 200, {
+                data: { updatedTransaction },
+                message: "Quotation rejected successfully",
+            });
+        }));
         this.createOrder = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;

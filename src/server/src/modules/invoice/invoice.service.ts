@@ -10,6 +10,7 @@ import {
 } from "@/shared/utils/accountReference";
 import { InvoiceRepository, InvoiceWithDetails } from "./invoice.repository";
 import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
+import { ORDER_LIFECYCLE_STATUS } from "@/shared/utils/orderLifecycle";
 
 interface RequesterContext {
   id: string;
@@ -130,6 +131,9 @@ export class InvoiceService {
         orderId: orderReference,
         customerType,
         orderDate: invoice.order.orderDate,
+        subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+        deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+        deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
       });
 
@@ -161,6 +165,9 @@ export class InvoiceService {
         orderId: orderReference,
         customerType,
         orderDate: invoice.order.orderDate,
+        subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+        deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+        deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
       });
 
@@ -210,27 +217,35 @@ export class InvoiceService {
       throw new AppError(404, "Order not found");
     }
 
-    const transactionStatus = (order.transaction?.status || order.status || "")
-      .toString()
+    const transactionStatus = String(
+      order.transaction?.status || order.status || ""
+    )
+      .trim()
       .toUpperCase();
 
     const normalizedStatusByLegacyValue: Record<string, string> = {
-      PENDING: "PLACED",
-      PROCESSING: "CONFIRMED",
-      SHIPPED: "CONFIRMED",
-      IN_TRANSIT: "CONFIRMED",
-      CANCELED: "REJECTED",
-      RETURNED: "REJECTED",
-      REFUNDED: "REJECTED",
+      PLACED: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+      PENDING: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+      PROCESSING: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      SHIPPED: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      IN_TRANSIT: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      DELIVERED: ORDER_LIFECYCLE_STATUS.DELIVERED,
+      REJECTED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      CANCELED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      RETURNED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      REFUNDED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
     };
 
     const normalizedStatus =
       normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
 
-    if (!["CONFIRMED", "DELIVERED"].includes(normalizedStatus)) {
+    if (
+      normalizedStatus !== ORDER_LIFECYCLE_STATUS.CONFIRMED &&
+      normalizedStatus !== ORDER_LIFECYCLE_STATUS.DELIVERED
+    ) {
       throw new AppError(
         409,
-        "Invoice is available only after admin confirms the order."
+        "Invoice is available only after payment confirmation."
       );
     }
 
@@ -270,13 +285,20 @@ export class InvoiceService {
       customerEmail: invoice.customerEmail,
       customerType,
       items,
+      subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+      deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+      deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
       totalAmount: invoice.order.amount,
       billingAddress: invoice.order.address
         ? {
-            street: invoice.order.address.street,
+            fullName: invoice.order.address.fullName,
+            phoneNumber: invoice.order.address.phoneNumber,
+            line1: invoice.order.address.line1,
+            line2: invoice.order.address.line2,
+            landmark: invoice.order.address.landmark,
             city: invoice.order.address.city,
             state: invoice.order.address.state,
-            zip: invoice.order.address.zip,
+            pincode: invoice.order.address.pincode,
             country: invoice.order.address.country,
           }
         : null,

@@ -79,6 +79,7 @@ router.get("/:id", protect_1.default, (0, authorizeRole_1.default)("ADMIN", "SUP
  *       404:
  *         description: Transaction not found.
  */
+router.put("/quotation/:id", protect_1.default, (0, authorizeRole_1.default)("ADMIN", "SUPERADMIN"), transactionController.updateTransactionQuotation);
 router.put("/status/:id", protect_1.default, (0, authorizeRole_1.default)("ADMIN", "SUPERADMIN"), transactionController.updateTransactionStatus);
 /**
  * @swagger

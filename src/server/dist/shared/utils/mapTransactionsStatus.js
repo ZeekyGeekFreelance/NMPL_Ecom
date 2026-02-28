@@ -11,9 +11,12 @@ const mapTransactionStatus = (searchQuery) => {
     const query = searchQuery.toLowerCase();
     // These are all the possible enum values for the `status` field
     const validStatuses = [
-        "PLACED",
+        "PENDING_VERIFICATION",
+        "WAITLISTED",
+        "AWAITING_PAYMENT",
+        "QUOTATION_REJECTED",
+        "QUOTATION_EXPIRED",
         "CONFIRMED",
-        "REJECTED",
         "DELIVERED",
     ];
     // Filter enums that match the search query (case-insensitive)

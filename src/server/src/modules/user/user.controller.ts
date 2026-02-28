@@ -66,9 +66,10 @@ export class UserController {
         throw new AppError(401, "User not authenticated");
       }
 
-      const { name } = req.body as { name: string };
+      const { name, phone } = req.body as { name?: string; phone?: string };
       const user = await this.userService.updateCurrentUserProfile(currentUserId, {
         name,
+        phone,
       });
 
       sendResponse(res, 200, {

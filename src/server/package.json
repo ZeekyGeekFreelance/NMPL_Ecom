@@ -6,10 +6,11 @@
     "@types/express": "4.17.21"
   },
   "scripts": {
-    "dev": "prisma generate && prisma migrate deploy && nodemon",
+    "dev": "prisma generate && nodemon",
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma": "prisma",
+    "db:migrate:deploy": "prisma migrate deploy",
     "seed": "ts-node seeds/seed.ts"
   },
   "keywords": [],

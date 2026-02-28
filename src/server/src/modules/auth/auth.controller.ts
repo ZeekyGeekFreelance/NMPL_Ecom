@@ -66,10 +66,6 @@ export class AuthController {
     if (accessToken && refreshToken) {
       res.cookie("refreshToken", refreshToken, cookieOptions);
       res.cookie("accessToken", accessToken, cookieOptions);
-
-      if (user.role === "USER") {
-        await this.cartService?.mergeCartsOnLogin(req.session.id, user.id);
-      }
     }
 
     sendResponse(res, 201, {
@@ -115,10 +111,6 @@ export class AuthController {
     res.cookie("accessToken", accessToken, cookieOptions);
 
     const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await this.cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
 
     sendResponse(res, 200, {
       data: {
@@ -153,7 +145,33 @@ export class AuthController {
   signout = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const start = Date.now();
     const refreshToken = req?.cookies?.refreshToken;
-    const userId = req.user?.id;
+    let userId = req.user?.id;
+
+    if (!userId && refreshToken && process.env.REFRESH_TOKEN_SECRET) {
+      try {
+        const decoded = jwt.verify(
+          refreshToken,
+          process.env.REFRESH_TOKEN_SECRET
+        ) as { id?: string };
+        if (typeof decoded.id === "string") {
+          userId = decoded.id;
+        }
+      } catch {
+        // Ignore invalid refresh token and continue clearing cookies.
+      }
+    }
+
+    if (userId) {
+      try {
+        await this.cartService?.clearCartOnSignOut(userId);
+      } catch (error) {
+        await this.logsService.warn("Failed to clear cart on sign out", {
+          userId,
+          sessionId: req.session.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     if (refreshToken) {
       const decoded: any = jwt.decode(refreshToken);

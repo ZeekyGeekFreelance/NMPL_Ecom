@@ -29,8 +29,7 @@ export class WebhookController {
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const { order, payment, shipment, address } =
-        await this.webhookService.handleCheckoutCompletion(session);
+      await this.webhookService.handleCheckoutCompletion(session);
     }
 
     sendResponse(res, 200, { message: "Webhook received successfully" });

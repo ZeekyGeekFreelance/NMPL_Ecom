@@ -111,7 +111,7 @@ export class CartRepository {
       // Validate stock
       const variant = await prisma.productVariant.findUnique({
         where: { id: data.variantId },
-        select: { stock: true },
+        select: { stock: true, reservedStock: true },
       });
       debugLog(
         "🔍 [CART REPOSITORY] Variant found for stock check:",
@@ -122,9 +122,12 @@ export class CartRepository {
         debugLog("🔍 [CART REPOSITORY] ERROR: Variant not found");
         throw new Error("Variant not found");
       }
-      if (variant.stock < data.quantity) {
+      const availableStock = variant.stock - (variant.reservedStock || 0);
+      if (availableStock < data.quantity) {
         debugLog("🔍 [CART REPOSITORY] ERROR: Insufficient stock");
-        throw new Error(`Insufficient stock: only ${variant.stock} available`);
+        throw new Error(
+          `Insufficient stock: only ${Math.max(availableStock, 0)} available`
+        );
       }
 
       const item = await prisma.cartItem.create({ data });
@@ -160,10 +163,12 @@ export class CartRepository {
       debugLog("🔍 [CART REPOSITORY] ERROR: Cart item not found");
       throw new Error("Cart item not found");
     }
-    if (cartItem.variant.stock < quantity) {
+    const availableStock =
+      cartItem.variant.stock - (cartItem.variant.reservedStock || 0);
+    if (availableStock < quantity) {
       debugLog("🔍 [CART REPOSITORY] ERROR: Insufficient stock for update");
       throw new Error(
-        `Insufficient stock: only ${cartItem.variant.stock} available`
+        `Insufficient stock: only ${Math.max(availableStock, 0)} available`
       );
     }
 
@@ -210,12 +215,17 @@ export class CartRepository {
         const newQuantity = existingItem.quantity + item.quantity;
         debugLog("🔍 [CART REPOSITORY] Merging quantities:", newQuantity);
 
-        if (item.variant.stock < newQuantity) {
+        const availableStock =
+          item.variant.stock - (item.variant.reservedStock || 0);
+        if (availableStock < newQuantity) {
           debugLog(
             "🔍 [CART REPOSITORY] ERROR: Insufficient stock after merge"
           );
           throw new Error(
-            `Insufficient stock for variant ${item.variantId}: only ${item.variant.stock} available`
+            `Insufficient stock for variant ${item.variantId}: only ${Math.max(
+              availableStock,
+              0
+            )} available`
           );
         }
         await prisma.cartItem.update({
@@ -225,12 +235,17 @@ export class CartRepository {
         debugLog("🔍 [CART REPOSITORY] Item quantity updated in user cart");
       } else {
         debugLog("🔍 [CART REPOSITORY] Adding new item to user cart");
-        if (item.variant.stock < item.quantity) {
+        const availableStock =
+          item.variant.stock - (item.variant.reservedStock || 0);
+        if (availableStock < item.quantity) {
           debugLog(
             "🔍 [CART REPOSITORY] ERROR: Insufficient stock for new item"
           );
           throw new Error(
-            `Insufficient stock for variant ${item.variantId}: only ${item.variant.stock} available`
+            `Insufficient stock for variant ${item.variantId}: only ${Math.max(
+              availableStock,
+              0
+            )} available`
           );
         }
         await prisma.cartItem.create({
@@ -258,29 +273,32 @@ export class CartRepository {
   }
 
   async clearCart(userId: string, tx?: Prisma.TransactionClient) {
-    debugLog("🔍 [CART REPOSITORY] clearCart called");
-    debugLog("🔍 [CART REPOSITORY] userId:", userId);
+    debugLog("[CART REPOSITORY] clearCart called");
+    debugLog("[CART REPOSITORY] userId:", userId);
 
     const client = tx || prisma;
-    const cart = await client.cart.findFirst({
-      where: { userId },
+    const activeCarts = await client.cart.findMany({
+      where: { userId, status: CART_STATUS.ACTIVE },
+      select: { id: true },
     });
 
-    debugLog("🔍 [CART REPOSITORY] Cart found to be cleared:", cart);
+    const activeCartIds = activeCarts.map((cart) => cart.id);
+    debugLog("[CART REPOSITORY] Active cart IDs to clear:", activeCartIds);
 
-    if (!cart) {
-      debugLog("🔍 [CART REPOSITORY] No cart found to clear");
+    if (!activeCartIds.length) {
+      debugLog("[CART REPOSITORY] No active cart found to clear");
       return;
     }
 
     const result = await client.cartItem.deleteMany({
-      where: { cartId: cart.id },
+      where: { cartId: { in: activeCartIds } },
     });
-    debugLog("🔍 [CART REPOSITORY] Cart items cleared:", result);
+    debugLog("[CART REPOSITORY] Active cart items cleared:", result);
 
     return result;
   }
 }
+
 
 
 

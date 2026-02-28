@@ -17,6 +17,7 @@ interface DealerUser {
   accountReference?: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: string;
   avatar: string | null;
   createdAt: string;
@@ -60,8 +61,8 @@ export const userApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["User"],
     }),
-    updateMyProfileName: builder.mutation({
-      query: (data: { name: string }) => ({
+    updateMyProfile: builder.mutation({
+      query: (data: { name?: string; phone?: string }) => ({
         url: "/users/me",
         method: "PATCH",
         body: data,
@@ -170,7 +171,7 @@ export const {
   useDeleteUserMutation,
   useGetProfileQuery,
   useGetMeQuery,
-  useUpdateMyProfileNameMutation,
+  useUpdateMyProfileMutation,
   useGetAllUsersQuery,
   useLazyGetMeQuery,
   useGetDealersQuery,

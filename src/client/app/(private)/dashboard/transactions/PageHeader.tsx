@@ -6,10 +6,13 @@ import { ArrowLeft, Download } from "lucide-react";
 const PageHeader = ({
   onBack,
   onUpdateStatus,
+  onOpenQuotationEditor,
   onDownloadInvoice,
   isDownloadingInvoice,
   isUpdating,
+  isIssuingQuotation,
   canUpdateStatus,
+  canEditQuotation,
   newStatus,
   setNewStatus,
   statusOptions,
@@ -38,6 +41,14 @@ const PageHeader = ({
         >
           <Download size={16} />
           {isDownloadingInvoice ? "Downloading..." : "Invoice PDF"}
+        </button>
+        <button
+          type="button"
+          onClick={onOpenQuotationEditor}
+          disabled={!canEditQuotation || isIssuingQuotation}
+          className="px-4 py-2 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 transition duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isIssuingQuotation ? "Sending..." : "Edit Quotation"}
         </button>
         {!isUpdating ? (
           <>

@@ -14,46 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.productResolvers = void 0;
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
-const client_1 = require("@prisma/client");
-const isDealerTableMissing = (error) => {
-    if (!(error instanceof Error)) {
-        return false;
-    }
-    return (error.message.includes('relation "DealerProfile" does not exist') ||
-        error.message.includes('relation "DealerPriceMapping" does not exist'));
-};
-const getDealerPriceMap = (prisma, userId, variantIds) => __awaiter(void 0, void 0, void 0, function* () {
-    if (!userId || !variantIds.length) {
-        return new Map();
-    }
-    try {
-        const dealerProfile = yield prisma.$queryRaw(client_1.Prisma.sql `
-        SELECT "status"
-        FROM "DealerProfile"
-        WHERE "userId" = ${userId}
-        LIMIT 1
-      `);
-        if (!dealerProfile.length || dealerProfile[0].status !== "APPROVED") {
-            return new Map();
-        }
-        const dealerPrices = yield prisma.$queryRaw(client_1.Prisma.sql `
-        SELECT "variantId", "customPrice"
-        FROM "DealerPriceMapping"
-        WHERE "dealerId" = ${userId}
-          AND "variantId" IN (${client_1.Prisma.join(variantIds)})
-      `);
-        return new Map(dealerPrices.map((dealerPrice) => [
-            dealerPrice.variantId,
-            dealerPrice.customPrice,
-        ]));
-    }
-    catch (error) {
-        if (isDealerTableMissing(error)) {
-            return new Map();
-        }
-        throw error;
-    }
-});
+const dealerAccess_1 = require("@/shared/utils/dealerAccess");
 const applyDealerPricingToProducts = (context, products) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     if (!products.length) {
@@ -63,7 +24,7 @@ const applyDealerPricingToProducts = (context, products) => __awaiter(void 0, vo
     const variantIds = products.flatMap((product) => Array.isArray(product === null || product === void 0 ? void 0 : product.variants)
         ? product.variants.map((variant) => variant.id)
         : []);
-    const dealerPriceMap = yield getDealerPriceMap(context.prisma, userId, variantIds);
+    const dealerPriceMap = yield (0, dealerAccess_1.getDealerPriceMap)(context.prisma, userId, variantIds);
     if (!dealerPriceMap.size) {
         return products;
     }

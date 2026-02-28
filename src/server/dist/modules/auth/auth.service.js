@@ -18,6 +18,7 @@ const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const sendEmail_1 = __importDefault(require("@/shared/utils/sendEmail"));
 const passwordReset_1 = __importDefault(require("@/shared/templates/passwordReset"));
 const registrationOtp_1 = __importDefault(require("@/shared/templates/registrationOtp"));
+const sendSms_1 = __importDefault(require("@/shared/utils/sendSms"));
 const authUtils_1 = require("@/shared/utils/authUtils");
 const client_1 = require("@prisma/client");
 const logger_1 = __importDefault(require("@/infra/winston/logger"));
@@ -27,6 +28,7 @@ const NotFoundError_1 = __importDefault(require("@/shared/errors/NotFoundError")
 const accountReference_1 = require("@/shared/utils/accountReference");
 const branding_1 = require("@/shared/utils/branding");
 const registrationOtp_2 = require("@/shared/utils/auth/registrationOtp");
+const userRole_1 = require("@/shared/utils/userRole");
 const resolveClientUrl = () => {
     return (process.env.CLIENT_URL ||
         process.env.CLIENT_URL_DEV ||
@@ -65,16 +67,21 @@ class AuthService {
         });
     }
     requestRegistrationOtp(_a) {
-        return __awaiter(this, arguments, void 0, function* ({ email, purpose = "USER_PORTAL", requestDealerAccess = false, }) {
+        return __awaiter(this, arguments, void 0, function* ({ email, phone, purpose = "USER_PORTAL", requestDealerAccess = false, }) {
             const normalizedEmail = email.trim().toLowerCase();
+            const normalizedPhone = phone.trim();
             const existingUser = yield this.authRepository.findUserByEmail(normalizedEmail);
             if (existingUser) {
                 throw new BadRequestError_1.default("This email is already registered. Please sign in instead.");
+            }
+            if (!normalizedPhone) {
+                throw new BadRequestError_1.default("Phone number is required to request OTP.");
             }
             let otpDetails;
             try {
                 otpDetails = yield (0, registrationOtp_2.createRegistrationOtp)({
                     email: normalizedEmail,
+                    phone: normalizedPhone,
                     purpose,
                     requestDealerAccess,
                 });
@@ -85,13 +92,14 @@ class AuthService {
                 }
                 throw new AppError_1.default(500, "Unable to prepare registration OTP. Please try again in a moment.");
             }
-            const { otpCode, expiresInSeconds, resendAvailableInSeconds } = otpDetails;
+            const { emailOtpCode, phoneOtpCode, expiresInSeconds, resendAvailableInSeconds, } = otpDetails;
+            const phoneOtpEnabled = (0, registrationOtp_2.isRegistrationPhoneOtpEnabled)();
             const purposeLabel = purpose === "DEALER_PORTAL" ? "Dealer Registration" : "Account Registration";
             const platformName = (0, branding_1.getPlatformName)();
             const supportEmail = (0, branding_1.getSupportEmail)();
             const otpTemplate = (0, registrationOtp_1.default)({
                 platformName,
-                otpCode,
+                emailOtpCode,
                 purposeLabel,
                 expiresInMinutes: Math.floor(expiresInSeconds / 60),
                 supportEmail,
@@ -106,14 +114,32 @@ class AuthService {
                 yield (0, registrationOtp_2.clearRegistrationOtp)(normalizedEmail);
                 throw new AppError_1.default(500, "Failed to send OTP email. Please try again in a moment.");
             }
+            if (phoneOtpEnabled) {
+                const phoneOtpMessage = [
+                    `${platformName} phone verification code: ${phoneOtpCode}`,
+                    `For ${purposeLabel}.`,
+                    `Expires in ${Math.floor(expiresInSeconds / 60)} minutes.`,
+                    "Do not share this code.",
+                ].join(" ");
+                const phoneOtpSent = yield (0, sendSms_1.default)({
+                    to: normalizedPhone,
+                    body: phoneOtpMessage,
+                });
+                if (!phoneOtpSent) {
+                    yield (0, registrationOtp_2.clearRegistrationOtp)(normalizedEmail);
+                    throw new AppError_1.default(500, "Failed to send phone OTP. Please try again after SMS configuration is verified.");
+                }
+            }
             return {
-                message: `OTP sent successfully. It will expire in ${Math.floor(expiresInSeconds / 60)} minutes.`,
+                message: phoneOtpEnabled
+                    ? `OTP sent to your email and phone. It will expire in ${Math.floor(expiresInSeconds / 60)} minutes.`
+                    : `OTP sent to your email. It will expire in ${Math.floor(expiresInSeconds / 60)} minutes.`,
                 resendAvailableInSeconds,
             };
         });
     }
     registerUser(_a) {
-        return __awaiter(this, arguments, void 0, function* ({ name, email, phone, password, otpCode, requestDealerAccess = false, businessName, contactPhone, }) {
+        return __awaiter(this, arguments, void 0, function* ({ name, email, phone, password, emailOtpCode, phoneOtpCode, requestDealerAccess = false, businessName, contactPhone, }) {
             var _b, _c, _d, _e, _f;
             const normalizedEmail = email.trim().toLowerCase();
             const normalizedPhone = String(phone !== null && phone !== void 0 ? phone : "").trim();
@@ -124,10 +150,14 @@ class AuthService {
             if (!normalizedPhone) {
                 throw new BadRequestError_1.default("Phone number is required.");
             }
-            if (!otpCode || !otpCode.trim()) {
-                throw new BadRequestError_1.default("Registration OTP is required. Please use the OTP sent to your email.");
+            if (!emailOtpCode || !emailOtpCode.trim()) {
+                throw new BadRequestError_1.default("Email OTP is required. Please use the OTP sent during registration.");
             }
-            const otpVerification = yield (0, registrationOtp_2.verifyAndConsumeRegistrationOtp)(normalizedEmail, otpCode);
+            const phoneOtpEnabled = (0, registrationOtp_2.isRegistrationPhoneOtpEnabled)();
+            if (phoneOtpEnabled && (!phoneOtpCode || !phoneOtpCode.trim())) {
+                throw new BadRequestError_1.default("Phone OTP is required. Please use the OTP sent during registration.");
+            }
+            const otpVerification = yield (0, registrationOtp_2.verifyAndConsumeRegistrationOtp)(normalizedEmail, normalizedPhone, emailOtpCode, phoneOtpEnabled ? phoneOtpCode : undefined);
             if (otpVerification.status === "EXPIRED") {
                 throw new BadRequestError_1.default("Registration OTP expired. Request a new OTP and try again.");
             }
@@ -135,7 +165,7 @@ class AuthService {
                 throw new BadRequestError_1.default("Too many incorrect OTP attempts. Please request a new OTP.");
             }
             if (otpVerification.status === "INVALID") {
-                throw new BadRequestError_1.default(`Invalid registration OTP code. ${otpVerification.attemptsRemaining} attempt(s) remaining.`);
+                throw new BadRequestError_1.default(`Invalid registration OTP ${phoneOtpEnabled ? "code(s)" : "code"}. ${otpVerification.attemptsRemaining} attempt(s) remaining.`);
             }
             const otpContext = otpVerification.context;
             const shouldRequestDealerAccess = otpContext.requestDealerAccess === true;
@@ -189,6 +219,10 @@ class AuthService {
                         email: newUser.email,
                         phone: newUser.phone,
                         role: newUser.role,
+                        effectiveRole: (0, userRole_1.resolveEffectiveRole)({
+                            role: newUser.role,
+                            dealerStatus: dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.status,
+                        }),
                         avatar: null,
                         isDealer: true,
                         dealerStatus: (_d = dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.status) !== null && _d !== void 0 ? _d : "PENDING",
@@ -208,6 +242,7 @@ class AuthService {
                     email: newUser.email,
                     phone: newUser.phone,
                     role: newUser.role,
+                    effectiveRole: (0, userRole_1.resolveEffectiveRole)({ role: newUser.role }),
                     avatar: null,
                     isDealer: false,
                     dealerStatus: null,
@@ -250,7 +285,10 @@ class AuthService {
             return {
                 accessToken,
                 refreshToken,
-                user: Object.assign(Object.assign({ accountReference: (0, accountReference_1.toAccountReference)(user.id) }, user), { isDealer: !!dealerProfile, dealerStatus: (_b = dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.status) !== null && _b !== void 0 ? _b : null, dealerBusinessName: (_c = dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.businessName) !== null && _c !== void 0 ? _c : null, dealerContactPhone: (_d = dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.contactPhone) !== null && _d !== void 0 ? _d : null }),
+                user: Object.assign(Object.assign({ accountReference: (0, accountReference_1.toAccountReference)(user.id) }, user), { effectiveRole: (0, userRole_1.resolveEffectiveRole)({
+                        role: user.role,
+                        dealerStatus: dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.status,
+                    }), isDealer: !!dealerProfile, dealerStatus: (_b = dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.status) !== null && _b !== void 0 ? _b : null, dealerBusinessName: (_c = dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.businessName) !== null && _c !== void 0 ? _c : null, dealerContactPhone: (_d = dealerProfile === null || dealerProfile === void 0 ? void 0 : dealerProfile.contactPhone) !== null && _d !== void 0 ? _d : null }),
             };
         });
     }
@@ -322,7 +360,7 @@ class AuthService {
     }
     refreshToken(oldRefreshToken) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f, _g;
+            var _a, _b, _c, _d, _e, _f, _g, _h;
             if (yield authUtils_1.tokenUtils.isTokenBlacklisted(oldRefreshToken)) {
                 throw new NotFoundError_1.default("Refresh token");
             }
@@ -353,11 +391,15 @@ class AuthService {
                 email: user.email,
                 phone: (_a = user.phone) !== null && _a !== void 0 ? _a : null,
                 role: user.role,
+                effectiveRole: (0, userRole_1.resolveEffectiveRole)({
+                    role: user.role,
+                    dealerStatus: (_b = user.dealerProfile) === null || _b === void 0 ? void 0 : _b.status,
+                }),
                 avatar: user.avatar,
                 isDealer: !!user.dealerProfile,
-                dealerStatus: (_c = (_b = user.dealerProfile) === null || _b === void 0 ? void 0 : _b.status) !== null && _c !== void 0 ? _c : null,
-                dealerBusinessName: (_e = (_d = user.dealerProfile) === null || _d === void 0 ? void 0 : _d.businessName) !== null && _e !== void 0 ? _e : null,
-                dealerContactPhone: (_g = (_f = user.dealerProfile) === null || _f === void 0 ? void 0 : _f.contactPhone) !== null && _g !== void 0 ? _g : null,
+                dealerStatus: (_d = (_c = user.dealerProfile) === null || _c === void 0 ? void 0 : _c.status) !== null && _d !== void 0 ? _d : null,
+                dealerBusinessName: (_f = (_e = user.dealerProfile) === null || _e === void 0 ? void 0 : _e.businessName) !== null && _f !== void 0 ? _f : null,
+                dealerContactPhone: (_h = (_g = user.dealerProfile) === null || _g === void 0 ? void 0 : _g.contactPhone) !== null && _h !== void 0 ? _h : null,
             };
             const newAccessToken = authUtils_1.tokenUtils.generateAccessToken(user.id);
             const newRefreshToken = authUtils_1.tokenUtils.generateRefreshToken(user.id, absoluteExpiration);

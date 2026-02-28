@@ -14,17 +14,25 @@ const PORT = process.env.PORT || 5000;
 async function bootstrap() {
   const { httpServer } = await createApp();
 
-  httpServer.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  httpServer.on("error", (err) => {
+    const nodeError = err as NodeJS.ErrnoException;
+    if (nodeError.code === "EADDRINUSE") {
+      console.error(
+        `Server error: port ${PORT} is already in use. Update PORT in src/server/.env and keep client API URL aligned.`
+      );
+    } else {
+      console.error("Server error:", err);
+    }
+    process.exit(1);
   });
 
-  httpServer.on("error", (err) => {
-    console.error("Server error:", err);
-    process.exit(1);
+  httpServer.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
   });
 }
 
 bootstrap().catch((error) => {
-  console.error("Failed to bootstrap server:", error);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  console.error(`Failed to bootstrap server: ${errorMessage}`);
   process.exit(1);
 });

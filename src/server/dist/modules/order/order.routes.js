@@ -41,6 +41,8 @@ router.get("/", protect_1.default, (0, authorizeRole_1.default)("ADMIN", "SUPERA
  *         description: Unauthorized. Token is invalid or missing.
  */
 router.get("/user", protect_1.default, orderController.getUserOrders);
+router.post("/:orderId/quotation/accept", protect_1.default, orderController.acceptQuotation);
+router.post("/:orderId/quotation/reject", protect_1.default, orderController.rejectQuotation);
 /**
  * @swagger
  * /orders/{orderId}:

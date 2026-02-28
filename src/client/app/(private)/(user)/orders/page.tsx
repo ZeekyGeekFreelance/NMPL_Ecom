@@ -36,12 +36,21 @@ const StatusBadge = ({ status }: { status: string }) => {
   const getStatusConfig = (status: string) => {
     const normalizedStatus = normalizeOrderStatus(status);
     const configs = {
-      PLACED: { color: "bg-yellow-100 text-yellow-800", icon: Clock },
-      CONFIRMED: { color: "bg-blue-100 text-blue-800", icon: Truck },
-      REJECTED: { color: "bg-red-100 text-red-800", icon: XCircle },
-      DELIVERED: { color: "bg-green-100 text-green-800", icon: CheckCircle },
+      PENDING_VERIFICATION: {
+        color: "bg-amber-100 text-amber-800",
+        icon: Clock,
+      },
+      WAITLISTED: { color: "bg-orange-100 text-orange-800", icon: Clock },
+      AWAITING_PAYMENT: { color: "bg-blue-100 text-blue-800", icon: Truck },
+      QUOTATION_REJECTED: { color: "bg-red-100 text-red-800", icon: XCircle },
+      QUOTATION_EXPIRED: { color: "bg-red-100 text-red-800", icon: XCircle },
+      CONFIRMED: { color: "bg-green-100 text-green-800", icon: CheckCircle },
+      DELIVERED: { color: "bg-emerald-100 text-emerald-800", icon: CheckCircle },
     };
-    return configs[normalizedStatus as keyof typeof configs] || configs.PLACED;
+    return (
+      configs[normalizedStatus as keyof typeof configs] ||
+      configs.PENDING_VERIFICATION
+    );
   };
 
   const statusLabel = getCustomerOrderStatusLabel(status);
@@ -269,9 +278,9 @@ const UserOrders = () => {
   const handleDownloadInvoice = React.useCallback(
     async (orderId: string) => {
       const order = orders.find((item: any) => item.id === orderId);
-      if (!canDownloadInvoiceForStatus(order?.status || "PLACED")) {
+      if (!canDownloadInvoiceForStatus(order?.status || "PENDING_VERIFICATION")) {
         showToast(
-          "Invoice will be available after admin confirms your order.",
+          "Invoice is generated after payment confirmation.",
           "info"
         );
         return;

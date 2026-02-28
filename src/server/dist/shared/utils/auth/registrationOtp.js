@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyAndConsumeRegistrationOtp = exports.clearRegistrationOtp = exports.createRegistrationOtp = exports.RegistrationOtpRateLimitError = void 0;
+exports.isRegistrationPhoneOtpEnabled = exports.verifyAndConsumeRegistrationOtp = exports.clearRegistrationOtp = exports.createRegistrationOtp = exports.RegistrationOtpRateLimitError = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
 const OTP_KEY_PREFIX = "registration:otp:";
@@ -25,6 +25,9 @@ const toPositiveInteger = (value, fallbackValue) => {
 const OTP_EXPIRY_SECONDS = toPositiveInteger(process.env.REGISTRATION_OTP_EXPIRY_SECONDS, 10 * 60);
 const OTP_RESEND_COOLDOWN_SECONDS = toPositiveInteger(process.env.REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS, 60);
 const OTP_MAX_VERIFY_ATTEMPTS = toPositiveInteger(process.env.REGISTRATION_OTP_MAX_ATTEMPTS, 5);
+const REGISTRATION_PHONE_OTP_ENABLED = (process.env.REGISTRATION_PHONE_OTP_ENABLED || "false")
+    .trim()
+    .toLowerCase() === "true";
 class RegistrationOtpRateLimitError extends Error {
     constructor(retryAfterSeconds) {
         super(`OTP recently sent. Please wait ${retryAfterSeconds} seconds before requesting a new one.`);
@@ -34,12 +37,13 @@ class RegistrationOtpRateLimitError extends Error {
 }
 exports.RegistrationOtpRateLimitError = RegistrationOtpRateLimitError;
 const normalizeEmail = (email) => email.trim().toLowerCase();
+const normalizePhone = (phone) => phone.trim();
 const buildOtpKey = (email) => `${OTP_KEY_PREFIX}${normalizeEmail(email)}`;
 const buildAttemptKey = (email) => `${OTP_ATTEMPT_KEY_PREFIX}${normalizeEmail(email)}`;
 const buildCooldownKey = (email) => `${OTP_COOLDOWN_KEY_PREFIX}${normalizeEmail(email)}`;
-const hashOtp = (email, otpCode) => crypto_1.default
+const hashOtp = (identifier, otpCode, channel) => crypto_1.default
     .createHash("sha256")
-    .update(`${normalizeEmail(email)}:${otpCode.trim()}`)
+    .update(`${identifier}:${channel}:${otpCode.trim()}`)
     .digest("hex");
 const generateOtp = () => crypto_1.default.randomInt(0, 1000000).toString().padStart(6, "0");
 const safeHashEquals = (firstHash, secondHash) => {
@@ -68,26 +72,36 @@ const registerFailedAttempt = (email, otpKey) => __awaiter(void 0, void 0, void 
     }
     return Math.max(OTP_MAX_VERIFY_ATTEMPTS - attempts, 0);
 });
-const createRegistrationOtp = (_a) => __awaiter(void 0, [_a], void 0, function* ({ email, purpose = "USER_PORTAL", requestDealerAccess = false, }) {
+const createRegistrationOtp = (_a) => __awaiter(void 0, [_a], void 0, function* ({ email, phone, purpose = "USER_PORTAL", requestDealerAccess = false, }) {
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
     const cooldownKey = buildCooldownKey(email);
     const retryAfterSeconds = yield redis_1.default.ttl(cooldownKey);
     if (retryAfterSeconds > 0) {
         throw new RegistrationOtpRateLimitError(retryAfterSeconds);
     }
-    const otpCode = generateOtp();
+    const emailOtpCode = generateOtp();
+    const phoneOtpCode = REGISTRATION_PHONE_OTP_ENABLED
+        ? generateOtp()
+        : undefined;
     const payload = {
-        hashedOtp: hashOtp(email, otpCode),
+        hashedEmailOtp: hashOtp(normalizedEmail, emailOtpCode, "EMAIL"),
+        hashedPhoneOtp: phoneOtpCode !== undefined
+            ? hashOtp(normalizedPhone, phoneOtpCode, "PHONE")
+            : null,
+        normalizedPhone,
         purpose,
         requestDealerAccess,
     };
     yield redis_1.default
         .multi()
-        .set(buildOtpKey(email), JSON.stringify(payload), "EX", OTP_EXPIRY_SECONDS)
+        .set(buildOtpKey(normalizedEmail), JSON.stringify(payload), "EX", OTP_EXPIRY_SECONDS)
         .set(cooldownKey, "1", "EX", OTP_RESEND_COOLDOWN_SECONDS)
-        .del(buildAttemptKey(email))
+        .del(buildAttemptKey(normalizedEmail))
         .exec();
     return {
-        otpCode,
+        emailOtpCode,
+        phoneOtpCode,
         expiresInSeconds: OTP_EXPIRY_SECONDS,
         resendAvailableInSeconds: OTP_RESEND_COOLDOWN_SECONDS,
     };
@@ -97,8 +111,10 @@ const clearRegistrationOtp = (email) => __awaiter(void 0, void 0, void 0, functi
     yield redis_1.default.del(buildOtpKey(email), buildAttemptKey(email), buildCooldownKey(email));
 });
 exports.clearRegistrationOtp = clearRegistrationOtp;
-const verifyAndConsumeRegistrationOtp = (email, otpCode) => __awaiter(void 0, void 0, void 0, function* () {
-    const otpKey = buildOtpKey(email);
+const verifyAndConsumeRegistrationOtp = (email, phone, emailOtpCode, phoneOtpCode) => __awaiter(void 0, void 0, void 0, function* () {
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
+    const otpKey = buildOtpKey(normalizedEmail);
     const stored = yield redis_1.default.get(otpKey);
     if (!stored) {
         return { status: "EXPIRED" };
@@ -108,14 +124,19 @@ const verifyAndConsumeRegistrationOtp = (email, otpCode) => __awaiter(void 0, vo
         payload = JSON.parse(stored);
     }
     catch (_a) {
-        yield (0, exports.clearRegistrationOtp)(email);
+        yield (0, exports.clearRegistrationOtp)(normalizedEmail);
         return { status: "EXPIRED" };
     }
-    const inputHash = hashOtp(email, otpCode);
-    if (!safeHashEquals(payload.hashedOtp, inputHash)) {
-        const attemptsRemaining = yield registerFailedAttempt(email, otpKey);
+    const emailOtpMatches = safeHashEquals(payload.hashedEmailOtp, hashOtp(normalizedEmail, emailOtpCode, "EMAIL"));
+    const phoneOtpMatches = !REGISTRATION_PHONE_OTP_ENABLED ||
+        (!!payload.hashedPhoneOtp &&
+            !!phoneOtpCode &&
+            safeHashEquals(payload.hashedPhoneOtp, hashOtp(normalizedPhone, phoneOtpCode, "PHONE")));
+    const phoneMatchesRequest = payload.normalizedPhone === normalizedPhone;
+    if (!phoneMatchesRequest || !emailOtpMatches || !phoneOtpMatches) {
+        const attemptsRemaining = yield registerFailedAttempt(normalizedEmail, otpKey);
         if (attemptsRemaining <= 0) {
-            yield (0, exports.clearRegistrationOtp)(email);
+            yield (0, exports.clearRegistrationOtp)(normalizedEmail);
             return { status: "LOCKED", attemptsRemaining: 0 };
         }
         return {
@@ -123,10 +144,16 @@ const verifyAndConsumeRegistrationOtp = (email, otpCode) => __awaiter(void 0, vo
             attemptsRemaining,
         };
     }
-    yield redis_1.default.multi().del(otpKey).del(buildAttemptKey(email)).exec();
+    yield redis_1.default.multi().del(otpKey).del(buildAttemptKey(normalizedEmail)).exec();
     return {
         status: "VERIFIED",
-        context: payload,
+        context: {
+            purpose: payload.purpose,
+            requestDealerAccess: payload.requestDealerAccess,
+            normalizedPhone: payload.normalizedPhone,
+        },
     };
 });
 exports.verifyAndConsumeRegistrationOtp = verifyAndConsumeRegistrationOtp;
+const isRegistrationPhoneOtpEnabled = () => REGISTRATION_PHONE_OTP_ENABLED;
+exports.isRegistrationPhoneOtpEnabled = isRegistrationPhoneOtpEnabled;

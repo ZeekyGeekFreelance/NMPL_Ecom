@@ -42,11 +42,19 @@ export class UserIdDto {
 }
 
 export class UpdateOwnProfileDto {
-  @IsNotEmpty({ message: "Name is required" })
+  @IsOptional()
   @IsString({ message: "Name must be a string" })
   @MinLength(2, { message: "Name must be at least 2 characters long" })
   @MaxLength(80, { message: "Name must be at most 80 characters long" })
-  name!: string;
+  name?: string;
+
+  @IsOptional()
+  @IsString({ message: "Phone number must be a string" })
+  @Matches(/^[0-9()+\-\s]{7,20}$/, {
+    message:
+      "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  })
+  phone?: string;
 }
 
 export class UserEmailDto {

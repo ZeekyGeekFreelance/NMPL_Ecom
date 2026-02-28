@@ -20,10 +20,13 @@ import {
 } from "@/app/lib/orderLifecycle";
 
 const stepIndexByStatus: Record<OrderLifecycleStatus, number> = {
-  PLACED: 1,
-  CONFIRMED: 2,
-  REJECTED: 2,
-  DELIVERED: 3,
+  PENDING_VERIFICATION: 1,
+  WAITLISTED: 2,
+  AWAITING_PAYMENT: 2,
+  QUOTATION_REJECTED: 3,
+  QUOTATION_EXPIRED: 3,
+  CONFIRMED: 3,
+  DELIVERED: 4,
 };
 
 const OrderStatus = ({ order }) => {
@@ -33,13 +36,18 @@ const OrderStatus = ({ order }) => {
 
   const getStatusIcon = (status: OrderLifecycleStatus) => {
     switch (status) {
-      case "PLACED":
+      case "PENDING_VERIFICATION":
         return <Clock size={24} />;
-      case "CONFIRMED":
+      case "WAITLISTED":
         return <Package size={24} />;
-      case "DELIVERED":
+      case "AWAITING_PAYMENT":
+        return <Package size={24} />;
+      case "CONFIRMED":
         return <Truck size={24} />;
-      case "REJECTED":
+      case "DELIVERED":
+        return <CheckCircle size={24} />;
+      case "QUOTATION_REJECTED":
+      case "QUOTATION_EXPIRED":
         return <XCircle size={24} />;
       default:
         return <ShoppingBag size={24} />;
@@ -47,8 +55,22 @@ const OrderStatus = ({ order }) => {
   };
 
   const getStatusDate = (status: OrderLifecycleStatus) => {
-    if (status === "PLACED") {
+    if (status === "PENDING_VERIFICATION") {
       return formatDate(order.createdAt || order.orderDate);
+    }
+
+    if (status === "WAITLISTED") {
+      if (currentStatus === "WAITLISTED") {
+        return formatDate(order.transaction?.updatedAt || order.updatedAt);
+      }
+      return "Pending";
+    }
+
+    if (status === "AWAITING_PAYMENT") {
+      if (currentStatus !== "PENDING_VERIFICATION" && currentStatus !== "WAITLISTED") {
+        return formatDate(order.transaction?.updatedAt || order.updatedAt);
+      }
+      return "Pending";
     }
 
     if (status === "CONFIRMED") {
@@ -59,17 +81,14 @@ const OrderStatus = ({ order }) => {
     }
 
     if (status === "DELIVERED") {
-      if (order.shipment?.deliveryDate) {
-        return formatDate(order.shipment.deliveryDate);
-      }
       if (currentStatus === "DELIVERED") {
         return formatDate(order.transaction?.updatedAt || order.updatedAt);
       }
       return "Pending";
     }
 
-    if (status === "REJECTED") {
-      if (currentStatus === "REJECTED") {
+    if (status === "QUOTATION_REJECTED" || status === "QUOTATION_EXPIRED") {
+      if (currentStatus === status) {
         return formatDate(order.transaction?.updatedAt || order.updatedAt);
       }
       return "Pending";
@@ -78,10 +97,22 @@ const OrderStatus = ({ order }) => {
     return "N/A";
   };
 
-  const timelineStatuses: OrderLifecycleStatus[] =
-    currentStatus === "REJECTED"
-      ? ["PLACED", "REJECTED"]
-      : ["PLACED", "CONFIRMED", "DELIVERED"];
+  const timelineStatuses: OrderLifecycleStatus[] = (() => {
+    if (currentStatus === "WAITLISTED") {
+      return ["PENDING_VERIFICATION", "WAITLISTED"];
+    }
+
+    if (
+      currentStatus === "QUOTATION_REJECTED" ||
+      currentStatus === "QUOTATION_EXPIRED"
+    ) {
+      return ["PENDING_VERIFICATION", "AWAITING_PAYMENT", currentStatus];
+    }
+
+    return currentStatus === "DELIVERED"
+      ? ["PENDING_VERIFICATION", "AWAITING_PAYMENT", "CONFIRMED", "DELIVERED"]
+      : ["PENDING_VERIFICATION", "AWAITING_PAYMENT", "CONFIRMED"];
+  })();
 
   const currentStep = getStatusStep(currentStatus);
 
@@ -107,10 +138,10 @@ const OrderStatus = ({ order }) => {
         </div>
       </div>
 
-      {currentStatus === "REJECTED" && (
+      {(currentStatus === "QUOTATION_REJECTED" ||
+        currentStatus === "QUOTATION_EXPIRED") && (
         <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          This order has been cancelled after manual review. If you need help,
-          contact support.
+          This quotation is no longer active. If you need help, contact support.
         </div>
       )}
 
@@ -149,7 +180,7 @@ const OrderStatus = ({ order }) => {
                       : "bg-gray-100 text-gray-400"
                   }`}
                 >
-                  {status === "DELIVERED" ? (
+                  {status === "CONFIRMED" || status === "DELIVERED" ? (
                     <CheckCircle size={24} />
                   ) : (
                     getStatusIcon(status)

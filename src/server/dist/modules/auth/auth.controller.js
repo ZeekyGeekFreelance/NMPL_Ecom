@@ -38,9 +38,10 @@ class AuthController {
         this.cartService = cartService;
         this.logsService = (0, logs_factory_1.makeLogsService)();
         this.requestRegistrationOtp = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            const { email, purpose, requestDealerAccess } = req.body;
+            const { email, phone, purpose, requestDealerAccess } = req.body;
             const response = yield this.authService.requestRegistrationOtp({
                 email,
+                phone,
                 purpose,
                 requestDealerAccess,
             });
@@ -54,13 +55,14 @@ class AuthController {
         this.signup = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const start = Date.now();
-            const { name, email, phone, password, otpCode, requestDealerAccess, businessName, contactPhone, } = req.body;
+            const { name, email, phone, password, emailOtpCode, phoneOtpCode, requestDealerAccess, businessName, contactPhone, } = req.body;
             const { user, accessToken, refreshToken, requiresApproval } = yield this.authService.registerUser({
                 name,
                 email,
                 phone,
                 password,
-                otpCode,
+                emailOtpCode,
+                phoneOtpCode,
                 requestDealerAccess,
                 businessName,
                 contactPhone,
@@ -84,6 +86,7 @@ class AuthController {
                         email: user.email,
                         phone: user.phone || null,
                         role: user.role,
+                        effectiveRole: user.effectiveRole || user.role,
                         avatar: user.avatar || null,
                         isDealer: user.isDealer || false,
                         dealerStatus: user.dealerStatus || null,
@@ -124,6 +127,7 @@ class AuthController {
                         email: user.email,
                         phone: user.phone || null,
                         role: user.role,
+                        effectiveRole: user.effectiveRole || user.role,
                         avatar: user.avatar,
                         isDealer: user.isDealer || false,
                         dealerStatus: user.dealerStatus || null,

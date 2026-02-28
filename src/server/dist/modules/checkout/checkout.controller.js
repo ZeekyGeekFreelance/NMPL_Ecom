@@ -45,8 +45,9 @@ class CheckoutController {
                     orderId: order.id,
                     orderReference: (0, accountReference_1.toOrderReference)(order.id),
                     status: order.status,
+                    nextStep: "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
                 },
-                message: "Order has been placed successfully",
+                message: "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
             });
             this.logsService.info("Order placed from checkout", {
                 userId,

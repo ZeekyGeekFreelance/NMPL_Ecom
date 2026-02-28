@@ -18,7 +18,7 @@ const checkoutController = (0, checkout_factory_1.makeCheckoutController)();
  *       - bearerAuth: []
  *     responses:
  *       201:
- *         description: Order placed successfully.
+ *         description: Order submitted for verification successfully.
  *       400:
  *         description: Invalid cart state (empty/stock/cart ownership issue).
  *       401:

@@ -10,9 +10,12 @@ const mapTransactionStatus = (searchQuery: string): string[] => {
 
   // These are all the possible enum values for the `status` field
   const validStatuses = [
-    "PLACED",
+    "PENDING_VERIFICATION",
+    "WAITLISTED",
+    "AWAITING_PAYMENT",
+    "QUOTATION_REJECTED",
+    "QUOTATION_EXPIRED",
     "CONFIRMED",
-    "REJECTED",
     "DELIVERED",
   ];
 

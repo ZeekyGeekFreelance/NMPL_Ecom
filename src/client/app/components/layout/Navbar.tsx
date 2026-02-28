@@ -20,7 +20,6 @@ import { useGetCartCountQuery } from "@/app/store/apis/CartApi";
 import useClickOutside from "@/app/hooks/dom/useClickOutside";
 import useEventListener from "@/app/hooks/dom/useEventListener";
 import { useAuth } from "@/app/hooks/useAuth";
-import { useAppSelector } from "@/app/store/hooks";
 import { useSignOutMutation } from "@/app/store/apis/AuthApi";
 import { generateUserAvatar } from "@/app/utils/placeholderImage";
 import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
@@ -47,7 +46,7 @@ const STORE_LINKS: NavLink[] = [
   { href: "/products", label: "Products", hideForAdmin: true },
   { href: "/brands", label: "Brands", hideForAdmin: true },
   { href: "/about-us", label: "About Us", hideForAdmin: true },
-  { href: "/cart", label: "Cart", hideForAdmin: true },
+  { href: "/cart", label: "Cart", authOnly: true, hideForAdmin: true },
   { href: "/orders", label: "Orders", authOnly: true, hideForAdmin: true },
   { href: "/profile", label: "Profile", authOnly: true },
   { href: "/support", label: "Support", authOnly: true, hideForAdmin: true },
@@ -73,13 +72,13 @@ const Navbar = () => {
   const [signOut] = useSignOutMutation();
   const router = useRouter();
   const { user, isLoading, isAuthenticated } = useAuth();
-  const guestCartItems = useAppSelector((state) => state.guestCart.items);
   const displayRole = resolveDisplayRole(user);
   const isAdmin = isAuthenticated && isAdminDisplayRole(displayRole);
   const isCustomerUser = isAuthenticated && isCustomerDisplayRole(displayRole);
-  const shouldShowCart = !isAuthenticated || isCustomerUser;
+  const shouldShowCart = isAuthenticated && isCustomerUser;
   const { data: cartData } = useGetCartCountQuery(undefined, {
-    skip: !isCustomerUser,
+    skip: !shouldShowCart,
+    refetchOnMountOrArgChange: true,
   });
   const { data: categoriesData } = useGetAllCategoriesQuery({});
 
@@ -98,11 +97,7 @@ const Navbar = () => {
     () => (categoriesData?.categories || []).slice(0, 8),
     [categoriesData?.categories]
   );
-  const guestCartCount = useMemo(
-    () => guestCartItems.reduce((sum, item) => sum + item.quantity, 0),
-    [guestCartItems]
-  );
-  const cartCount = isCustomerUser ? cartData?.cartCount || 0 : guestCartCount;
+  const cartCount = cartData?.cartCount || 0;
   const brandHref = isAdmin ? "/dashboard" : "/";
 
   useEventListener("scroll", () => {
@@ -224,7 +219,9 @@ const Navbar = () => {
               </Link>
             )}
 
-            {!isLoading && isAuthenticated ? (
+            {isLoading ? (
+              <div className="w-8 h-8 rounded-full border border-gray-300 bg-gray-100 animate-pulse" />
+            ) : isAuthenticated ? (
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setMenuOpen((prev) => !prev)}

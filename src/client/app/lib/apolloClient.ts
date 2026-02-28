@@ -9,10 +9,74 @@ if (process.env.NODE_ENV !== "production") {
   loadErrorMessages();
 }
 
+const NETWORK_FAILURE_PATTERNS = [
+  /failed to fetch/i,
+  /fetch failed/i,
+  /network request failed/i,
+  /econnrefused/i,
+  /enotfound/i,
+  /ecanceled/i,
+  /aborted/i,
+];
+
+const getErrorMessage = (error: unknown) => {
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+
+  const typedError = error as { message?: unknown };
+  return typeof typedError.message === "string" ? typedError.message : "";
+};
+
+const getErrorStatusCode = (error: unknown): number | undefined => {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const typedError = error as {
+    statusCode?: unknown;
+    status?: unknown;
+    response?: { status?: unknown };
+  };
+
+  const directStatus =
+    typeof typedError.statusCode === "number"
+      ? typedError.statusCode
+      : typeof typedError.status === "number"
+      ? typedError.status
+      : undefined;
+
+  if (typeof directStatus === "number") {
+    return directStatus;
+  }
+
+  return typeof typedError.response?.status === "number"
+    ? typedError.response.status
+    : undefined;
+};
+
+const isEndpointUnreachableError = (error: unknown) => {
+  const message = getErrorMessage(error);
+  if (!message) {
+    return false;
+  }
+
+  return NETWORK_FAILURE_PATTERNS.some((pattern) => pattern.test(message));
+};
+
 const errorLink = onError(({ graphQLErrors, networkError }) => {
   if (process.env.NODE_ENV !== "production") {
     if (graphQLErrors) console.error("GraphQL Error", graphQLErrors);
-    if (networkError) console.error("Network Error", networkError);
+    if (networkError) {
+      if (isEndpointUnreachableError(networkError)) {
+        console.error(
+          `[Apollo] Unable to reach GraphQL endpoint: ${GRAPHQL_URL}`,
+          networkError
+        );
+      } else {
+        console.error("Network Error", networkError);
+      }
+    }
   }
 });
 export const initializeApollo = (initialState = null) => {
@@ -23,7 +87,22 @@ export const initializeApollo = (initialState = null) => {
   const retryLink = new RetryLink({
     attempts: {
       max: 3,
-      retryIf: (error) => Boolean(error),
+      retryIf: (error) => {
+        if (!error) {
+          return false;
+        }
+
+        if (isEndpointUnreachableError(error)) {
+          return false;
+        }
+
+        const statusCode = getErrorStatusCode(error);
+        if (typeof statusCode !== "number") {
+          return false;
+        }
+
+        return statusCode === 429 || statusCode >= 500;
+      },
     },
     delay: {
       initial: 300,

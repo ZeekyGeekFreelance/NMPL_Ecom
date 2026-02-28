@@ -1,6 +1,6 @@
 import { buildDateFilter, getDateRange } from "@/shared/utils/analytics";
 import { Context } from "../resolver";
-import { REJECTED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const productPerformance = {
   Query: {
@@ -28,7 +28,7 @@ const productPerformance = {
           order: {
             orderDate: currentOrderDateFilter,
             status: {
-              notIn: [...REJECTED_ORDER_STATUS_VALUES],
+              in: [...CONFIRMED_ORDER_STATUS_VALUES],
             },
           },
           ...(category && {

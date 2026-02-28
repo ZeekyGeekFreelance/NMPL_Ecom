@@ -63,53 +63,12 @@ const slugify_1 = __importDefault(require("@/shared/utils/slugify"));
 const sync_1 = require("csv-parse/sync");
 const XLSX = __importStar(require("xlsx"));
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
-const client_1 = require("@prisma/client");
+const dealerAccess_1 = require("@/shared/utils/dealerAccess");
 class ProductService {
     constructor(productRepository, attributeRepository, variantRepository) {
         this.productRepository = productRepository;
         this.attributeRepository = attributeRepository;
         this.variantRepository = variantRepository;
-    }
-    isDealerTableMissing(error) {
-        if (!(error instanceof Error)) {
-            return false;
-        }
-        return (error.message.includes('relation "DealerProfile" does not exist') ||
-            error.message.includes('relation "DealerPriceMapping" does not exist'));
-    }
-    getDealerPriceMap(userId, variantIds) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!userId || !variantIds.length) {
-                return new Map();
-            }
-            try {
-                const dealerProfile = yield database_config_1.default.$queryRaw(client_1.Prisma.sql `
-          SELECT "status"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `);
-                if (!dealerProfile.length || dealerProfile[0].status !== "APPROVED") {
-                    return new Map();
-                }
-                const dealerPrices = yield database_config_1.default.$queryRaw(client_1.Prisma.sql `
-          SELECT "variantId", "customPrice"
-          FROM "DealerPriceMapping"
-          WHERE "dealerId" = ${userId}
-            AND "variantId" IN (${client_1.Prisma.join(variantIds)})
-        `);
-                return new Map(dealerPrices.map((dealerPrice) => [
-                    dealerPrice.variantId,
-                    dealerPrice.customPrice,
-                ]));
-            }
-            catch (error) {
-                if (this.isDealerTableMissing(error)) {
-                    return new Map();
-                }
-                throw error;
-            }
-        });
     }
     applyDealerPricingToProduct(product, userId) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -118,7 +77,7 @@ class ProductService {
                 return product;
             }
             const variantIds = product.variants.map((variant) => variant.id);
-            const dealerPriceMap = yield this.getDealerPriceMap(userId, variantIds);
+            const dealerPriceMap = yield (0, dealerAccess_1.getDealerPriceMap)(database_config_1.default, userId, variantIds);
             if (!dealerPriceMap.size) {
                 return product;
             }
@@ -140,7 +99,7 @@ class ProductService {
             if (!variantIds.length) {
                 return products;
             }
-            const dealerPriceMap = yield this.getDealerPriceMap(userId, variantIds);
+            const dealerPriceMap = yield (0, dealerAccess_1.getDealerPriceMap)(database_config_1.default, userId, variantIds);
             if (!dealerPriceMap.size) {
                 return products;
             }

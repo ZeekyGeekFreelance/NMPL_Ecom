@@ -23,7 +23,6 @@ import {
   getOrderStatusColor,
   getOrderStatusLabel,
   normalizeOrderStatus,
-  requiresConfirmedRejectionSafetyCheck,
   type OrderLifecycleStatus,
 } from "@/app/lib/orderLifecycle";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
@@ -45,8 +44,6 @@ const TransactionsDashboard = () => {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isStatusConfirmModalOpen, setIsStatusConfirmModalOpen] =
     useState(false);
-  const [isConfirmedRejectionModalOpen, setIsConfirmedRejectionModalOpen] =
-    useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<{
     id: string;
     status: OrderLifecycleStatus | "";
@@ -55,10 +52,6 @@ const TransactionsDashboard = () => {
     status: "",
   });
   const [newStatus, setNewStatus] = useState<OrderLifecycleStatus | "">("");
-  const [pendingForcedStatusUpdate, setPendingForcedStatusUpdate] = useState<{
-    id: string;
-    status: OrderLifecycleStatus;
-  } | null>(null);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{
     id: string;
     currentStatus: OrderLifecycleStatus;
@@ -105,21 +98,22 @@ const TransactionsDashboard = () => {
     router.push(`/dashboard/transactions/${toTransactionReference(id)}`);
   };
 
+  const canEditQuotation = (status: string) => {
+    const normalizedStatus = normalizeOrderStatus(status);
+    return (
+      normalizedStatus === "PENDING_VERIFICATION" ||
+      normalizedStatus === "WAITLISTED"
+    );
+  };
+
   const executeStatusUpdate = async (params: {
     id: string;
     status: OrderLifecycleStatus;
-    forceConfirmedRejection?: boolean;
   }) => {
     try {
       await updateTransactionStatus({
         id: params.id,
         status: params.status,
-        ...(params.forceConfirmedRejection
-          ? {
-              forceConfirmedRejection: true,
-              confirmationToken: "CONFIRMED_ORDER_REJECTION",
-            }
-          : {}),
       }).unwrap();
       showToast("Status updated successfully", "success");
       refetch();
@@ -161,46 +155,11 @@ const TransactionsDashboard = () => {
     }
 
     setIsStatusConfirmModalOpen(false);
-    if (
-      requiresConfirmedRejectionSafetyCheck({
-        currentStatus: pendingStatusUpdate.currentStatus,
-        nextStatus: pendingStatusUpdate.nextStatus,
-      })
-    ) {
-      setPendingForcedStatusUpdate({
-        id: pendingStatusUpdate.id,
-        status: pendingStatusUpdate.nextStatus,
-      });
-      setIsConfirmedRejectionModalOpen(true);
-      setPendingStatusUpdate(null);
-      return;
-    }
-
     await executeStatusUpdate({
       id: pendingStatusUpdate.id,
       status: pendingStatusUpdate.nextStatus,
     });
     setPendingStatusUpdate(null);
-  };
-
-  const confirmForcedRejection = async () => {
-    if (!pendingForcedStatusUpdate) {
-      setIsConfirmedRejectionModalOpen(false);
-      return;
-    }
-
-    setIsConfirmedRejectionModalOpen(false);
-    await executeStatusUpdate({
-      id: pendingForcedStatusUpdate.id,
-      status: pendingForcedStatusUpdate.status,
-      forceConfirmedRejection: true,
-    });
-    setPendingForcedStatusUpdate(null);
-  };
-
-  const cancelForcedRejection = () => {
-    setIsConfirmedRejectionModalOpen(false);
-    setPendingForcedStatusUpdate(null);
   };
 
   const cancelStatusUpdateConfirmation = () => {
@@ -301,6 +260,16 @@ const TransactionsDashboard = () => {
             <PenLine size={16} />
             Update
           </button>
+          {canEditQuotation(row.status) ? (
+            <button
+              type="button"
+              onClick={() => handleViewDetails(row.id)}
+              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-indigo-50"
+            >
+              <PenLine size={16} />
+              Quote
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => handleDeleteTransaction(row.id)}
@@ -378,15 +347,6 @@ const TransactionsDashboard = () => {
       />
 
       <ConfirmModal
-        isOpen={isConfirmedRejectionModalOpen}
-        title="Reject Confirmed Order?"
-        type="danger"
-        message="This order has already been confirmed. Rejecting now will restore stock and override the prior confirmation. Continue only if this is intentional."
-        onConfirm={confirmForcedRejection}
-        onCancel={cancelForcedRejection}
-      />
-
-      <ConfirmModal
         isOpen={isStatusConfirmModalOpen}
         title="Confirm Status Update"
         type="warning"
@@ -457,6 +417,7 @@ const TransactionsDashboard = () => {
 };
 
 export default withAuth(TransactionsDashboard);
+
 
 
 

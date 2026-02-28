@@ -16,10 +16,9 @@ exports.configureGraphQL = configureGraphQL;
 const body_parser_1 = __importDefault(require("body-parser"));
 const server_1 = require("@apollo/server");
 const express4_1 = require("@apollo/server/express4");
-const client_1 = require("@prisma/client");
 const schema_1 = require("./v1/schema");
 const optionalAuth_1 = __importDefault(require("@/shared/middlewares/optionalAuth"));
-const prisma = new client_1.PrismaClient();
+const database_config_1 = __importDefault(require("@/infra/database/database.config"));
 function configureGraphQL(app) {
     return __awaiter(this, void 0, void 0, function* () {
         const apolloServer = new server_1.ApolloServer({
@@ -31,7 +30,7 @@ function configureGraphQL(app) {
                 return ({
                     req,
                     res,
-                    prisma,
+                    prisma: database_config_1.default,
                     user: req.user,
                 });
             }),

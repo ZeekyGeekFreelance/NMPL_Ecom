@@ -63,26 +63,30 @@ export default function DashboardLayout({
   const transactionStatuses = useMemo(
     () =>
       ((transactionsData?.transactions || []) as Array<{ status?: string }>).map(
-        (transaction) => normalizeOrderStatus(transaction.status || "PLACED")
+        (transaction) =>
+          normalizeOrderStatus(transaction.status || "PENDING_VERIFICATION")
       ),
     [transactionsData?.transactions]
   );
 
-  const pendingConfirmationCount = useMemo(
-    () => transactionStatuses.filter((status) => status === "PLACED").length,
+  const pendingVerificationCount = useMemo(
+    () =>
+      transactionStatuses.filter((status) => status === "PENDING_VERIFICATION")
+        .length,
     [transactionStatuses]
   );
 
-  const deliveryActionCount = useMemo(
+  const paymentFollowupCount = useMemo(
     () =>
       transactionStatuses.filter(
-        (status) => status === "CONFIRMED"
+        (status) =>
+          status === "AWAITING_PAYMENT" || status === "WAITLISTED"
       ).length,
     [transactionStatuses]
   );
 
   const actionableTransactionCount =
-    pendingConfirmationCount + deliveryActionCount;
+    pendingVerificationCount + paymentFollowupCount;
 
   const actionMessages: ActionMessage[] = useMemo(() => {
     const messages: ActionMessage[] = [];
@@ -99,32 +103,32 @@ export default function DashboardLayout({
       });
     }
 
-    if (pendingConfirmationCount > 0) {
+    if (pendingVerificationCount > 0) {
       messages.push({
-        id: "order-confirmations",
-        title: "Orders need confirmation",
-        description: `${pendingConfirmationCount} order${
-          pendingConfirmationCount > 1 ? "s are" : " is"
-        } waiting for admin confirmation.`,
+        id: "order-verifications",
+        title: "Orders need verification",
+        description: `${pendingVerificationCount} order${
+          pendingVerificationCount > 1 ? "s are" : " is"
+        } waiting for stock verification.`,
         href: "/dashboard/transactions",
-        count: pendingConfirmationCount,
+        count: pendingVerificationCount,
       });
     }
 
-    if (deliveryActionCount > 0) {
+    if (paymentFollowupCount > 0) {
       messages.push({
-        id: "delivery-updates",
-        title: "Delivery updates pending",
-        description: `${deliveryActionCount} confirmed order${
-          deliveryActionCount > 1 ? "s need" : " needs"
-        } delivery status update.`,
+        id: "payment-followup",
+        title: "Quotation follow-up pending",
+        description: `${paymentFollowupCount} order${
+          paymentFollowupCount > 1 ? "s require" : " requires"
+        } payment/waitlist follow-up.`,
         href: "/dashboard/transactions",
-        count: deliveryActionCount,
+        count: paymentFollowupCount,
       });
     }
 
     return messages;
-  }, [pendingDealerCount, pendingConfirmationCount, deliveryActionCount]);
+  }, [pendingDealerCount, pendingVerificationCount, paymentFollowupCount]);
 
   const totalActionableMessages = actionMessages.reduce(
     (sum, message) => sum + message.count,

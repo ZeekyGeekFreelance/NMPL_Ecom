@@ -68,6 +68,7 @@ const typeDefs = (0, graphql_tag_1.default) `
     id: ID!
     name: String!
     email: String!
+    customerType: String!
     orderCount: Int!
     totalSpent: Float!
     engagementScore: Float!

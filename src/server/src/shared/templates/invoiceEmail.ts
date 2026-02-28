@@ -10,6 +10,9 @@ interface InvoiceEmailTemplateInput {
   orderId: string;
   customerType?: "USER" | "DEALER";
   orderDate: Date;
+  subtotalAmount?: number;
+  deliveryCharge?: number;
+  deliveryMode?: string;
   totalAmount: number;
 }
 
@@ -21,10 +24,17 @@ export const buildInvoiceEmailTemplate = ({
   orderId,
   customerType,
   orderDate,
+  subtotalAmount,
+  deliveryCharge,
+  deliveryMode,
   totalAmount,
 }: InvoiceEmailTemplateInput): { html: string; text: string } => {
   const normalizedName = recipientName?.trim() || "Customer";
   const amount = formatINRCurrency(totalAmount);
+  const subtotal =
+    typeof subtotalAmount === "number" ? formatINRCurrency(subtotalAmount) : null;
+  const delivery =
+    typeof deliveryCharge === "number" ? formatINRCurrency(deliveryCharge) : null;
   const placedOn = formatDateTimeInIST(orderDate);
   const generatedAt = formatDateTimeInIST(new Date());
   const platformName = getPlatformName();
@@ -42,6 +52,8 @@ export const buildInvoiceEmailTemplate = ({
       customerType ? `Customer Type: ${customerType}` : null,
       `Order Date: ${placedOn}`,
       `Generated At: ${generatedAt}`,
+      subtotal ? `Subtotal: ${subtotal}` : null,
+      delivery ? `Delivery (${deliveryMode || "DELIVERY"}): ${delivery}` : null,
       `Total Amount: ${amount}`,
       `Support: ${supportEmail}`,
       "",
@@ -63,6 +75,16 @@ export const buildInvoiceEmailTemplate = ({
           ${customerType ? `<strong>Customer Type:</strong> ${customerType}<br />` : ""}
           <strong>Order Date:</strong> ${placedOn}<br />
           <strong>Generated At:</strong> ${generatedAt}<br />
+          ${
+            subtotal
+              ? `<strong>Subtotal:</strong> ${subtotal}<br />`
+              : ""
+          }
+          ${
+            delivery
+              ? `<strong>Delivery (${deliveryMode || "DELIVERY"}):</strong> ${delivery}<br />`
+              : ""
+          }
           <strong>Total Amount:</strong> ${amount}
         </p>
         <p>

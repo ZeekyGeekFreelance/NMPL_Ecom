@@ -1,6 +1,7 @@
 import { apiSlice } from "../slices/ApiSlice";
 import { setUser, logout } from "../slices/AuthSlice";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
+import { clearPendingAuthIntent } from "@/app/lib/authIntent";
 
 interface User {
   id: string;
@@ -88,8 +89,14 @@ export const authApi = apiSlice.injectEndpoints({
         method: "GET",
       }),
       onQueryStarted: async (_, { dispatch, queryFulfilled }) => {
-        await queryFulfilled;
-        dispatch(logout());
+        try {
+          await queryFulfilled;
+        } finally {
+          dispatch(apiSlice.util.resetApiState());
+          dispatch(logout());
+          clearPendingAuthIntent();
+          emitAuthSyncEvent("SIGNED_OUT");
+        }
       },
     }),
     forgotPassword: builder.mutation<{ message?: string }, { email: string }>({

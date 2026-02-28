@@ -15,6 +15,29 @@ export class CheckoutController {
     private cartService: CartService
   ) {}
 
+  getCheckoutSummary = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+
+    if (!userId) {
+      throw new AppError(400, "User not found");
+    }
+
+    if (userRole !== "USER") {
+      throw new AppError(403, "Only customer accounts can checkout");
+    }
+
+    const summary = await this.checkoutService.getCheckoutSummary(userId, {
+      addressId: req.body?.addressId,
+      deliveryMode: req.body?.deliveryMode,
+    });
+
+    sendResponse(res, 200, {
+      data: summary,
+      message: "Checkout summary calculated successfully",
+    });
+  });
+
   initiateCheckout = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const userRole = req.user?.role;
@@ -33,7 +56,10 @@ export class CheckoutController {
     }
 
     await this.cartService.logCartEvent(cart.id, "CHECKOUT_STARTED", userId);
-    const order = await this.checkoutService.placeOrder(userId, cart.id);
+    const order = await this.checkoutService.placeOrder(userId, cart.id, {
+      addressId: req.body?.addressId,
+      deliveryMode: req.body?.deliveryMode,
+    });
     await this.cartService.logCartEvent(cart.id, "CHECKOUT_COMPLETED", userId);
 
     sendResponse(res, 201, {
@@ -41,8 +67,15 @@ export class CheckoutController {
         orderId: order.id,
         orderReference: toOrderReference(order.id),
         status: order.status,
+        subtotalAmount: order.subtotalAmount,
+        deliveryCharge: order.deliveryCharge,
+        deliveryMode: order.deliveryMode,
+        finalTotal: order.amount,
+        nextStep:
+          "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
       },
-      message: "Order has been placed successfully",
+      message:
+        "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
     });
 
     this.logsService.info("Order placed from checkout", {

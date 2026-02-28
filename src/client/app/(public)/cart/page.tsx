@@ -4,6 +4,7 @@ import MainLayout from "@/app/components/templates/MainLayout";
 import { Trash2, ShoppingCart, Minus, Plus, ShieldAlert } from "lucide-react";
 import React, { useMemo } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import CartSummary from "@/app/(public)/cart/CartSummary";
 import {
   useGetCartQuery,
@@ -14,12 +15,9 @@ import { motion } from "framer-motion";
 import CartSkeletonLoader from "@/app/components/feedback/CartSkeletonLoader";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 import { useAuth } from "@/app/hooks/useAuth";
-import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
-import {
-  removeGuestCartItem,
-  updateGuestCartQuantity,
-} from "@/app/store/slices/GuestCartSlice";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import useToast from "@/app/hooks/ui/useToast";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import {
   isAdminDisplayRole,
   isCustomerDisplayRole,
@@ -46,43 +44,26 @@ const formatVariantName = (item: any) => {
 const Cart = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const formatPrice = useFormatPrice();
+  const { showToast } = useToast();
   const displayRole = resolveDisplayRole(user);
-  const isCustomerUser = isAuthenticated && isCustomerDisplayRole(displayRole);
+  const isCustomerUser =
+    isAuthenticated && isCustomerDisplayRole(displayRole);
   const isAdminOrSuperAdmin =
     isAuthenticated && isAdminDisplayRole(displayRole);
-
-  const dispatch = useAppDispatch();
-  const guestItems = useAppSelector((state) => state.guestCart.items);
+  const shouldLoadCart = isCustomerUser;
 
   const { data, isLoading: userCartLoading } = useGetCartQuery(undefined, {
-    skip: !isCustomerUser,
+    skip: !shouldLoadCart,
   });
   const [removeFromCart] = useRemoveFromCartMutation();
   const [updateCartItem] = useUpdateCartItemMutation();
 
-  const cartItems = useMemo(() => {
-    if (isCustomerUser) {
-      return data?.cart?.cartItems || [];
-    }
+  const cartItems = useMemo(
+    () => (shouldLoadCart ? data?.cart?.cartItems || [] : []),
+    [data?.cart?.cartItems, shouldLoadCart]
+  );
 
-    return guestItems.map((item) => ({
-      id: item.variantId,
-      quantity: item.quantity,
-      variantId: item.variantId,
-      variant: {
-        id: item.variantId,
-        sku: item.sku,
-        price: item.price,
-        images: [item.image],
-        stock: item.stock,
-        product: {
-          name: item.name,
-        },
-      },
-    }));
-  }, [data?.cart?.cartItems, guestItems, isCustomerUser]);
-
-  const isLoading = authLoading || (isCustomerUser && userCartLoading);
+  const isLoading = authLoading || (shouldLoadCart && userCartLoading);
   debugLog("items => ", cartItems);
 
   const subtotal = useMemo(() => {
@@ -100,16 +81,16 @@ const Cart = () => {
   debugLog("subtotal => ", subtotal);
 
   const handleRemoveFromCart = async (item: any) => {
-    if (isCustomerUser) {
-      try {
-        await removeFromCart(item.id).unwrap();
-      } catch (error) {
-        console.error("Error removing item:", error);
-      }
-      return;
+    try {
+      await removeFromCart(item.id).unwrap();
+      showToast("Item removed from cart", "success");
+    } catch (error) {
+      showToast(
+        getApiErrorMessage(error, "Failed to remove item from cart"),
+        "error"
+      );
+      console.error("Error removing item:", error);
     }
-
-    dispatch(removeGuestCartItem(item.variant.id));
   };
 
   const handleQuantityChange = async (item: any, delta: number) => {
@@ -118,21 +99,15 @@ const Cart = () => {
       return;
     }
 
-    if (isCustomerUser) {
-      try {
-        await updateCartItem({ id: item.id, quantity: nextQuantity }).unwrap();
-      } catch (error) {
-        console.error("Error updating item:", error);
-      }
-      return;
+    try {
+      await updateCartItem({ id: item.id, quantity: nextQuantity }).unwrap();
+    } catch (error) {
+      showToast(
+        getApiErrorMessage(error, "Failed to update item quantity"),
+        "error"
+      );
+      console.error("Error updating item:", error);
     }
-
-    dispatch(
-      updateGuestCartQuantity({
-        variantId: item.variant.id,
-        quantity: nextQuantity,
-      })
-    );
   };
 
   return (
@@ -155,7 +130,19 @@ const Cart = () => {
           </span>
         </motion.div>
 
-        {isAdminOrSuperAdmin ? (
+        {!authLoading && !isAuthenticated ? (
+          <div className="rounded-lg border border-gray-200 bg-white p-6 mb-6 text-center">
+            <p className="text-sm text-gray-700">
+              Sign in to view your cart.
+            </p>
+            <Link
+              href="/sign-in?next=%2Fcart"
+              className="mt-3 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Sign in
+            </Link>
+          </div>
+        ) : isAdminOrSuperAdmin ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6">
             <div className="flex items-start gap-3">
               <ShieldAlert size={18} className="text-amber-700 mt-0.5" />
@@ -172,7 +159,7 @@ const Cart = () => {
         ) : null}
 
         {/* Cart Content */}
-        {isAdminOrSuperAdmin ? null : isLoading ? (
+        {!isAuthenticated || isAdminOrSuperAdmin ? null : isLoading ? (
           <CartSkeletonLoader />
         ) : cartItems.length === 0 ? (
           <div className="text-center py-10">
@@ -242,7 +229,14 @@ const Cart = () => {
                     <button
                       type="button"
                       onClick={() => handleQuantityChange(item, 1)}
-                      disabled={item.quantity >= item.variant.stock}
+                      disabled={
+                        item.quantity >=
+                        Math.max(
+                          0,
+                          (Number(item.variant.stock) || 0) -
+                            (Number(item.variant.reservedStock) || 0)
+                        )
+                      }
                       className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
                     >
                       <Plus size={16} />

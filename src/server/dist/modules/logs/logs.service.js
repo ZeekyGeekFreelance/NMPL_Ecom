@@ -42,11 +42,17 @@ class LogsService {
     log(entry) {
         return __awaiter(this, void 0, void 0, function* () {
             console.log(`[${entry.level.toUpperCase()}] ${entry.message}`, entry.context || "");
-            yield this.logsRepository.createLog({
-                level: entry.level,
-                message: entry.message,
-                context: entry.context,
-            });
+            try {
+                yield this.logsRepository.createLog({
+                    level: entry.level,
+                    message: entry.message,
+                    context: entry.context,
+                });
+            }
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`[LOG_PERSIST_FAILED] ${message}`);
+            }
         });
     }
     info(message, context) {

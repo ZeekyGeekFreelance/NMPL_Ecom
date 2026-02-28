@@ -45,6 +45,18 @@ router.get(
  */
 router.get("/user", protect, orderController.getUserOrders);
 
+router.post(
+  "/:orderId/quotation/accept",
+  protect,
+  orderController.acceptQuotation
+);
+
+router.post(
+  "/:orderId/quotation/reject",
+  protect,
+  orderController.rejectQuotation
+);
+
 /**
  * @swagger
  * /orders/{orderId}:

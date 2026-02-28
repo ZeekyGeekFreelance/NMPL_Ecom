@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReportsService = void 0;
 const date_fns_1 = require("date-fns");
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
+const userRole_1 = require("@/shared/utils/userRole");
 class ReportsService {
     constructor(reportsRepository, analyticsRepository) {
         this.reportsRepository = reportsRepository;
@@ -135,6 +136,7 @@ class ReportsService {
                 userId: user.id,
                 name: user.name || "Unknown",
                 email: user.email,
+                customerType: (0, userRole_1.resolveCustomerTypeFromUser)(user),
                 orderCount: user.orders.length,
                 totalSpent: user.orders.reduce((sum, order) => sum + order.amount, 0),
             }))

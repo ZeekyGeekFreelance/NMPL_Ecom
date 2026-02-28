@@ -36,8 +36,8 @@ router.get("/me", protect, userController.getMe);
  * @swagger
  * /users/me:
  *   patch:
- *     summary: Update authenticated profile name
- *     description: Updates the display name of the authenticated user.
+ *     summary: Update authenticated profile
+ *     description: Updates the display name and/or phone number of the authenticated user.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -46,13 +46,14 @@ router.get("/me", protect, userController.getMe);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - name
  *             properties:
  *               name:
  *                 type: string
  *                 minLength: 2
  *                 maxLength: 80
+ *               phone:
+ *                 type: string
+ *                 pattern: "^[0-9()+\\-\\s]{7,20}$"
  *     responses:
  *       200:
  *         description: Profile updated successfully.

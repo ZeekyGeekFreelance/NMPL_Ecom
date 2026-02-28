@@ -59,14 +59,20 @@ const globalError = (err, req, res, _next) => __awaiter(void 0, void 0, void 0, 
     }
     const start = Date.now();
     const end = Date.now();
-    yield logsService.error(`Error: ${error.message}`, {
-        statusCode: error.statusCode,
-        stack: err.stack,
-        method: req.method,
-        url: req.originalUrl,
-        userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || null,
-        timePeriod: end - start,
-    });
+    try {
+        yield logsService.error(`Error: ${error.message}`, {
+            statusCode: error.statusCode,
+            stack: err.stack,
+            method: req.method,
+            url: req.originalUrl,
+            userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || null,
+            timePeriod: end - start,
+        });
+    }
+    catch (loggingError) {
+        const logErrorMessage = loggingError instanceof Error ? loggingError.message : String(loggingError);
+        logger_1.default.error(`[globalError] Failed to persist error log: ${logErrorMessage}`);
+    }
     res.status(error.statusCode || 500).json(Object.assign(Object.assign({ status: error.statusCode >= 400 && error.statusCode < 500 ? "fail" : "error", message: error.message }, (error.details && { errors: error.details })), (isDev && {
         stack: error.stack,
         error,

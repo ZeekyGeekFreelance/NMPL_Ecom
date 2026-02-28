@@ -12,7 +12,7 @@ import {
   getDateRange,
   calculateChanges,
 } from "@/shared/utils/analytics";
-import { REJECTED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const userAnalytics = {
   Query: {
@@ -39,7 +39,7 @@ const userAnalytics = {
             some: {
               orderDate: currentOrderDateFilter,
               status: {
-                notIn: [...REJECTED_ORDER_STATUS_VALUES],
+                in: [...CONFIRMED_ORDER_STATUS_VALUES],
               },
             },
           },
@@ -54,7 +54,7 @@ const userAnalytics = {
             where: {
               orderDate: currentOrderDateFilter,
               status: {
-                notIn: [...REJECTED_ORDER_STATUS_VALUES],
+                in: [...CONFIRMED_ORDER_STATUS_VALUES],
               },
             },
           },
@@ -84,7 +84,7 @@ const userAnalytics = {
                     yearEnd
                   ),
                   status: {
-                    notIn: [...REJECTED_ORDER_STATUS_VALUES],
+                    in: [...CONFIRMED_ORDER_STATUS_VALUES],
                   },
                 },
               },
@@ -104,7 +104,7 @@ const userAnalytics = {
                     yearEnd
                   ),
                   status: {
-                    notIn: [...REJECTED_ORDER_STATUS_VALUES],
+                    in: [...CONFIRMED_ORDER_STATUS_VALUES],
                   },
                 },
               },

@@ -300,15 +300,24 @@ const buildUserRetentionSections = (userRetention) => {
         {
             key: "retention-top-users",
             title: "Top Users",
-            columns: ["SN No.", "User ID", "Name", "Email", "Order Count", "Total Spent"],
+            columns: [
+                "SN No.",
+                "User ID",
+                "Name",
+                "Email",
+                "Customer Type",
+                "Order Count",
+                "Total Spent",
+            ],
             rows: (userRetention.topUsers || []).map((user, index) => {
-                var _a;
+                var _a, _b;
                 return ({
                     "SN No.": index + 1,
                     "User ID": toExportCell("User ID", user.userId),
                     Name: toExportCell("Name", user.name),
                     Email: toExportCell("Email", user.email),
-                    "Order Count": toExportCell("Order Count", (_a = toNumber(user.orderCount)) !== null && _a !== void 0 ? _a : EMPTY_VALUE),
+                    "Customer Type": toExportCell("Customer Type", (_a = user.customerType) !== null && _a !== void 0 ? _a : "UNKNOWN"),
+                    "Order Count": toExportCell("Order Count", (_b = toNumber(user.orderCount)) !== null && _b !== void 0 ? _b : EMPTY_VALUE),
                     "Total Spent": toExportCell("Total Spent", toCurrencyValue(user.totalSpent)),
                 });
             }),
@@ -381,18 +390,20 @@ const buildUserAnalyticsSections = (users, keyPrefix = "users") => {
                 "User ID",
                 "Name",
                 "Email",
+                "Customer Type",
                 "Order Count",
                 "Total Spent",
                 "Engagement Score",
             ],
             rows: (users.topUsers || []).map((user, index) => {
-                var _a;
+                var _a, _b;
                 return ({
                     "SN No.": index + 1,
                     "User ID": toExportCell("User ID", user.userId || user.id),
                     Name: toExportCell("Name", user.name),
                     Email: toExportCell("Email", user.email),
-                    "Order Count": toExportCell("Order Count", (_a = toNumber(user.orderCount)) !== null && _a !== void 0 ? _a : EMPTY_VALUE),
+                    "Customer Type": toExportCell("Customer Type", (_a = user.customerType) !== null && _a !== void 0 ? _a : "UNKNOWN"),
+                    "Order Count": toExportCell("Order Count", (_b = toNumber(user.orderCount)) !== null && _b !== void 0 ? _b : EMPTY_VALUE),
                     "Total Spent": toExportCell("Total Spent", toCurrencyValue(user.totalSpent)),
                     "Engagement Score": toExportCell("Engagement Score", toFixedNumber(user.engagementScore)),
                 });

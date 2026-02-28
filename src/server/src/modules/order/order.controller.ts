@@ -40,16 +40,63 @@ export class OrderController {
     });
   });
 
+  acceptQuotation = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { orderId } = req.params;
+    if (!userId) {
+      throw new AppError(400, "User not found");
+    }
+
+    const paymentSession = await this.orderService.acceptQuotationForOrder(
+      orderId,
+      userId
+    );
+
+    sendResponse(res, 200, {
+      data: paymentSession,
+      message: "Quotation accepted. Redirect to payment gateway.",
+    });
+  });
+
+  rejectQuotation = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { orderId } = req.params;
+    if (!userId) {
+      throw new AppError(400, "User not found");
+    }
+
+    const updatedTransaction = await this.orderService.rejectQuotationForOrder(
+      orderId,
+      userId
+    );
+
+    sendResponse(res, 200, {
+      data: { updatedTransaction },
+      message: "Quotation rejected successfully",
+    });
+  });
+
   createOrder = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const { cartId } = req.body;
+    const { cartId, addressId, deliveryMode } = req.body || {};
     if (!userId) {
       throw new AppError(400, "User not found");
     }
     if (!cartId) {
       throw new AppError(400, "Cart ID is required");
     }
-    const order = await this.orderService.createOrderFromCart(userId, cartId);
+    if (!addressId) {
+      throw new AppError(400, "Address selection is required");
+    }
+    if (deliveryMode !== "PICKUP" && deliveryMode !== "DELIVERY") {
+      throw new AppError(400, "Delivery mode must be PICKUP or DELIVERY");
+    }
+    const order = await this.orderService.createOrderFromCart(
+      userId,
+      cartId,
+      addressId,
+      deliveryMode
+    );
     sendResponse(res, 201, {
       data: { order },
       message: "Order created successfully",

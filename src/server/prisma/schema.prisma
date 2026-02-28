@@ -14,10 +14,20 @@ enum ROLE {
 }
 
 enum TRANSACTION_STATUS {
-  PLACED
+  PENDING_VERIFICATION
+  WAITLISTED
+  AWAITING_PAYMENT
+  QUOTATION_REJECTED
+  QUOTATION_EXPIRED
   CONFIRMED
-  REJECTED
   DELIVERED
+}
+
+enum RESERVATION_STATUS {
+  ACTIVE
+  RELEASED
+  EXPIRED
+  CONSUMED
 }
 
 enum PAYMENT_STATUS {
@@ -49,6 +59,27 @@ enum DEALER_STATUS {
 enum ORDER_CUSTOMER_ROLE {
   USER
   DEALER
+}
+
+enum ORDER_QUOTATION_LOG_EVENT {
+  ORIGINAL_ORDER
+  ADMIN_QUOTATION
+  CUSTOMER_ACCEPTED
+  CUSTOMER_REJECTED
+  QUOTATION_EXPIRED
+  PAYMENT_CONFIRMED
+}
+
+enum ADDRESS_TYPE {
+  HOME
+  OFFICE
+  WAREHOUSE
+  OTHER
+}
+
+enum DELIVERY_MODE {
+  PICKUP
+  DELIVERY
 }
 
 model User {
@@ -116,6 +147,7 @@ model ProductVariant {
   images            String[]                  @default([])
   price             Float
   stock             Int
+  reservedStock     Int                       @default(0)
   lowStockThreshold Int                       @default(10)
   barcode           String?
   attributes        ProductVariantAttribute[]
@@ -271,21 +303,49 @@ model Order {
   id          String       @id @default(uuid())
   userId      String
   customerRoleSnapshot ORDER_CUSTOMER_ROLE @default(USER)
+  subtotalAmount Float      @default(0)
+  deliveryCharge Float      @default(0)
+  deliveryMode DELIVERY_MODE @default(DELIVERY)
   amount      Float
   orderDate   DateTime     @default(now())
-  status      String       @default("PLACED")
+  status      String       @default("PENDING_VERIFICATION")
+  verificationQueuedAt DateTime?
+  quotationSentAt DateTime?
+  paymentRequestedAt DateTime?
+  reservationExpiresAt DateTime?
   user        User         @relation(fields: [userId], references: [id])
   orderItems  OrderItem[]
   payment     Payment?     @relation("OrderPayment")
-  address     Address?     @relation("OrderAddress")
+  address     OrderAddressSnapshot? @relation("OrderAddress")
   shipment    Shipment?    @relation("OrderShipment")
   transaction Transaction? @relation("OrderTransaction")
+  reservation OrderReservation?
+  quotationLogs OrderQuotationLog[]
   invoice     Invoice?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   @@index([userId])
   @@index([customerRoleSnapshot])
+  @@index([status])
+}
+
+model OrderQuotationLog {
+  id            String                   @id @default(uuid())
+  orderId        String
+  order          Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  event          ORDER_QUOTATION_LOG_EVENT
+  previousTotal  Float?
+  updatedTotal   Float
+  currency       String                   @default("INR")
+  actorUserId    String?
+  actorRole      String?
+  message        String?
+  lineItems      Json?
+  createdAt      DateTime                 @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([event, createdAt])
 }
 
 model OrderItem {
@@ -318,20 +378,62 @@ model Payment {
 }
 
 model Address {
-  id        String   @id @default(uuid())
-  city      String
-  state     String
-  country   String
-  zip       String
-  street    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  order     Order?   @relation("OrderAddress", fields: [orderId], references: [id], onDelete: SetNull)
-  orderId   String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String       @id @default(uuid())
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  type        ADDRESS_TYPE @default(HOME)
+  fullName    String
+  phoneNumber String
+  line1       String
+  line2       String?
+  landmark    String?
+  city        String
+  state       String
+  country     String
+  pincode     String
+  isDefault   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  @@index([userId, orderId])
+  @@index([userId, isDefault])
+}
+
+model OrderAddressSnapshot {
+  id             String        @id @default(uuid())
+  orderId         String        @unique
+  order           Order         @relation("OrderAddress", fields: [orderId], references: [id], onDelete: Cascade)
+  sourceAddressId String?
+  addressType     ADDRESS_TYPE
+  fullName        String
+  phoneNumber     String
+  line1           String
+  line2           String?
+  landmark        String?
+  city            String
+  state           String
+  country         String
+  pincode         String
+  deliveryMode    DELIVERY_MODE
+  deliveryCharge  Float         @default(0)
+  deliveryLabel   String
+  serviceArea     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([pincode])
+}
+
+model DeliveryRate {
+  id            String   @id @default(uuid())
+  pincode       String   @unique
+  city          String?
+  state         String?
+  charge        Float
+  isServiceable Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isServiceable])
 }
 
 model Shipment {
@@ -352,12 +454,27 @@ model Transaction {
   id              String             @id @default(uuid())
   order           Order              @relation("OrderTransaction", fields: [orderId], references: [id], onDelete: Cascade)
   orderId         String             @unique
-  status          TRANSACTION_STATUS @default(PLACED)
+  status          TRANSACTION_STATUS @default(PENDING_VERIFICATION)
   transactionDate DateTime           @default(now())
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
   @@index([orderId])
+}
+
+model OrderReservation {
+  id         String             @id @default(uuid())
+  orderId    String             @unique
+  order      Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status     RESERVATION_STATUS @default(ACTIVE)
+  expiresAt  DateTime
+  releasedAt DateTime?
+  consumedAt DateTime?
+  reason     String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@index([status, expiresAt])
 }
 
 model InvoiceCounter {

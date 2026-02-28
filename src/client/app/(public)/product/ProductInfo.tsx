@@ -2,17 +2,15 @@
 import Rating from "@/app/components/feedback/Rating";
 import { useAddToCartMutation } from "@/app/store/apis/CartApi";
 import { useAuth } from "@/app/hooks/useAuth";
-import { useAppDispatch } from "@/app/store/hooks";
-import { addGuestCartItem } from "@/app/store/slices/GuestCartSlice";
 import useToast from "@/app/hooks/ui/useToast";
 import { Product } from "@/app/types/productTypes";
 import { Palette, Ruler, Info, Package, Check, X } from "lucide-react";
 import { motion } from "framer-motion";
-import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import Link from "next/link";
 import { isCustomerDisplayRole, resolveDisplayRole } from "@/app/lib/userRole";
+import { setPendingAuthIntent } from "@/app/lib/authIntent";
 
 interface ProductInfoProps {
   id: string;
@@ -29,6 +27,7 @@ interface ProductInfoProps {
 }
 
 const ProductInfo: React.FC<ProductInfoProps> = ({
+  id,
   name,
   averageRating,
   reviewCount,
@@ -41,9 +40,10 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   resetSelections,
 }) => {
   const { showToast } = useToast();
-  const dispatch = useAppDispatch();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const formatPrice = useFormatPrice();
   const [addToCart, { isLoading }] = useAddToCartMutation();
   const isCustomerUser =
@@ -51,30 +51,29 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const isGuest = !isAuthenticated;
   const showDealerSignupNudge = !(isAuthenticated && user?.isDealer);
 
-  const addSelectedVariantToCart = async (): Promise<boolean> => {
+  const getCurrentPathWithSearch = () => {
+    const query = searchParams?.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  };
+
+  const resolveSelectedVariantForCart = () => {
     if (!selectedVariant) {
       showToast("Please select a valid variant", "error");
-      return false;
+      return null;
     }
 
     if (selectedVariant.stock <= 0) {
       showToast("Selected variant is out of stock", "error");
-      return false;
+      return null;
     }
 
-    if (isGuest) {
-      dispatch(
-        addGuestCartItem({
-          variantId: selectedVariant.id,
-          name,
-          sku: selectedVariant.sku,
-          price: selectedVariant.price,
-          image:
-            selectedVariant.images?.[0] || generateProductPlaceholder(name),
-          stock: selectedVariant.stock,
-        })
-      );
-      return true;
+    return selectedVariant;
+  };
+
+  const addSelectedVariantToCart = async (): Promise<boolean> => {
+    const variant = resolveSelectedVariantForCart();
+    if (!variant) {
+      return false;
     }
 
     if (!isCustomerUser) {
@@ -84,7 +83,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
 
     try {
       await addToCart({
-        variantId: selectedVariant.id,
+        variantId: variant.id,
         quantity: 1,
       }).unwrap();
       return true;
@@ -98,21 +97,64 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
 
+    if (isAuthLoading) {
+      showToast("Checking session. Please try again in a moment.", "info");
+      return;
+    }
+
+    const variant = resolveSelectedVariantForCart();
+    if (!variant) {
+      return;
+    }
+
+    if (isGuest) {
+      const returnTo = getCurrentPathWithSearch();
+      setPendingAuthIntent({
+        actionType: "add_to_cart",
+        productId: id,
+        variantId: variant.id,
+        quantity: 1,
+        returnTo,
+      });
+      showToast("Please sign in to continue with your cart action.", "info");
+      router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+
     const isAdded = await addSelectedVariantToCart();
     if (!isAdded) {
       return;
     }
 
-    showToast(
-      isGuest
-        ? "Added to temporary cart. Sign in to place order."
-        : "Product added to cart",
-      "success"
-    );
+    showToast("Product added to cart", "success");
   };
 
   const handleBuyNow = async (e: React.MouseEvent) => {
     e.preventDefault();
+
+    if (isAuthLoading) {
+      showToast("Checking session. Please try again in a moment.", "info");
+      return;
+    }
+
+    const variant = resolveSelectedVariantForCart();
+    if (!variant) {
+      return;
+    }
+
+    if (isGuest) {
+      const returnTo = getCurrentPathWithSearch();
+      setPendingAuthIntent({
+        actionType: "buy_now",
+        productId: id,
+        variantId: variant.id,
+        quantity: 1,
+        returnTo,
+      });
+      showToast("Please sign in to continue with checkout.", "info");
+      router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`);
+      return;
+    }
 
     const isAdded = await addSelectedVariantToCart();
     if (!isAdded) {
@@ -131,7 +173,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
     : variants[0]?.stock || 0;
   const selectedSku = selectedVariant?.sku || variants[0]?.sku || "N/A";
   const cartActionAllowed = stock > 0 && !!selectedVariant;
-  const canUseCart = cartActionAllowed && (isGuest || isCustomerUser);
+  const canUseCart = !isAuthLoading && cartActionAllowed && (isGuest || isCustomerUser);
 
   // Compute available colors and sizes
   const colorValues = new Set<string>();
@@ -456,6 +498,8 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               Adding to Cart...
             </div>
+          ) : isAuthLoading ? (
+            "Checking session..."
           ) : canUseCart ? (
             "Add to Cart"
           ) : !isGuest && !isCustomerUser ? (

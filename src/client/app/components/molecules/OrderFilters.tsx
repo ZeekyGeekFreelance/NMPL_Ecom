@@ -16,9 +16,12 @@ const OrderFilters: React.FC<OrderFiltersProps> = ({
 }) => {
   const statusOptions = [
     { value: "", label: "All Orders" },
-    { value: "PLACED", label: "Placed" },
+    { value: "PENDING_VERIFICATION", label: "Pending Verification" },
+    { value: "WAITLISTED", label: "Waitlisted" },
+    { value: "AWAITING_PAYMENT", label: "Awaiting Payment" },
+    { value: "QUOTATION_REJECTED", label: "Quotation Rejected" },
+    { value: "QUOTATION_EXPIRED", label: "Quotation Expired" },
     { value: "CONFIRMED", label: "Confirmed" },
-    { value: "REJECTED", label: "Cancelled" },
     { value: "DELIVERED", label: "Delivered" },
   ];
 

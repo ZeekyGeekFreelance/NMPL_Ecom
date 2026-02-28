@@ -49,7 +49,13 @@ export function withAuth<P extends object>(
 
       if (!isAuthenticated) {
         setIsRedirecting(true);
-        router.replace(options?.redirectTo || "/sign-in");
+        const configuredRedirect = options?.redirectTo || "/sign-in";
+        if (configuredRedirect === "/sign-in" && typeof window !== "undefined") {
+          const nextPath = `${window.location.pathname}${window.location.search}`;
+          router.replace(`/sign-in?next=${encodeURIComponent(nextPath)}`);
+        } else {
+          router.replace(configuredRedirect);
+        }
         return;
       }
 

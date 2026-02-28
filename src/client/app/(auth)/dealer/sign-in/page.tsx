@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { Loader2 } from "lucide-react";
 import { useSignInMutation } from "@/app/store/apis/AuthApi";
@@ -17,6 +17,7 @@ interface InputForm {
 const DealerSignIn = () => {
   const [signIn, { error, isLoading }] = useSignInMutation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const apiErrorMessage =
     (error as any)?.data?.message || "Unable to sign in with dealer credentials.";
 
@@ -34,10 +35,15 @@ const DealerSignIn = () => {
   const onSubmit = async (formData: InputForm) => {
     try {
       const response = await signIn(formData).unwrap();
+      const requestedNextPath = searchParams.get("next");
+      const nextPath =
+        requestedNextPath && requestedNextPath.startsWith("/")
+          ? requestedNextPath
+          : null;
       const destination =
         response.user?.role === "ADMIN" || response.user?.role === "SUPERADMIN"
           ? "/dashboard"
-          : "/";
+          : nextPath || "/";
       router.push(destination);
     } catch {
       // Error handled from mutation state.

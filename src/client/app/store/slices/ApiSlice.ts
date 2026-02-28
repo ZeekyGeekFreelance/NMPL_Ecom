@@ -2,6 +2,7 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { logout } from "./AuthSlice";
 import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
+import { clearPendingAuthIntent } from "@/app/lib/authIntent";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const ENABLE_NATIVE_CONFIRMATION =
@@ -83,6 +84,8 @@ const normalizeUrlPath = (url: unknown) => {
 
 const isAuthEndpoint = (normalizedUrl: string) =>
   normalizedUrl.startsWith("/auth/");
+const isBootstrapAuthProfileEndpoint = (normalizedUrl: string) =>
+  normalizedUrl === "/users/me";
 
 const getAuthUserFromState = (api: any) => {
   const state = api.getState() as { auth?: { user?: unknown | null } };
@@ -98,7 +101,7 @@ const shouldAttemptTokenRefresh = (
   }
 
   if (!normalizedUrl) {
-    return true;
+    return authUser !== null && authUser !== undefined;
   }
 
   if (normalizedUrl === "/auth/refresh-token") {
@@ -109,7 +112,25 @@ const shouldAttemptTokenRefresh = (
     return false;
   }
 
+  // Before auth bootstrap resolves (authUser === undefined), only
+  // `/users/me` may legitimately require refresh. This avoids refresh spam
+  // for unrelated public/optional requests that return 401.
+  if (authUser === undefined) {
+    return isBootstrapAuthProfileEndpoint(normalizedUrl);
+  }
+
   return true;
+};
+
+const shouldSyncUnauthorizedState = (
+  normalizedUrl: string,
+  authUser: unknown | null | undefined
+) => {
+  if (authUser) {
+    return true;
+  }
+
+  return authUser === undefined && isBootstrapAuthProfileEndpoint(normalizedUrl);
 };
 
 const handleUnauthorizedState = (api: any) => {
@@ -120,7 +141,9 @@ const handleUnauthorizedState = (api: any) => {
     return;
   }
 
+  api.dispatch(apiSlice.util.resetApiState());
   api.dispatch(logout());
+  clearPendingAuthIntent();
 
   if (authUser) {
     emitAuthSyncEvent("SIGNED_OUT");
@@ -213,7 +236,10 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
     const authUser = getAuthUserFromState(api);
 
     if (!shouldAttemptTokenRefresh(normalizedUrl, authUser)) {
-      if (!isAuthEndpoint(normalizedUrl)) {
+      if (
+        !isAuthEndpoint(normalizedUrl) &&
+        shouldSyncUnauthorizedState(normalizedUrl, authUser)
+      ) {
         handleUnauthorizedState(api);
       }
       return result;
@@ -225,9 +251,17 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
     if (refreshResult.data) {
       // If there's data, retry the original req with the new token
       result = await baseQuery(args, api, extraOptions);
+      if (
+        result.error?.status === 401 &&
+        shouldSyncUnauthorizedState(normalizedUrl, authUser)
+      ) {
+        handleUnauthorizedState(api);
+      }
     } else {
       // If refresh fails, clear local auth state once.
-      handleUnauthorizedState(api);
+      if (shouldSyncUnauthorizedState(normalizedUrl, authUser)) {
+        handleUnauthorizedState(api);
+      }
     }
   }
 
@@ -241,6 +275,7 @@ export const apiSlice = createApi({
     "User",
     "Product",
     "Category",
+    "Address",
     "Cart",
     "Order",
     "Review",

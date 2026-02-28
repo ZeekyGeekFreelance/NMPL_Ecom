@@ -3,16 +3,18 @@ export default function getStatusStep(status) {
 
   switch (normalized) {
     case "DELIVERED":
-      return 3;
+      return 4;
     case "CONFIRMED":
-    case "PROCESSING":
-    case "SHIPPED":
-    case "IN_TRANSIT":
+      return 3;
+    case "AWAITING_PAYMENT":
       return 2;
-    case "REJECTED":
+    case "WAITLISTED":
       return 2;
+    case "QUOTATION_REJECTED":
+    case "QUOTATION_EXPIRED":
+      return 3;
+    case "PENDING_VERIFICATION":
     case "PLACED":
-    case "PENDING":
     default:
       return 1;
   }

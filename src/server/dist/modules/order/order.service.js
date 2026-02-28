@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -21,47 +54,54 @@ const branding_1 = require("@/shared/utils/branding");
 const accountReference_1 = require("@/shared/utils/accountReference");
 const dateTime_1 = require("@/shared/utils/dateTime");
 const logs_factory_1 = require("../logs/logs.factory");
+const dealerAccess_1 = require("@/shared/utils/dealerAccess");
+const userRole_1 = require("@/shared/utils/userRole");
+const orderLifecycle_1 = require("@/shared/utils/orderLifecycle");
+const stripe_1 = __importStar(require("@/infra/payment/stripe"));
+const transaction_service_1 = require("../transaction/transaction.service");
+const transaction_repository_1 = require("../transaction/transaction.repository");
 class OrderService {
     constructor(orderRepository) {
         this.orderRepository = orderRepository;
         this.logsService = (0, logs_factory_1.makeLogsService)();
+        this.transactionService = new transaction_service_1.TransactionService(new transaction_repository_1.TransactionRepository());
     }
-    isDealerTableMissing(error) {
-        if (!(error instanceof Error)) {
-            return false;
-        }
-        return (error.message.includes('relation "DealerProfile" does not exist') ||
-            error.message.includes('relation "DealerPriceMapping" does not exist'));
+    resolvePortalUrl() {
+        const configuredUrl = process.env.CLIENT_URL ||
+            process.env.CLIENT_URL_DEV ||
+            process.env.CLIENT_URL_PROD ||
+            "http://localhost:3000";
+        return configuredUrl.replace(/\/+$/, "");
     }
-    getDealerPriceMap(userId, variantIds) {
+    buildQuotationLogLineItems(orderItems = []) {
+        return orderItems.map((item) => {
+            var _a, _b, _c;
+            return ({
+                orderItemId: item.id,
+                variantId: item.variantId,
+                sku: ((_a = item.variant) === null || _a === void 0 ? void 0 : _a.sku) || null,
+                productName: ((_c = (_b = item.variant) === null || _b === void 0 ? void 0 : _b.product) === null || _c === void 0 ? void 0 : _c.name) || "Product",
+                quantity: Number(item.quantity) || 0,
+                unitPrice: Number(item.price) || 0,
+                lineTotal: Number(((Number(item.quantity) || 0) * (Number(item.price) || 0)).toFixed(2)),
+            });
+        });
+    }
+    createQuotationLog(params) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!variantIds.length) {
-                return new Map();
-            }
-            try {
-                const dealerProfileRows = yield database_config_1.default.$queryRaw(client_1.Prisma.sql `
-          SELECT "status"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `);
-                if (!dealerProfileRows.length || dealerProfileRows[0].status !== "APPROVED") {
-                    return new Map();
-                }
-                const priceRows = yield database_config_1.default.$queryRaw(client_1.Prisma.sql `
-          SELECT "variantId", "customPrice"
-          FROM "DealerPriceMapping"
-          WHERE "dealerId" = ${userId}
-            AND "variantId" IN (${client_1.Prisma.join(variantIds)})
-        `);
-                return new Map(priceRows.map((row) => [row.variantId, row.customPrice]));
-            }
-            catch (error) {
-                if (this.isDealerTableMissing(error)) {
-                    return new Map();
-                }
-                throw error;
-            }
+            yield database_config_1.default.orderQuotationLog.create({
+                data: {
+                    orderId: params.orderId,
+                    event: params.event,
+                    previousTotal: params.previousTotal === undefined ? null : params.previousTotal,
+                    updatedTotal: Number(params.updatedTotal.toFixed(2)),
+                    currency: "INR",
+                    actorUserId: params.actorUserId || null,
+                    actorRole: params.actorRole || null,
+                    message: params.message || null,
+                    lineItems: params.lineItems,
+                },
+            });
         });
     }
     getAllOrders() {
@@ -74,9 +114,26 @@ class OrderService {
             return this.orderRepository.findOrdersByUserId(userId);
         });
     }
+    resolveOrderIdForUser(orderIdentifier, userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const normalized = String(orderIdentifier || "").trim();
+            if (!normalized) {
+                throw new AppError_1.default(400, "Order ID is required");
+            }
+            if (!normalized.toUpperCase().startsWith("ORD-")) {
+                return normalized;
+            }
+            const orderId = yield this.orderRepository.findOrderIdByReferenceForUser(normalized, userId);
+            if (!orderId) {
+                throw new AppError_1.default(404, "Order not found");
+            }
+            return orderId;
+        });
+    }
     getOrderDetails(orderId, userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const order = yield this.orderRepository.findOrderById(orderId);
+            const resolvedOrderId = yield this.resolveOrderIdForUser(orderId, userId);
+            const order = yield this.orderRepository.findOrderById(resolvedOrderId);
             if (!order) {
                 throw new AppError_1.default(404, "Order not found");
             }
@@ -86,8 +143,167 @@ class OrderService {
             return order;
         });
     }
+    acceptQuotationForOrder(orderId, userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            if (!stripe_1.isStripeConfigured || !stripe_1.default) {
+                throw new AppError_1.default(503, "Payment gateway is not configured. Please contact support.");
+            }
+            const resolvedOrderId = yield this.resolveOrderIdForUser(orderId, userId);
+            const order = yield this.orderRepository.findOrderById(resolvedOrderId);
+            if (!order) {
+                throw new AppError_1.default(404, "Order not found");
+            }
+            if (order.userId !== userId) {
+                throw new AppError_1.default(403, "You are not authorized to update this order");
+            }
+            if (!order.transaction) {
+                throw new AppError_1.default(409, "Quotation workflow is not initialized for this order.");
+            }
+            const normalizedStatus = String(order.transaction.status || order.status).toUpperCase();
+            if (normalizedStatus !== orderLifecycle_1.ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT) {
+                throw new AppError_1.default(409, `Payment can start only for AWAITING_PAYMENT orders. Current status: ${normalizedStatus}`);
+            }
+            const reservationExpiry = ((_a = order.reservation) === null || _a === void 0 ? void 0 : _a.expiresAt) || order.reservationExpiresAt || null;
+            if (reservationExpiry && new Date(reservationExpiry).getTime() <= Date.now()) {
+                yield this.transactionService
+                    .updateTransactionStatus(order.transaction.id, {
+                    status: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
+                })
+                    .catch(() => null);
+                throw new AppError_1.default(409, "Quotation has expired. Please contact support for next steps.");
+            }
+            if (!Array.isArray(order.orderItems) || order.orderItems.length === 0) {
+                throw new AppError_1.default(409, "Order has no line items to bill.");
+            }
+            if (!Number.isFinite(order.amount) || Number(order.amount) <= 0) {
+                throw new AppError_1.default(409, "Quoted amount is invalid for online payment processing.");
+            }
+            const currency = (process.env.STRIPE_CURRENCY || "inr").toLowerCase();
+            const lineItems = order.orderItems.map((item) => {
+                var _a, _b, _c;
+                return ({
+                    quantity: item.quantity,
+                    price_data: {
+                        currency,
+                        unit_amount: Math.round(item.price * 100),
+                        product_data: {
+                            name: ((_b = (_a = item.variant) === null || _a === void 0 ? void 0 : _a.product) === null || _b === void 0 ? void 0 : _b.name) || ((_c = item.variant) === null || _c === void 0 ? void 0 : _c.sku) || "Product",
+                            metadata: {
+                                orderId: order.id,
+                                orderItemId: item.id,
+                                variantId: item.variantId,
+                            },
+                        },
+                    },
+                });
+            });
+            const hasInvalidLineItem = lineItems.some((line) => !Number.isFinite(line.quantity) ||
+                line.quantity <= 0 ||
+                !Number.isFinite(line.price_data.unit_amount) ||
+                line.price_data.unit_amount <= 0);
+            if (hasInvalidLineItem) {
+                throw new AppError_1.default(409, "Quoted line items contain invalid quantity or price.");
+            }
+            const portalUrl = this.resolvePortalUrl();
+            const orderReference = (0, accountReference_1.toOrderReference)(order.id);
+            const now = Date.now();
+            const reservationExpiryTimestamp = reservationExpiry
+                ? new Date(reservationExpiry).getTime()
+                : null;
+            const maxStripeCheckoutExpiry = now + 23 * 60 * 60 * 1000;
+            const checkoutSessionExpiry = reservationExpiryTimestamp && reservationExpiryTimestamp > now + 5 * 60 * 1000
+                ? Math.floor(Math.min(reservationExpiryTimestamp, maxStripeCheckoutExpiry) / 1000)
+                : undefined;
+            const checkoutSession = yield stripe_1.default.checkout.sessions.create(Object.assign({ mode: "payment", customer_email: ((_b = order.user) === null || _b === void 0 ? void 0 : _b.email) || undefined, line_items: lineItems, metadata: {
+                    orderId: order.id,
+                    orderReference,
+                    userId,
+                }, success_url: `${portalUrl}/payment-success?orderId=${orderReference}`, cancel_url: `${portalUrl}/cancel?orderId=${orderReference}` }, (checkoutSessionExpiry ? { expires_at: checkoutSessionExpiry } : {})));
+            if (!checkoutSession.url) {
+                throw new AppError_1.default(500, "Unable to initialize payment session. Please try again.");
+            }
+            if ((_c = order.payment) === null || _c === void 0 ? void 0 : _c.id) {
+                yield database_config_1.default.payment.update({
+                    where: {
+                        id: order.payment.id,
+                    },
+                    data: {
+                        method: "STRIPE_CHECKOUT",
+                        amount: Number(order.amount),
+                    },
+                });
+            }
+            else {
+                yield database_config_1.default.payment.create({
+                    data: {
+                        orderId: order.id,
+                        userId: order.userId,
+                        method: "STRIPE_CHECKOUT",
+                        amount: Number(order.amount),
+                        status: client_1.PAYMENT_STATUS.PENDING,
+                    },
+                });
+            }
+            yield this.createQuotationLog({
+                orderId: order.id,
+                event: client_1.ORDER_QUOTATION_LOG_EVENT.CUSTOMER_ACCEPTED,
+                previousTotal: Number(order.amount),
+                updatedTotal: Number(order.amount),
+                actorUserId: userId,
+                actorRole: order.customerRoleSnapshot,
+                message: "Customer accepted quotation and initiated payment.",
+                lineItems: this.buildQuotationLogLineItems(order.orderItems),
+            });
+            return {
+                orderId: order.id,
+                orderReference,
+                checkoutUrl: checkoutSession.url,
+                checkoutSessionId: checkoutSession.id,
+                reservationExpiresAt: reservationExpiry,
+            };
+        });
+    }
+    rejectQuotationForOrder(orderId, userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const resolvedOrderId = yield this.resolveOrderIdForUser(orderId, userId);
+            const order = yield this.orderRepository.findOrderById(resolvedOrderId);
+            if (!order) {
+                throw new AppError_1.default(404, "Order not found");
+            }
+            if (order.userId !== userId) {
+                throw new AppError_1.default(403, "You are not authorized to update this order");
+            }
+            if (!order.transaction) {
+                throw new AppError_1.default(409, "Quotation workflow is not initialized for this order.");
+            }
+            const normalizedStatus = String(order.transaction.status || order.status).toUpperCase();
+            if (normalizedStatus !== orderLifecycle_1.ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT) {
+                throw new AppError_1.default(409, `Only AWAITING_PAYMENT quotations can be rejected. Current status: ${normalizedStatus}`);
+            }
+            return this.transactionService.updateTransactionStatus(order.transaction.id, {
+                status: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+                actorUserId: userId,
+                actorRole: order.customerRoleSnapshot,
+            });
+        });
+    }
     createOrderFromCart(userId, cartId) {
         return __awaiter(this, void 0, void 0, function* () {
+            const orderingUser = yield database_config_1.default.user.findUnique({
+                where: { id: userId },
+                select: {
+                    role: true,
+                    dealerProfile: {
+                        select: {
+                            status: true,
+                        },
+                    },
+                },
+            });
+            if (!orderingUser) {
+                throw new AppError_1.default(404, "User not found");
+            }
             const cart = yield database_config_1.default.cart.findUnique({
                 where: { id: cartId },
                 include: { cartItems: { include: { variant: { include: { product: true } } } } },
@@ -101,13 +317,8 @@ class OrderService {
             if (cart.userId !== userId) {
                 throw new AppError_1.default(403, "You are not authorized to access this cart");
             }
-            const dealerPriceMap = yield this.getDealerPriceMap(userId, cart.cartItems.map((item) => item.variantId));
-            const amount = cart.cartItems.reduce((sum, item) => {
-                var _a;
-                return sum +
-                    item.quantity *
-                        ((_a = dealerPriceMap.get(item.variantId)) !== null && _a !== void 0 ? _a : item.variant.price);
-            }, 0);
+            const dealerPriceMap = yield (0, dealerAccess_1.getDealerPriceMap)(database_config_1.default, userId, cart.cartItems.map((item) => item.variantId));
+            const customerRoleSnapshot = (0, userRole_1.resolveCustomerTypeFromUser)(orderingUser);
             const orderItems = cart.cartItems.map((item) => {
                 var _a;
                 return ({
@@ -118,11 +329,11 @@ class OrderService {
             });
             const order = yield this.orderRepository.createOrder({
                 userId,
-                amount,
+                customerRoleSnapshot,
                 cartId,
                 orderItems,
             });
-            yield this.sendOrderPlacedNotifications(userId, order.id).catch((error) => __awaiter(this, void 0, void 0, function* () {
+            yield this.sendOrderPlacedNotifications(userId, order.id, customerRoleSnapshot).catch((error) => __awaiter(this, void 0, void 0, function* () {
                 const errorMessage = error instanceof Error ? error.message : "Unknown notification error";
                 yield this.logsService.warn("Order placed notifications failed", {
                     userId,
@@ -153,7 +364,7 @@ class OrderService {
             return Array.from(new Set(emails));
         });
     }
-    sendOrderPlacedNotifications(userId, orderId) {
+    sendOrderPlacedNotifications(userId, orderId, customerType) {
         return __awaiter(this, void 0, void 0, function* () {
             const user = yield database_config_1.default.user.findUnique({
                 where: { id: userId },
@@ -175,30 +386,30 @@ class OrderService {
             if (user.email) {
                 notificationPromises.push((0, sendEmail_1.default)({
                     to: user.email,
-                    subject: `${platformName} | Your Order Has Been Placed`,
+                    subject: `${platformName} | Order Received - Verification Pending`,
                     text: [
                         `Hello ${user.name},`,
                         "",
-                        `Your order has been placed on ${platformName}.`,
+                        `Your order has been received on ${platformName}.`,
                         `Order ID: ${orderReference}`,
                         `Account Reference: ${accountReference}`,
-                        `Current status: PLACED`,
+                        `Current status: ${orderLifecycle_1.ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}`,
                         `Action Time (IST): ${actionTime}`,
                         "",
-                        "We will confirm your order after stock verification.",
+                        "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
                         `Need help? Contact ${supportEmail}.`,
                     ].join("\n"),
                     html: `
             <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
               <p>Hello <strong>${user.name}</strong>,</p>
-              <p>Your order has been placed on <strong>${platformName}</strong>.</p>
+              <p>Your order has been received on <strong>${platformName}</strong>.</p>
               <p>
                 <strong>Order ID:</strong> ${orderReference}<br />
                 <strong>Account Reference:</strong> ${accountReference}<br />
-                <strong>Current status:</strong> PLACED<br />
+                <strong>Current status:</strong> ${orderLifecycle_1.ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}<br />
                 <strong>Action Time (IST):</strong> ${actionTime}
               </p>
-              <p>We will confirm your order after stock verification.</p>
+              <p>Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.</p>
               <p>
                 Need help? Contact
                 <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
@@ -211,18 +422,19 @@ class OrderService {
             for (const adminEmail of adminRecipients) {
                 notificationPromises.push((0, sendEmail_1.default)({
                     to: adminEmail,
-                    subject: `${platformName} | New Order Arrived`,
+                    subject: `${platformName} | New Order Awaiting Verification`,
                     text: [
                         "New order received.",
                         "",
                         `Order ID: ${orderReference}`,
                         `Customer Name: ${user.name}`,
                         `Customer Email: ${user.email || "Not available"}`,
+                        `Customer Type: ${customerType}`,
                         `Account Reference: ${accountReference}`,
-                        "Current status: PLACED",
+                        `Current status: ${orderLifecycle_1.ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}`,
                         `Action Time (IST): ${actionTime}`,
                         "",
-                        `Please review and update status from the admin panel.`,
+                        `Please verify stock and send quotation from the admin panel.`,
                     ].join("\n"),
                     html: `
             <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
@@ -231,11 +443,12 @@ class OrderService {
                 <strong>Order ID:</strong> ${orderReference}<br />
                 <strong>Customer Name:</strong> ${user.name}<br />
                 <strong>Customer Email:</strong> ${user.email || "Not available"}<br />
+                <strong>Customer Type:</strong> ${customerType}<br />
                 <strong>Account Reference:</strong> ${accountReference}<br />
-                <strong>Current status:</strong> PLACED<br />
+                <strong>Current status:</strong> ${orderLifecycle_1.ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}<br />
                 <strong>Action Time (IST):</strong> ${actionTime}
               </p>
-              <p>Please review and update status from the admin panel.</p>
+              <p>Please verify stock and send quotation from the admin panel.</p>
             </div>
           `,
                 }));

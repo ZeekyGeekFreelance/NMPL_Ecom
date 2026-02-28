@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -8,12 +8,20 @@ import { withAuth } from "@/app/components/HOC/WithAuth";
 import MainLayout from "@/app/components/templates/MainLayout";
 import {
   useGetMeQuery,
-  useUpdateMyProfileNameMutation,
+  useUpdateMyProfileMutation,
 } from "@/app/store/apis/UserApi";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
 import useToast from "@/app/hooks/ui/useToast";
 import { useAppDispatch } from "@/app/store/hooks";
 import { setUser } from "@/app/store/slices/AuthSlice";
+import {
+  useCreateAddressMutation,
+  useGetAddressesQuery,
+  useSetDefaultAddressMutation,
+  type Address,
+  type AddressType,
+} from "@/app/store/apis/AddressApi";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import {
   AlertCircle,
   ArrowRight,
@@ -23,7 +31,10 @@ import {
   LayoutDashboard,
   LifeBuoy,
   Mail,
+  MapPin,
+  Phone,
   PackageSearch,
+  PlusCircle,
   ReceiptText,
   Shield,
   User,
@@ -48,6 +59,7 @@ type ProfileUser = {
   accountReference?: string;
   name?: string | null;
   email?: string | null;
+  phone?: string | null;
   role?: string | null;
   avatar?: string | null;
   dealerProfile?: DealerProfile | null;
@@ -55,6 +67,60 @@ type ProfileUser = {
   dealerStatus?: DealerStatus | null;
   dealerBusinessName?: string | null;
   dealerContactPhone?: string | null;
+};
+
+type AddressFormState = {
+  type: AddressType;
+  fullName: string;
+  phoneNumber: string;
+  line1: string;
+  line2: string;
+  landmark: string;
+  city: string;
+  state: string;
+  country: string;
+  pincode: string;
+  isDefault: boolean;
+};
+
+const getEmptyAddressForm = (): AddressFormState => ({
+  type: "HOME",
+  fullName: "",
+  phoneNumber: "",
+  line1: "",
+  line2: "",
+  landmark: "",
+  city: "",
+  state: "",
+  country: "India",
+  pincode: "",
+  isDefault: false,
+});
+
+const parseAddressesPayload = (payload: unknown): Address[] => {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const typedPayload = payload as {
+    addresses?: Address[];
+    data?: { addresses?: Address[] };
+  };
+
+  return typedPayload.addresses || typedPayload.data?.addresses || [];
+};
+
+const parseAddressPayload = (payload: unknown): Address | null => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const typedPayload = payload as {
+    address?: Address;
+    data?: { address?: Address };
+  };
+
+  return typedPayload.address || typedPayload.data?.address || null;
 };
 
 const ACCOUNT_META: Record<
@@ -213,14 +279,31 @@ const getDisplayNameError = (value: string): string | null => {
   return null;
 };
 
+const normalizePhoneNumber = (phone: string): string =>
+  phone.replace(/\s+/g, " ").trim();
+
+const getPhoneNumberError = (value: string): string | null => {
+  if (!value) {
+    return "Phone number is required.";
+  }
+
+  if (!/^[0-9()+\-\s]{7,20}$/.test(value)) {
+    return "Phone number must be 7-20 characters and contain only valid digits/symbols.";
+  }
+
+  return null;
+};
+
 const UserProfile = () => {
   const dispatch = useAppDispatch();
   const { showToast } = useToast();
   const { data, isLoading, error, refetch } = useGetMeQuery(undefined);
-  const [updateMyProfileName, { isLoading: isUpdatingName }] =
-    useUpdateMyProfileNameMutation();
+  const [updateMyProfile, { isLoading: isUpdatingProfile }] =
+    useUpdateMyProfileMutation();
   const [editableName, setEditableName] = useState("");
+  const [editablePhone, setEditablePhone] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const user = (data as { user?: ProfileUser } | undefined)?.user;
 
   const normalizeRole = (value?: string | null): Role => {
@@ -244,19 +327,61 @@ const UserProfile = () => {
   const dealerStatus = (dealerProfile?.status || user?.dealerStatus || "PENDING") as DealerStatus;
   const dealerStatusCopy = DEALER_STATUS_COPY[dealerStatus];
   const normalizedCurrentName = normalizeDisplayName(user?.name || "");
+  const normalizedCurrentPhone = normalizePhoneNumber(user?.phone || "");
   const normalizedEditableName = normalizeDisplayName(editableName);
-  const canSaveName = useMemo(
+  const normalizedEditablePhone = normalizePhoneNumber(editablePhone);
+  const canSaveProfile = useMemo(
     () =>
-      normalizedEditableName.length > 0 &&
-      normalizedEditableName !== normalizedCurrentName &&
-      !isUpdatingName,
-    [normalizedCurrentName, normalizedEditableName, isUpdatingName]
+      !isUpdatingProfile &&
+      (normalizedEditableName !== normalizedCurrentName ||
+        normalizedEditablePhone !== normalizedCurrentPhone),
+    [
+      isUpdatingProfile,
+      normalizedCurrentName,
+      normalizedCurrentPhone,
+      normalizedEditableName,
+      normalizedEditablePhone,
+    ]
+  );
+  const shouldShowAddressBook =
+    accountKind === "USER" || accountKind === "DEALER";
+  const [isAddressFormOpen, setIsAddressFormOpen] = useState(false);
+  const [addressForm, setAddressForm] = useState<AddressFormState>(
+    getEmptyAddressForm()
+  );
+  const {
+    data: addressesResponse,
+    isLoading: isAddressesLoading,
+    isFetching: isAddressesFetching,
+    refetch: refetchAddresses,
+  } = useGetAddressesQuery(undefined, {
+    skip: !shouldShowAddressBook,
+  });
+  const [createAddress, { isLoading: isCreatingAddress }] =
+    useCreateAddressMutation();
+  const [setDefaultAddress, { isLoading: isSettingDefaultAddress }] =
+    useSetDefaultAddressMutation();
+  const addresses = useMemo(
+    () => parseAddressesPayload(addressesResponse),
+    [addressesResponse]
   );
 
   useEffect(() => {
     setEditableName(user?.name || "");
+    setEditablePhone(user?.phone || "");
     setNameError(null);
-  }, [user?.id, user?.name]);
+    setPhoneError(null);
+  }, [user?.id, user?.name, user?.phone]);
+
+  useEffect(() => {
+    if (!shouldShowAddressBook || isAddressesLoading) {
+      return;
+    }
+
+    if (addresses.length === 0) {
+      setIsAddressFormOpen(true);
+    }
+  }, [addresses.length, isAddressesLoading, shouldShowAddressBook]);
 
   const handleNameChange = (value: string) => {
     setEditableName(value);
@@ -265,22 +390,37 @@ const UserProfile = () => {
     }
   };
 
-  const handleSaveName = async () => {
-    const nextName = normalizeDisplayName(editableName);
-    const validationError = getDisplayNameError(nextName);
+  const handlePhoneChange = (value: string) => {
+    setEditablePhone(value);
+    if (phoneError) {
+      setPhoneError(null);
+    }
+  };
 
-    if (validationError) {
-      setNameError(validationError);
+  const handleSaveProfile = async () => {
+    const nextName = normalizeDisplayName(editableName);
+    const nextPhone = normalizePhoneNumber(editablePhone);
+    const nextNameError = getDisplayNameError(nextName);
+    const nextPhoneError = getPhoneNumberError(nextPhone);
+
+    setNameError(nextNameError);
+    setPhoneError(nextPhoneError);
+
+    if (nextNameError || nextPhoneError) {
       return;
     }
 
-    if (!user?.id || nextName === normalizedCurrentName) {
+    if (
+      !user?.id ||
+      (nextName === normalizedCurrentName && nextPhone === normalizedCurrentPhone)
+    ) {
       return;
     }
 
     try {
-      const response = (await updateMyProfileName({
+      const response = (await updateMyProfile({
         name: nextName,
+        phone: nextPhone,
       }).unwrap()) as {
         user?: ProfileUser;
       };
@@ -295,6 +435,7 @@ const UserProfile = () => {
                 updatedUser.accountReference || toAccountReference(updatedUser.id),
               name: updatedUser.name || nextName,
               email: updatedUser.email || user.email || "",
+              phone: updatedUser.phone || nextPhone,
               role: updatedUser.role || role,
               avatar: updatedUser.avatar || null,
               isDealer:
@@ -318,15 +459,92 @@ const UserProfile = () => {
       }
 
       setEditableName(nextName);
+      setEditablePhone(nextPhone);
       setNameError(null);
-      showToast("Profile name updated successfully.", "success");
+      setPhoneError(null);
+      showToast("Profile updated successfully.", "success");
       await refetch();
     } catch (saveError: unknown) {
       const apiMessage =
         typeof saveError === "object" && saveError !== null
           ? (saveError as { data?: { message?: string } }).data?.message
           : null;
-      showToast(apiMessage || "Failed to update profile name.", "error");
+      showToast(apiMessage || "Failed to update profile.", "error");
+    }
+  };
+
+  const handleAddressInputChange = (
+    key: keyof AddressFormState,
+    value: string | boolean
+  ) => {
+    setAddressForm((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
+  };
+
+  const handleCreateAddress = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const requiredFields: Array<keyof AddressFormState> = [
+      "fullName",
+      "phoneNumber",
+      "line1",
+      "city",
+      "state",
+      "country",
+      "pincode",
+    ];
+
+    const hasMissingField = requiredFields.some(
+      (field) => !String(addressForm[field] ?? "").trim()
+    );
+
+    if (hasMissingField) {
+      showToast("Please complete all required address fields.", "error");
+      return;
+    }
+
+    try {
+      const response = await createAddress({
+        type: addressForm.type,
+        fullName: addressForm.fullName.trim(),
+        phoneNumber: addressForm.phoneNumber.trim(),
+        line1: addressForm.line1.trim(),
+        line2: addressForm.line2.trim() || undefined,
+        landmark: addressForm.landmark.trim() || undefined,
+        city: addressForm.city.trim(),
+        state: addressForm.state.trim(),
+        country: addressForm.country.trim(),
+        pincode: addressForm.pincode.trim(),
+        isDefault: addressForm.isDefault,
+      }).unwrap();
+
+      const createdAddress = parseAddressPayload(response);
+      setAddressForm(getEmptyAddressForm());
+      setIsAddressFormOpen(false);
+      await refetchAddresses();
+      showToast(
+        createdAddress
+          ? "Address saved in your account successfully."
+          : "Address saved successfully.",
+        "success"
+      );
+    } catch (addressError: unknown) {
+      showToast(getApiErrorMessage(addressError, "Failed to save address."), "error");
+    }
+  };
+
+  const handleSetDefaultAddress = async (addressId: string) => {
+    try {
+      await setDefaultAddress(addressId).unwrap();
+      await refetchAddresses();
+      showToast("Default address updated.", "success");
+    } catch (addressError: unknown) {
+      showToast(
+        getApiErrorMessage(addressError, "Failed to set default address."),
+        "error"
+      );
     }
   };
 
@@ -450,15 +668,36 @@ const UserProfile = () => {
                         />
                         <button
                           type="button"
-                          onClick={handleSaveName}
-                          disabled={!canSaveName}
+                          onClick={handleSaveProfile}
+                          disabled={!canSaveProfile}
                           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
                         >
-                          {isUpdatingName ? "Saving..." : "Save"}
+                          {isUpdatingProfile ? "Saving..." : "Save"}
                         </button>
                       </div>
                       {nameError && (
                         <p className="mt-1 text-xs text-red-600">{nameError}</p>
+                      )}
+                    </div>
+                    <div className="text-gray-700">
+                      <p className="text-gray-500">Account Phone</p>
+                      <div className="mt-1">
+                        <input
+                          type="tel"
+                          value={editablePhone}
+                          onChange={(event) => handlePhoneChange(event.target.value)}
+                          onBlur={() =>
+                            setPhoneError(
+                              getPhoneNumberError(normalizePhoneNumber(editablePhone))
+                            )
+                          }
+                          maxLength={20}
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          placeholder="Enter your account phone number"
+                        />
+                      </div>
+                      {phoneError && (
+                        <p className="mt-1 text-xs text-red-600">{phoneError}</p>
                       )}
                     </div>
                     <p className="text-gray-700 break-all">
@@ -531,7 +770,7 @@ const UserProfile = () => {
                       </p>
                       <p className="text-gray-700">
                         <span className="text-gray-500">Contact Phone:</span>{" "}
-                        {dealerProfile?.contactPhone || "Not set"}
+                        {dealerProfile?.contactPhone || user.phone || "Not set"}
                       </p>
                       <p className="text-gray-700">
                         <span className="text-gray-500">Approval Date:</span>{" "}
@@ -593,6 +832,224 @@ const UserProfile = () => {
                 </div>
               )}
 
+              {shouldShowAddressBook && (
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <MapPin size={16} className="text-indigo-600" />
+                      <h3 className="text-sm font-semibold text-gray-800">
+                        Saved Addresses
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddressFormOpen((previous) => !previous)}
+                      className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                    >
+                      <PlusCircle size={14} />
+                      {isAddressFormOpen ? "Hide Form" : "Add New Address"}
+                    </button>
+                  </div>
+
+                  {isAddressesLoading ? (
+                    <p className="text-sm text-gray-600">Loading saved addresses...</p>
+                  ) : addresses.length === 0 ? (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      No address saved yet. Add one now for faster checkout.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {addresses.map((address) => (
+                        <div
+                          key={address.id}
+                          className="rounded-md border border-gray-200 bg-gray-50 p-3"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-gray-800">
+                                  {address.fullName}
+                                </p>
+                                <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                                  {address.type}
+                                </span>
+                                {address.isDefault && (
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {address.line1}
+                                {address.line2 ? `, ${address.line2}` : ""}
+                                {address.landmark ? `, ${address.landmark}` : ""}
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                {[address.city, address.state, address.country]
+                                  .filter(Boolean)
+                                  .join(", ")}{" "}
+                                - {address.pincode}
+                              </p>
+                              <p className="text-xs text-gray-600">
+                                Phone: {address.phoneNumber}
+                              </p>
+                            </div>
+
+                            {!address.isDefault && (
+                              <button
+                                type="button"
+                                onClick={() => void handleSetDefaultAddress(address.id)}
+                                disabled={isSettingDefaultAddress}
+                                className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Set Default
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {isAddressesFetching && (
+                    <p className="mt-2 text-xs text-gray-500">Refreshing address list...</p>
+                  )}
+
+                  {isAddressFormOpen && (
+                    <form
+                      onSubmit={handleCreateAddress}
+                      className="mt-4 space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3"
+                    >
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-gray-700">
+                          Address Type
+                        </label>
+                        <select
+                          value={addressForm.type}
+                          onChange={(event) =>
+                            handleAddressInputChange(
+                              "type",
+                              event.target.value as AddressType
+                            )
+                          }
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        >
+                          <option value="HOME">Home</option>
+                          <option value="OFFICE">Office</option>
+                          <option value="WAREHOUSE">Warehouse</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <input
+                          value={addressForm.fullName}
+                          onChange={(event) =>
+                            handleAddressInputChange("fullName", event.target.value)
+                          }
+                          placeholder="Full Name *"
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                          required
+                        />
+                        <input
+                          value={addressForm.phoneNumber}
+                          onChange={(event) =>
+                            handleAddressInputChange("phoneNumber", event.target.value)
+                          }
+                          placeholder="Phone Number *"
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                          required
+                        />
+                      </div>
+
+                      <input
+                        value={addressForm.line1}
+                        onChange={(event) =>
+                          handleAddressInputChange("line1", event.target.value)
+                        }
+                        placeholder="Address Line 1 *"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        required
+                      />
+                      <input
+                        value={addressForm.line2}
+                        onChange={(event) =>
+                          handleAddressInputChange("line2", event.target.value)
+                        }
+                        placeholder="Address Line 2 (optional)"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                      />
+                      <input
+                        value={addressForm.landmark}
+                        onChange={(event) =>
+                          handleAddressInputChange("landmark", event.target.value)
+                        }
+                        placeholder="Landmark (optional)"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                      />
+
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <input
+                          value={addressForm.city}
+                          onChange={(event) =>
+                            handleAddressInputChange("city", event.target.value)
+                          }
+                          placeholder="City *"
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                          required
+                        />
+                        <input
+                          value={addressForm.state}
+                          onChange={(event) =>
+                            handleAddressInputChange("state", event.target.value)
+                          }
+                          placeholder="State *"
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                          required
+                        />
+                        <input
+                          value={addressForm.country}
+                          onChange={(event) =>
+                            handleAddressInputChange("country", event.target.value)
+                          }
+                          placeholder="Country *"
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                          required
+                        />
+                        <input
+                          value={addressForm.pincode}
+                          onChange={(event) =>
+                            handleAddressInputChange("pincode", event.target.value)
+                          }
+                          placeholder="Pincode *"
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                          required
+                        />
+                      </div>
+
+                      <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={addressForm.isDefault}
+                          onChange={(event) =>
+                            handleAddressInputChange("isDefault", event.target.checked)
+                          }
+                        />
+                        Set as default address
+                      </label>
+
+                      <button
+                        type="submit"
+                        disabled={isCreatingAddress}
+                        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                      >
+                        {isCreatingAddress ? "Saving..." : "Save Address"}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
               <div className="rounded-xl border border-gray-200 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <PackageSearch size={16} className="text-indigo-600" />
@@ -614,7 +1071,7 @@ const UserProfile = () => {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-4">
                 <div className="rounded-xl border border-gray-200 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Mail size={16} className="text-indigo-600" />
@@ -622,6 +1079,15 @@ const UserProfile = () => {
                   </div>
                   <p className="text-sm text-gray-700 break-all">
                     {user.email || "Not provided"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Phone size={16} className="text-indigo-600" />
+                    <p className="text-sm font-semibold text-gray-800">Account Phone</p>
+                  </div>
+                  <p className="text-sm text-gray-700 break-all">
+                    {user.phone || "Not provided"}
                   </p>
                 </div>
                 <div className="rounded-xl border border-gray-200 p-4">

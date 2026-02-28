@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import MainLayout from "@/app/components/templates/MainLayout";
 import ShippingAddressCard from "../ShippingAddressCard";
 import OrderSummary from "../OrderSummary";
@@ -13,7 +13,13 @@ import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const OrderTrackingPage = () => {
   const { orderId } = useParams();
+  const searchParams = useSearchParams();
   const normalizedOrderId = Array.isArray(orderId) ? orderId[0] : orderId;
+  const quotationActionParam = searchParams.get("quotationAction");
+  const initialQuotationAction =
+    quotationActionParam === "pay" || quotationActionParam === "reject"
+      ? quotationActionParam
+      : null;
   const { data, isLoading, error } = useGetOrderQuery(normalizedOrderId, {
     skip: !normalizedOrderId,
   });
@@ -46,7 +52,10 @@ const OrderTrackingPage = () => {
           <div className="col-span-2 space-y-6">
             <OrderStatus order={order} />
 
-            <OrderSummary order={order} />
+            <OrderSummary
+              order={order}
+              initialQuotationAction={initialQuotationAction}
+            />
           </div>
 
           <ShippingAddressCard order={order} />

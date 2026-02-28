@@ -13,10 +13,14 @@ interface InvoicePdfItem {
 }
 
 interface InvoiceAddress {
-  street: string;
+  fullName?: string;
+  phoneNumber?: string;
+  line1: string;
+  line2?: string | null;
+  landmark?: string | null;
   city: string;
   state: string;
-  zip: string;
+  pincode: string;
   country: string;
 }
 
@@ -29,6 +33,9 @@ interface InvoicePdfInput {
   customerEmail: string;
   customerType: "DEALER" | "USER";
   items: InvoicePdfItem[];
+  subtotalAmount: number;
+  deliveryCharge: number;
+  deliveryMode: string;
   totalAmount: number;
   billingAddress?: InvoiceAddress | null;
 }
@@ -123,9 +130,21 @@ export default function generateInvoicePdf(
       }
       doc.text(invoice.customerEmail);
       if (invoice.billingAddress) {
-        doc.text(invoice.billingAddress.street);
+        if (invoice.billingAddress.fullName) {
+          doc.text(invoice.billingAddress.fullName);
+        }
+        if (invoice.billingAddress.phoneNumber) {
+          doc.text(invoice.billingAddress.phoneNumber);
+        }
+        doc.text(invoice.billingAddress.line1);
+        if (invoice.billingAddress.line2) {
+          doc.text(invoice.billingAddress.line2);
+        }
+        if (invoice.billingAddress.landmark) {
+          doc.text(`Landmark: ${invoice.billingAddress.landmark}`);
+        }
         doc.text(
-          `${invoice.billingAddress.city}, ${invoice.billingAddress.state} ${invoice.billingAddress.zip}`
+          `${invoice.billingAddress.city}, ${invoice.billingAddress.state} ${invoice.billingAddress.pincode}`
         );
         doc.text(invoice.billingAddress.country);
       }
@@ -140,8 +159,24 @@ export default function generateInvoicePdf(
       doc.moveDown(0.8);
       doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#d1d5db").stroke();
       doc.moveDown(0.8);
+      doc.font(fonts.regular).fontSize(10);
+      doc.text(`Subtotal: ${formatCurrency(invoice.subtotalAmount)}`, 50, doc.y, {
+        align: "right",
+      });
+      doc.moveDown(0.3);
+      doc.text(
+        `Delivery (${invoice.deliveryMode}): ${formatCurrency(
+          invoice.deliveryCharge
+        )}`,
+        50,
+        doc.y,
+        {
+          align: "right",
+        }
+      );
+      doc.moveDown(0.3);
       doc.font(fonts.bold).fontSize(12);
-      doc.text(`Total: ${formatCurrency(invoice.totalAmount)}`, 50, doc.y, {
+      doc.text(`Final Total: ${formatCurrency(invoice.totalAmount)}`, 50, doc.y, {
         align: "right",
       });
 
