@@ -14,16 +14,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
+const config_1 = require("@/config");
 const optionalAuth = (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
     const accessToken = req.cookies.accessToken;
     if (!accessToken) {
         return next();
     }
-    if (!process.env.ACCESS_TOKEN_SECRET) {
-        return next();
-    }
     try {
-        const decoded = jsonwebtoken_1.default.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
+        const decoded = jsonwebtoken_1.default.verify(accessToken, config_1.config.auth.accessTokenSecret);
         const user = yield database_config_1.default.user.findUnique({
             where: { id: String(decoded.id) },
             select: { id: true, role: true },

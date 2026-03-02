@@ -15,7 +15,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CartRepository = void 0;
 const client_1 = require("@prisma/client");
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
-const isDevelopment = process.env.NODE_ENV !== "production";
+const config_1 = require("@/config");
+const isDevelopment = config_1.config.isDevelopment;
 const debugLog = (...args) => {
     if (isDevelopment) {
         console.log(...args);
@@ -234,21 +235,23 @@ class CartRepository {
     }
     clearCart(userId, tx) {
         return __awaiter(this, void 0, void 0, function* () {
-            debugLog("🔍 [CART REPOSITORY] clearCart called");
-            debugLog("🔍 [CART REPOSITORY] userId:", userId);
+            debugLog("[CART REPOSITORY] clearCart called");
+            debugLog("[CART REPOSITORY] userId:", userId);
             const client = tx || database_config_1.default;
-            const cart = yield client.cart.findFirst({
-                where: { userId },
+            const activeCarts = yield client.cart.findMany({
+                where: { userId, status: client_1.CART_STATUS.ACTIVE },
+                select: { id: true },
             });
-            debugLog("🔍 [CART REPOSITORY] Cart found to be cleared:", cart);
-            if (!cart) {
-                debugLog("🔍 [CART REPOSITORY] No cart found to clear");
+            const activeCartIds = activeCarts.map((cart) => cart.id);
+            debugLog("[CART REPOSITORY] Active cart IDs to clear:", activeCartIds);
+            if (!activeCartIds.length) {
+                debugLog("[CART REPOSITORY] No active cart found to clear");
                 return;
             }
             const result = yield client.cartItem.deleteMany({
-                where: { cartId: cart.id },
+                where: { cartId: { in: activeCartIds } },
             });
-            debugLog("🔍 [CART REPOSITORY] Cart items cleared:", result);
+            debugLog("[CART REPOSITORY] Active cart items cleared:", result);
             return result;
         });
     }

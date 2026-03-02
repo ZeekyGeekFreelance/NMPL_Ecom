@@ -1,28 +1,18 @@
 import axios from "axios";
 import logger from "@/infra/winston/logger";
+import { config } from "@/config";
 
 interface SendSmsInput {
   to: string;
   body: string;
 }
 
-const resolveSmsProvider = (): "TWILIO" | "LOG" => {
-  const configuredProvider = (process.env.SMS_PROVIDER || "").trim().toUpperCase();
-  if (configuredProvider === "LOG") {
-    return "LOG";
-  }
-
-  if (configuredProvider === "TWILIO") {
-    return "TWILIO";
-  }
-
-  return process.env.NODE_ENV === "production" ? "TWILIO" : "LOG";
-};
+const resolveSmsProvider = (): "TWILIO" | "LOG" => config.sms.provider;
 
 const sendViaTwilio = async ({ to, body }: SendSmsInput): Promise<boolean> => {
-  const accountSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
-  const authToken = (process.env.TWILIO_AUTH_TOKEN || "").trim();
-  const fromNumber = (process.env.TWILIO_FROM_NUMBER || "").trim();
+  const accountSid = config.sms.twilioAccountSid || "";
+  const authToken = config.sms.twilioAuthToken || "";
+  const fromNumber = config.sms.twilioFromNumber || "";
 
   if (!accountSid || !authToken || !fromNumber) {
     logger.error(

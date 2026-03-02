@@ -78,12 +78,28 @@ const OrderSummary = ({
   const quotationLogs = Array.isArray(order?.quotationLogs)
     ? order.quotationLogs
     : [];
-  const shippingCost = 75.0;
-  const platformFees = 94.0;
-  const subtotal = order.amount;
+  const subtotal = useMemo(() => Number(order?.subtotalAmount ?? order?.amount ?? 0), [
+    order?.subtotalAmount,
+    order?.amount,
+  ]);
+  const deliveryCharge = useMemo(() => {
+    if (typeof order?.deliveryCharge === "number") {
+      return order.deliveryCharge;
+    }
+    if (typeof order?.address?.deliveryCharge === "number") {
+      return order.address.deliveryCharge;
+    }
+    return 0;
+  }, [order?.address?.deliveryCharge, order?.deliveryCharge]);
+  const finalTotal = useMemo(() => {
+    if (typeof order?.amount === "number") {
+      return order.amount;
+    }
+    return Number((subtotal + deliveryCharge).toFixed(2));
+  }, [order?.amount, subtotal, deliveryCharge]);
   const total = useMemo(() => {
-    return formatPrice(subtotal + shippingCost + platformFees);
-  }, [subtotal, shippingCost, platformFees, formatPrice]);
+    return formatPrice(finalTotal);
+  }, [finalTotal, formatPrice]);
 
   const handleDownloadInvoice = useCallback(async () => {
     if (!canDownloadInvoice) {
@@ -363,15 +379,9 @@ const OrderSummary = ({
           </div>
         </div>
         <div className="flex justify-between text-gray-700">
-          <p>Shipping Cost</p>
+          <p>Delivery Charge</p>
           <span className="font-medium text-gray-800">
-            {formatPrice(shippingCost)}
-          </span>
-        </div>
-        <div className="flex justify-between text-gray-700">
-          <p>Platform Fees</p>
-          <span className="font-medium text-gray-800">
-            {formatPrice(platformFees)}
+            {formatPrice(deliveryCharge)}
           </span>
         </div>
         <div className="flex justify-between pt-2 border-t border-gray-100">

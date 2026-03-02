@@ -6,6 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const protect_1 = __importDefault(require("@/shared/middlewares/protect"));
 const checkout_factory_1 = require("./checkout.factory");
+const validateDto_1 = require("@/shared/middlewares/validateDto");
+const checkout_dto_1 = require("./checkout.dto");
+const rateLimiter_1 = require("@/shared/middlewares/rateLimiter");
 const router = express_1.default.Router();
 const checkoutController = (0, checkout_factory_1.makeCheckoutController)();
 /**
@@ -26,5 +29,6 @@ const checkoutController = (0, checkout_factory_1.makeCheckoutController)();
  *       403:
  *         description: Forbidden. Only customer (`USER`) accounts can place orders.
  */
-router.post("/", protect_1.default, checkoutController.initiateCheckout);
+router.post("/summary", protect_1.default, (0, validateDto_1.validateDto)(checkout_dto_1.CheckoutSelectionDto), checkoutController.getCheckoutSummary);
+router.post("/", protect_1.default, rateLimiter_1.orderRateLimiter, (0, validateDto_1.validateDto)(checkout_dto_1.CheckoutSelectionDto), checkoutController.initiateCheckout);
 exports.default = router;

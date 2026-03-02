@@ -20,8 +20,6 @@ COPY . .
 # Build TypeScript
 RUN npm run build
 
-# Set environment variables
-ENV PORT=5000
 EXPOSE 5000
 
 # Run compiled server

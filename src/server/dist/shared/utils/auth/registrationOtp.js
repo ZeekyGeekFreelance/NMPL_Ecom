@@ -15,19 +15,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isRegistrationPhoneOtpEnabled = exports.verifyAndConsumeRegistrationOtp = exports.clearRegistrationOtp = exports.createRegistrationOtp = exports.RegistrationOtpRateLimitError = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
-const OTP_KEY_PREFIX = "registration:otp:";
-const OTP_ATTEMPT_KEY_PREFIX = "registration:otp:attempts:";
-const OTP_COOLDOWN_KEY_PREFIX = "registration:otp:cooldown:";
-const toPositiveInteger = (value, fallbackValue) => {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackValue;
-};
-const OTP_EXPIRY_SECONDS = toPositiveInteger(process.env.REGISTRATION_OTP_EXPIRY_SECONDS, 10 * 60);
-const OTP_RESEND_COOLDOWN_SECONDS = toPositiveInteger(process.env.REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS, 60);
-const OTP_MAX_VERIFY_ATTEMPTS = toPositiveInteger(process.env.REGISTRATION_OTP_MAX_ATTEMPTS, 5);
-const REGISTRATION_PHONE_OTP_ENABLED = (process.env.REGISTRATION_PHONE_OTP_ENABLED || "false")
-    .trim()
-    .toLowerCase() === "true";
+const config_1 = require("@/config");
+const cacheKey_1 = require("@/shared/utils/cacheKey");
+const OTP_EXPIRY_SECONDS = config_1.config.registrationOtp.expirySeconds;
+const OTP_RESEND_COOLDOWN_SECONDS = config_1.config.registrationOtp.resendCooldownSeconds;
+const OTP_MAX_VERIFY_ATTEMPTS = config_1.config.registrationOtp.maxAttempts;
+const REGISTRATION_PHONE_OTP_ENABLED = config_1.config.registrationOtp.phoneOtpEnabled;
 class RegistrationOtpRateLimitError extends Error {
     constructor(retryAfterSeconds) {
         super(`OTP recently sent. Please wait ${retryAfterSeconds} seconds before requesting a new one.`);
@@ -38,9 +31,9 @@ class RegistrationOtpRateLimitError extends Error {
 exports.RegistrationOtpRateLimitError = RegistrationOtpRateLimitError;
 const normalizeEmail = (email) => email.trim().toLowerCase();
 const normalizePhone = (phone) => phone.trim();
-const buildOtpKey = (email) => `${OTP_KEY_PREFIX}${normalizeEmail(email)}`;
-const buildAttemptKey = (email) => `${OTP_ATTEMPT_KEY_PREFIX}${normalizeEmail(email)}`;
-const buildCooldownKey = (email) => `${OTP_COOLDOWN_KEY_PREFIX}${normalizeEmail(email)}`;
+const buildOtpKey = (email) => (0, cacheKey_1.cacheKey)("registration", "otp", normalizeEmail(email));
+const buildAttemptKey = (email) => (0, cacheKey_1.cacheKey)("registration", "otp", "attempts", normalizeEmail(email));
+const buildCooldownKey = (email) => (0, cacheKey_1.cacheKey)("registration", "otp", "cooldown", normalizeEmail(email));
 const hashOtp = (identifier, otpCode, channel) => crypto_1.default
     .createHash("sha256")
     .update(`${identifier}:${channel}:${otpCode.trim()}`)

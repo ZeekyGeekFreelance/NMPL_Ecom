@@ -50,12 +50,20 @@ class UpdateOwnProfileDto {
 }
 exports.UpdateOwnProfileDto = UpdateOwnProfileDto;
 __decorate([
-    (0, class_validator_1.IsNotEmpty)({ message: "Name is required" }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)({ message: "Name must be a string" }),
     (0, class_validator_1.MinLength)(2, { message: "Name must be at least 2 characters long" }),
     (0, class_validator_1.MaxLength)(80, { message: "Name must be at most 80 characters long" }),
     __metadata("design:type", String)
 ], UpdateOwnProfileDto.prototype, "name", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)({ message: "Phone number must be a string" }),
+    (0, class_validator_1.Matches)(/^[0-9()+\-\s]{7,20}$/, {
+        message: "Phone number must be 7-20 characters and contain only valid digits/symbols",
+    }),
+    __metadata("design:type", String)
+], UpdateOwnProfileDto.prototype, "phone", void 0);
 class UserEmailDto {
 }
 exports.UserEmailDto = UserEmailDto;

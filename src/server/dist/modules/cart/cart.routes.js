@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cart_factory_1 = require("./cart.factory");
-const optionalAuth_1 = __importDefault(require("@/shared/middlewares/optionalAuth"));
+const protect_1 = __importDefault(require("@/shared/middlewares/protect"));
 const router = express_1.default.Router();
 const cartController = (0, cart_factory_1.makeCartController)();
 /**
@@ -22,7 +22,7 @@ const cartController = (0, cart_factory_1.makeCartController)();
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/", optionalAuth_1.default, cartController.getCart);
+router.get("/", protect_1.default, cartController.getCart);
 /**
  * @swagger
  * /cart/count:
@@ -37,7 +37,7 @@ router.get("/", optionalAuth_1.default, cartController.getCart);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/count", optionalAuth_1.default, cartController.getCartCount);
+router.get("/count", protect_1.default, cartController.getCartCount);
 /**
  * @swagger
  * /cart:
@@ -63,7 +63,7 @@ router.get("/count", optionalAuth_1.default, cartController.getCartCount);
  *       400:
  *         description: Invalid input data.
  */
-router.post("/", optionalAuth_1.default, cartController.addToCart);
+router.post("/", protect_1.default, cartController.addToCart);
 /**
  * @swagger
  * /cart/item/{itemId}:
@@ -96,7 +96,7 @@ router.post("/", optionalAuth_1.default, cartController.addToCart);
  *       404:
  *         description: Cart item not found.
  */
-router.put("/item/:itemId", optionalAuth_1.default, cartController.updateCartItem);
+router.put("/item/:itemId", protect_1.default, cartController.updateCartItem);
 /**
  * @swagger
  * /cart/item/{itemId}:
@@ -118,7 +118,7 @@ router.put("/item/:itemId", optionalAuth_1.default, cartController.updateCartIte
  *       404:
  *         description: Cart item not found.
  */
-router.delete("/item/:itemId", optionalAuth_1.default, cartController.removeFromCart);
+router.delete("/item/:itemId", protect_1.default, cartController.removeFromCart);
 /**
  * @swagger
  * /cart/merge:
@@ -133,5 +133,5 @@ router.delete("/item/:itemId", optionalAuth_1.default, cartController.removeFrom
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.post("/merge", optionalAuth_1.default, cartController.mergeCarts);
+router.post("/merge", protect_1.default, cartController.mergeCarts);
 exports.default = router;

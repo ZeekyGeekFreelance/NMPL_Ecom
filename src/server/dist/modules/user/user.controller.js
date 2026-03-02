@@ -17,7 +17,8 @@ const asyncHandler_1 = __importDefault(require("@/shared/utils/asyncHandler"));
 const sendResponse_1 = __importDefault(require("@/shared/utils/sendResponse"));
 const logs_factory_1 = require("../logs/logs.factory");
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
-const isDevelopment = process.env.NODE_ENV !== "production";
+const config_1 = require("@/config");
+const isDevelopment = config_1.config.isDevelopment;
 const debugLog = (...args) => {
     if (isDevelopment) {
         console.log(...args);
@@ -67,9 +68,10 @@ class UserController {
             if (!currentUserId) {
                 throw new AppError_1.default(401, "User not authenticated");
             }
-            const { name } = req.body;
+            const { name, phone } = req.body;
             const user = yield this.userService.updateCurrentUserProfile(currentUserId, {
                 name,
+                phone,
             });
             (0, sendResponse_1.default)(res, 200, {
                 data: { user },

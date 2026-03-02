@@ -4,9 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "repo:sanity": "node ./scripts/repo-sanity-proxy.js",
+    "env:check": "node ./scripts/validate-env.js",
+    "build": "npm run repo:sanity && npm run env:check -- --production && node ./scripts/clean-build.js && node ./scripts/assert-determinism.js pre && next build && node ./scripts/assert-determinism.js post",
     "start": "next start",
     "lint": "next lint"
+  },
+  "engines": {
+    "node": ">=22 <23"
   },
   "dependencies": {
     "@apollo/client": "^3.13.7",

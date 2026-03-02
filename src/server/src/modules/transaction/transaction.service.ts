@@ -10,7 +10,10 @@ import {
   toOrderReference,
 } from "@/shared/utils/accountReference";
 import sendEmail from "@/shared/utils/sendEmail";
-import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
+import {
+  getPlatformName,
+  getSupportEmail,
+} from "@/shared/utils/branding";
 import prisma from "@/infra/database/database.config";
 import { ORDER_QUOTATION_LOG_EVENT, ROLE } from "@prisma/client";
 import { formatDateTimeInIST } from "@/shared/utils/dateTime";
@@ -24,8 +27,7 @@ import {
   ORDER_STATUS_TRANSITIONS,
   type OrderLifecycleStatus,
 } from "@/shared/utils/orderLifecycle";
-
-const fallbackPortalUrl = "http://localhost:3000";
+import { config } from "@/config";
 
 const userFacingStatusLabel: Record<OrderLifecycleStatus, string> = {
   PENDING_VERIFICATION: "Pending Verification",
@@ -148,17 +150,10 @@ export class TransactionService {
   }
 
   private resolvePortalUrl(): string {
-    const configuredUrl =
-      process.env.CLIENT_URL ||
-      process.env.CLIENT_URL_DEV ||
-      process.env.CLIENT_URL_PROD ||
-      "";
-
-    if (configuredUrl.trim()) {
-      return configuredUrl.replace(/\/+$/, "");
-    }
-
-    return fallbackPortalUrl;
+    const configuredUrl = config.isProduction
+      ? config.urls.clientProd
+      : config.urls.clientDev;
+    return configuredUrl.replace(/\/+$/, "");
   }
 
   private formatCurrency(value: number): string {
@@ -966,13 +961,13 @@ export class TransactionService {
 
     await this.notifyPromotedWaitlistedOrders(updateResult.promotedOrderIds);
 
-    if (updateResult.effectiveStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED) {
+    if (updateResult.effectiveStatus === ORDER_LIFECYCLE_STATUS.DELIVERED) {
       this.invoiceService
         .generateAndSendInvoiceForOrder(transaction.orderId)
         .catch(async (error: unknown) => {
           if (this.invoiceService.isInvoiceTableMissing(error)) {
             await this.logsService.warn(
-              "Invoice table is missing. Skipping automated billing after order confirmation.",
+              "Invoice table is missing. Skipping automated billing after order delivery.",
               { orderId: transaction.orderId }
             );
             return;
@@ -982,7 +977,7 @@ export class TransactionService {
             error instanceof Error ? error.message : "Unknown invoice error";
 
           await this.logsService.error(
-            "Automated invoice generation failed after order confirmation",
+            "Automated invoice generation failed after order delivery",
             {
               orderId: transaction.orderId,
               transactionId: resolvedId,

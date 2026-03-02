@@ -17,38 +17,31 @@ exports.generateAccessToken = generateAccessToken;
 exports.generateRefreshToken = generateRefreshToken;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
+const crypto_1 = __importDefault(require("crypto"));
+const config_1 = require("@/config");
+const cacheKey_1 = require("@/shared/utils/cacheKey");
 function generateAccessToken(id) {
-    const accessSecret = process.env.ACCESS_TOKEN_SECRET;
-    if (!accessSecret) {
-        throw new Error("ACCESS_TOKEN_SECRET is not configured");
-    }
-    return jsonwebtoken_1.default.sign({ id }, accessSecret, {
-        expiresIn: "15m",
+    return jsonwebtoken_1.default.sign({ id }, config_1.config.auth.accessTokenSecret, {
+        expiresIn: config_1.config.auth.accessTtlSeconds,
     });
 }
 function generateRefreshToken(id, absExp) {
-    const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
-    if (!refreshSecret) {
-        throw new Error("REFRESH_TOKEN_SECRET is not configured");
-    }
-    const absoluteExpiration = absExp || Math.floor(Date.now() / 1000) + 86400;
+    const absoluteExpiration = absExp ||
+        Math.floor(Date.now() / 1000) + config_1.config.auth.refreshAbsoluteTtlSeconds;
     const ttl = absoluteExpiration - Math.floor(Date.now() / 1000);
-    return jsonwebtoken_1.default.sign({ id, absExp: absoluteExpiration }, refreshSecret, {
+    (0, cacheKey_1.assertFiniteTtl)(ttl, "refresh-token");
+    return jsonwebtoken_1.default.sign({ id, absExp: absoluteExpiration }, config_1.config.auth.refreshTokenSecret, {
         expiresIn: ttl,
     });
 }
+const tokenHash = (token) => crypto_1.default.createHash("sha256").update(token).digest("hex");
 const blacklistToken = (token, ttl) => __awaiter(void 0, void 0, void 0, function* () {
-    yield redis_1.default.set(`blacklist:${token}`, "blacklisted", "EX", ttl);
+    (0, cacheKey_1.assertFiniteTtl)(ttl, "token-blacklist");
+    yield redis_1.default.set((0, cacheKey_1.cacheKey)("auth", "blacklist", tokenHash(token)), "blacklisted", "EX", ttl);
 });
 exports.blacklistToken = blacklistToken;
 const isTokenBlacklisted = (token) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const result = yield redis_1.default.get(`blacklist:${token}`);
-        return result !== null;
-    }
-    catch (error) {
-        // Silently handle Redis errors - token not in Redis is treated as not blacklisted
-        return false;
-    }
+    const result = yield redis_1.default.get((0, cacheKey_1.cacheKey)("auth", "blacklist", tokenHash(token)));
+    return result !== null;
 });
 exports.isTokenBlacklisted = isTokenBlacklisted;

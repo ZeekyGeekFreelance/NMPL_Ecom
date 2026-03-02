@@ -68,6 +68,9 @@ class InvoiceRepository {
                     order: {
                         select: {
                             id: true,
+                            subtotalAmount: true,
+                            deliveryCharge: true,
+                            deliveryMode: true,
                             amount: true,
                             status: true,
                             customerRoleSnapshot: true,
@@ -101,6 +104,9 @@ class InvoiceRepository {
                     order: {
                         select: {
                             id: true,
+                            subtotalAmount: true,
+                            deliveryCharge: true,
+                            deliveryMode: true,
                             amount: true,
                             status: true,
                             customerRoleSnapshot: true,

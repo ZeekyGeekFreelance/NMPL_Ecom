@@ -1,9 +1,9 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
+import { config, isAllowedOrigin } from "@/config";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
 const debugLog = (...args: unknown[]) => {
-  if (isDevelopment) {
+  if (config.isDevelopment) {
     console.log(...args);
   }
 };
@@ -14,10 +14,13 @@ export class SocketManager {
   constructor(httpServer: HTTPServer) {
     this.io = new SocketIOServer(httpServer, {
       cors: {
-        origin:
-          process.env.NODE_ENV === "production"
-            ? ["https://ecommerce-nu-rosy.vercel.app"]
-            : ["http://localhost:3000", "http://localhost:5173"],
+        origin: (origin, callback) => {
+          if (isAllowedOrigin(origin)) {
+            callback(null, true);
+            return;
+          }
+          callback(new Error(`Origin not allowed by Socket CORS: ${origin}`));
+        },
         methods: ["GET", "POST"],
         credentials: true,
       },

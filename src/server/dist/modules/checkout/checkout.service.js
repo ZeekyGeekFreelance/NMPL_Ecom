@@ -14,9 +14,14 @@ class CheckoutService {
     constructor(orderService) {
         this.orderService = orderService;
     }
-    placeOrder(userId, cartId) {
+    getCheckoutSummary(userId, data) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.orderService.createOrderFromCart(userId, cartId);
+            return this.orderService.buildCheckoutSummaryFromUserCart(userId, data.addressId, data.deliveryMode);
+        });
+    }
+    placeOrder(userId, cartId, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return this.orderService.createOrderFromCart(userId, cartId, data.addressId, data.deliveryMode);
         });
     }
 }

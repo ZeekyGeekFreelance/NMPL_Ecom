@@ -15,26 +15,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AddressRepository = void 0;
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
 class AddressRepository {
-    createAddress(data, tx) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return tx === null || tx === void 0 ? void 0 : tx.address.create({
-                data: {
-                    orderId: data.orderId,
-                    userId: data.userId,
-                    city: data.city,
-                    state: data.state,
-                    street: data.street,
-                    country: data.country,
-                    zip: data.zip,
-                },
-            });
-        });
-    }
     findAddressesByUserId(userId) {
         return __awaiter(this, void 0, void 0, function* () {
             return database_config_1.default.address.findMany({
                 where: { userId },
-                orderBy: { createdAt: "desc" },
+                orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }],
             });
         });
     }
@@ -45,9 +30,57 @@ class AddressRepository {
             });
         });
     }
-    deleteAddress(addressId) {
+    createAddress(data, tx) {
         return __awaiter(this, void 0, void 0, function* () {
-            return database_config_1.default.address.delete({
+            const client = tx || database_config_1.default;
+            return client.address.create({
+                data,
+            });
+        });
+    }
+    updateAddress(addressId, data, tx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const client = tx || database_config_1.default;
+            return client.address.update({
+                where: { id: addressId },
+                data,
+            });
+        });
+    }
+    unsetDefaultAddresses(userId, tx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const client = tx || database_config_1.default;
+            yield client.address.updateMany({
+                where: { userId, isDefault: true },
+                data: { isDefault: false },
+            });
+        });
+    }
+    countUserAddresses(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return database_config_1.default.address.count({
+                where: { userId },
+            });
+        });
+    }
+    findNextAddressForDefault(userId, excludeAddressId, tx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const client = tx || database_config_1.default;
+            return client.address.findFirst({
+                where: {
+                    userId,
+                    id: {
+                        not: excludeAddressId,
+                    },
+                },
+                orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+            });
+        });
+    }
+    deleteAddress(addressId, tx) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const client = tx || database_config_1.default;
+            return client.address.delete({
                 where: { id: addressId },
             });
         });

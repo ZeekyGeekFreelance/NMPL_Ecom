@@ -5,12 +5,34 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const winston_1 = __importDefault(require("winston"));
 const path_1 = __importDefault(require("path"));
-const logFormat = winston_1.default.format.printf((info) => {
-    return `[${info.timestamp}] ${info.level.toUpperCase()}: ${info.message}`;
+const config_1 = require("@/config");
+const SENSITIVE_KEY_PATTERN = /(password|token|secret|authorization|cookie|api[-_]?key)/i;
+const sanitizeValue = (value) => {
+    if (Array.isArray(value)) {
+        return value.map((entry) => sanitizeValue(entry));
+    }
+    if (value && typeof value === "object") {
+        const source = value;
+        const sanitized = {};
+        for (const [key, entry] of Object.entries(source)) {
+            sanitized[key] = SENSITIVE_KEY_PATTERN.test(key)
+                ? "[REDACTED]"
+                : sanitizeValue(entry);
+        }
+        return sanitized;
+    }
+    return value;
+};
+const sanitizeFormat = winston_1.default.format((info) => {
+    const sanitized = sanitizeValue(info);
+    if (!("traceId" in sanitized)) {
+        sanitized.traceId = "system";
+    }
+    return sanitized;
 });
 const logger = winston_1.default.createLogger({
-    level: "info",
-    format: winston_1.default.format.combine(winston_1.default.format.timestamp(), winston_1.default.format.colorize(), logFormat),
+    level: config_1.config.isDevelopment ? "debug" : "info",
+    format: winston_1.default.format.combine(winston_1.default.format.timestamp(), sanitizeFormat(), winston_1.default.format.errors({ stack: !config_1.config.isProduction }), winston_1.default.format.json()),
     transports: [
         new winston_1.default.transports.Console(),
         new winston_1.default.transports.File({

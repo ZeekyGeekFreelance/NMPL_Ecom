@@ -14,22 +14,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isTokenBlacklisted = exports.blacklistToken = void 0;
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
-const logger_1 = __importDefault(require("@/infra/winston/logger"));
+const crypto_1 = __importDefault(require("crypto"));
+const cacheKey_1 = require("@/shared/utils/cacheKey");
 // Blacklist token in Redis
 const blacklistToken = (token, ttl) => __awaiter(void 0, void 0, void 0, function* () {
-    yield redis_1.default.set(`blacklist:${token}`, "blacklisted", "EX", ttl);
+    (0, cacheKey_1.assertFiniteTtl)(ttl, "token-blacklist");
+    const tokenHash = crypto_1.default.createHash("sha256").update(token).digest("hex");
+    yield redis_1.default.set((0, cacheKey_1.cacheKey)("auth", "blacklist", tokenHash), "blacklisted", "EX", ttl);
 });
 exports.blacklistToken = blacklistToken;
 // Check if token is blacklisted
 const isTokenBlacklisted = (token) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const result = yield redis_1.default.get(`blacklist:${token}`);
-        return result !== null;
-    }
-    catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger_1.default.warn(`[auth.redisUtils] Redis lookup failed: ${message}`);
-        return false;
-    }
+    const tokenHash = crypto_1.default.createHash("sha256").update(token).digest("hex");
+    const result = yield redis_1.default.get((0, cacheKey_1.cacheKey)("auth", "blacklist", tokenHash));
+    return result !== null;
 });
 exports.isTokenBlacklisted = isTokenBlacklisted;

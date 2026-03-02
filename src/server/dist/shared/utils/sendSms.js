@@ -14,20 +14,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const axios_1 = __importDefault(require("axios"));
 const logger_1 = __importDefault(require("@/infra/winston/logger"));
-const resolveSmsProvider = () => {
-    const configuredProvider = (process.env.SMS_PROVIDER || "").trim().toUpperCase();
-    if (configuredProvider === "LOG") {
-        return "LOG";
-    }
-    if (configuredProvider === "TWILIO") {
-        return "TWILIO";
-    }
-    return process.env.NODE_ENV === "production" ? "TWILIO" : "LOG";
-};
+const config_1 = require("@/config");
+const resolveSmsProvider = () => config_1.config.sms.provider;
 const sendViaTwilio = (_a) => __awaiter(void 0, [_a], void 0, function* ({ to, body }) {
-    const accountSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
-    const authToken = (process.env.TWILIO_AUTH_TOKEN || "").trim();
-    const fromNumber = (process.env.TWILIO_FROM_NUMBER || "").trim();
+    const accountSid = config_1.config.sms.twilioAccountSid || "";
+    const authToken = config_1.config.sms.twilioAuthToken || "";
+    const fromNumber = config_1.config.sms.twilioFromNumber || "";
     if (!accountSid || !authToken || !fromNumber) {
         logger_1.default.error("[sendSms] SMS not sent: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_FROM_NUMBER is missing.");
         return false;

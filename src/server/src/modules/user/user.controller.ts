@@ -4,8 +4,9 @@ import asyncHandler from "@/shared/utils/asyncHandler";
 import sendResponse from "@/shared/utils/sendResponse";
 import { makeLogsService } from "../logs/logs.factory";
 import AppError from "@/shared/errors/AppError";
+import { config } from "@/config";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = config.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);

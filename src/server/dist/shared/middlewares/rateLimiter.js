@@ -3,63 +3,47 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.registrationLimiter = exports.passwordResetLimiter = exports.authRateLimiter = void 0;
+exports.orderRateLimiter = exports.registrationLimiter = exports.passwordResetLimiter = exports.otpRateLimiter = exports.authRateLimiter = void 0;
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
-/**
- * Rate limiter for authentication endpoints (brute force protection)
- * Maximum 5 login attempts per 15 minutes per IP
- */
-exports.authRateLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 attempts per window
-    message: "Too many authentication attempts. Please try again later.",
-    standardHeaders: false, // Don't return RateLimit-* headers
-    skip: (req) => {
-        // Skip rate limiting in development
-        return process.env.NODE_ENV !== "production";
-    },
-    handler: (req, res) => {
+const config_1 = require("@/config");
+if (config_1.config.isProduction && !config_1.config.rateLimit.enabled) {
+    throw new Error("[rate-limit] Production boot blocked: RATE_LIMIT_ENABLED must be true.");
+}
+const createLimiter = ({ windowMs, max, message, }) => (0, express_rate_limit_1.default)({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => !config_1.config.rateLimit.enabled,
+    handler: (_req, res) => {
         res.status(429).json({
             success: false,
-            message: "Too many authentication attempts. Please try again in 15 minutes.",
+            message,
         });
     },
 });
-/**
- * Rate limiter for password reset endpoints
- * Maximum 3 attempts per hour per IP
- */
-exports.passwordResetLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 3, // 3 attempts per hour
+exports.authRateLimiter = createLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: config_1.config.rateLimit.loginMax,
+    message: "Too many login attempts. Please try again later.",
+});
+exports.otpRateLimiter = createLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: config_1.config.rateLimit.otpMax,
+    message: "Too many OTP attempts. Please try again later.",
+});
+exports.passwordResetLimiter = createLimiter({
+    windowMs: 60 * 60 * 1000,
+    max: config_1.config.rateLimit.otpMax,
     message: "Too many password reset attempts. Please try again later.",
-    standardHeaders: false,
-    skip: (req) => {
-        return process.env.NODE_ENV !== "production";
-    },
-    handler: (req, res) => {
-        res.status(429).json({
-            success: false,
-            message: "Too many password reset attempts. Please try again in 1 hour.",
-        });
-    },
 });
-/**
- * Rate limiter for registration endpoints
- * Maximum 10 registrations per hour per IP
- */
-exports.registrationLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // 10 attempts per hour
+exports.registrationLimiter = createLimiter({
+    windowMs: 60 * 60 * 1000,
+    max: config_1.config.rateLimit.otpMax,
     message: "Too many registration attempts. Please try again later.",
-    standardHeaders: false,
-    skip: (req) => {
-        return process.env.NODE_ENV !== "production";
-    },
-    handler: (req, res) => {
-        res.status(429).json({
-            success: false,
-            message: "Too many registration attempts. Please try again in 1 hour.",
-        });
-    },
+});
+exports.orderRateLimiter = createLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: config_1.config.rateLimit.orderMax,
+    message: "Too many order placement attempts. Please try again later.",
 });

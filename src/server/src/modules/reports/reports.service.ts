@@ -1,5 +1,7 @@
 import { subDays, subMonths, subYears, startOfYear, endOfYear } from "date-fns";
 import redisClient from "@/infra/cache/redis";
+import { config } from "@/config";
+import { cacheKey } from "@/shared/utils/cacheKey";
 import { ReportsRepository } from "./reports.repository";
 import { AnalyticsRepository } from "../analytics/analytics.repository";
 import {
@@ -17,10 +19,10 @@ export class ReportsService {
 
   async generateSalesReport(query: DateRangeQuery): Promise<SalesReport> {
     const { timePeriod, year, startDate, endDate } = query;
-    const cacheKey = `reports:sales:${timePeriod}:${year || "all"}:${
+    const reportCacheKey = cacheKey("reports", "sales", `${timePeriod}:${year || "all"}:${
       startDate?.toISOString() || "none"
-    }:${endDate?.toISOString() || "none"}`;
-    const cachedData = await redisClient.get(cacheKey);
+    }:${endDate?.toISOString() || "none"}`);
+    const cachedData = await redisClient.get(reportCacheKey);
 
     if (cachedData) {
       return JSON.parse(cachedData);
@@ -116,7 +118,11 @@ export class ReportsService {
       topProducts,
     };
 
-    await redisClient.setex(cacheKey, 300, JSON.stringify(result));
+    await redisClient.setex(
+      reportCacheKey,
+      config.cache.reportsTtlSeconds,
+      JSON.stringify(result)
+    );
     return result;
   }
 
@@ -124,10 +130,14 @@ export class ReportsService {
     query: DateRangeQuery
   ): Promise<UserRetentionReport> {
     const { timePeriod, year, startDate, endDate } = query;
-    const cacheKey = `reports:user_retention:${timePeriod}:${year || "all"}:${
+    const reportCacheKey = cacheKey(
+      "reports",
+      "user_retention",
+      `${timePeriod}:${year || "all"}:${
       startDate?.toISOString() || "none"
-    }:${endDate?.toISOString() || "none"}`;
-    const cachedData = await redisClient.get(cacheKey);
+      }:${endDate?.toISOString() || "none"}`
+    );
+    const cachedData = await redisClient.get(reportCacheKey);
 
     if (cachedData) {
       return JSON.parse(cachedData);
@@ -214,7 +224,11 @@ export class ReportsService {
       topUsers: topCustomers,
     };
 
-    await redisClient.setex(cacheKey, 300, JSON.stringify(result));
+    await redisClient.setex(
+      reportCacheKey,
+      config.cache.reportsTtlSeconds,
+      JSON.stringify(result)
+    );
     return result;
   }
 

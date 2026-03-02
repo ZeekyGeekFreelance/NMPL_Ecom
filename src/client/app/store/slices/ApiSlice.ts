@@ -3,10 +3,10 @@ import { logout } from "./AuthSlice";
 import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
 import { clearPendingAuthIntent } from "@/app/lib/authIntent";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const ENABLE_NATIVE_CONFIRMATION =
-  process.env.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM === "true";
+const ENABLE_NATIVE_CONFIRMATION = runtimeEnv.enableNativeConfirm === true;
 
 const CONFIRMATION_REQUIRED_PATHS = [
   /^\/users(\/|$)/,

@@ -102,9 +102,9 @@ const drawItemsTable = (
   const right = 545;
   const pageBottom = () => doc.page.height - doc.page.margins.bottom;
   const columns = [
-    { key: "product", label: "Product Name", x: 50, width: 205, align: "left" },
+    { key: "product", label: "Product", x: 50, width: 205, align: "left" },
     { key: "sku", label: "SKU", x: 260, width: 95, align: "left" },
-    { key: "qty", label: "Quantity", x: 360, width: 50, align: "right" },
+    { key: "qty", label: "Qty", x: 360, width: 50, align: "right" },
     { key: "unit", label: "Unit Price", x: 415, width: 60, align: "right" },
     { key: "line", label: "Line Total", x: 480, width: 65, align: "right" },
   ] as const;
@@ -234,6 +234,12 @@ export default function generateInvoicePdf(
         doc.text(`Account Ref: ${invoice.accountReference}`);
       }
 
+      drawSectionTitle(doc, "Fulfillment", fonts);
+      doc
+        .font(fonts.regular)
+        .fontSize(10)
+        .text(`Fulfillment Mode: ${deliveryLabel}`);
+
       drawSectionTitle(
         doc,
         toSafeText(
@@ -249,11 +255,6 @@ export default function generateInvoicePdf(
         toSafeText(invoice.customerPhone, "Not provided"),
         normalizedDeliveryMode === "PICKUP" ? "Store" : "Receiver"
       );
-      doc
-        .font(fonts.regular)
-        .fontSize(10)
-        .moveDown(0.2)
-        .text(`Fulfillment Mode: ${deliveryLabel}`);
 
       drawSectionTitle(doc, "Items", fonts);
       drawItemsTable(doc, invoice.items, fonts, formatCurrency);

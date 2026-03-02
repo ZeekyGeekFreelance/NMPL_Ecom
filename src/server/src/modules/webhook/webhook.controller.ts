@@ -5,6 +5,7 @@ import { WebhookService } from "./webhook.service";
 import { makeLogsService } from "../logs/logs.factory";
 import stripe from "@/infra/payment/stripe";
 import AppError from "@/shared/errors/AppError";
+import { config } from "@/config";
 
 export class WebhookController {
   private logsService = makeLogsService();
@@ -24,7 +25,7 @@ export class WebhookController {
     event = stripe.webhooks.constructEvent(
       req.body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      config.payment.stripeWebhookSecret!
     );
 
     if (event.type === "checkout.session.completed") {

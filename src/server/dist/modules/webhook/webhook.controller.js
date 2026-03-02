@@ -18,6 +18,7 @@ const sendResponse_1 = __importDefault(require("@/shared/utils/sendResponse"));
 const logs_factory_1 = require("../logs/logs.factory");
 const stripe_1 = __importDefault(require("@/infra/payment/stripe"));
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
+const config_1 = require("@/config");
 class WebhookController {
     constructor(webhookService) {
         this.webhookService = webhookService;
@@ -30,7 +31,7 @@ class WebhookController {
                 throw new AppError_1.default(503, "Stripe is not configured. Set STRIPE_SECRET_KEY to receive webhooks.");
             }
             let event;
-            event = stripe_1.default.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+            event = stripe_1.default.webhooks.constructEvent(req.body, sig, config_1.config.payment.stripeWebhookSecret);
             if (event.type === "checkout.session.completed") {
                 const session = event.data.object;
                 yield this.webhookService.handleCheckoutCompletion(session);

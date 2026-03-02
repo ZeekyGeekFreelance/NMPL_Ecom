@@ -23,8 +23,9 @@ import {
   isCustomerDisplayRole,
   resolveDisplayRole,
 } from "@/app/lib/userRole";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = runtimeEnv.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);

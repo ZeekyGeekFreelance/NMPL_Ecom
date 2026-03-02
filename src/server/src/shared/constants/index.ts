@@ -1,12 +1,11 @@
+import { config } from "@/config";
+
 export const cookieParserOptions = {};
 
 export const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite:
-    process.env.NODE_ENV === "production"
-      ? ("none" as const)
-      : ("lax" as const),
+  secure: config.isProduction,
+  sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
   path: "/",
-  domain: undefined,
+  domain: config.security.cookieDomain,
 };

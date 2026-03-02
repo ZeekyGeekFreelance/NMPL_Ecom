@@ -29,14 +29,12 @@ const accountReference_1 = require("@/shared/utils/accountReference");
 const branding_1 = require("@/shared/utils/branding");
 const registrationOtp_2 = require("@/shared/utils/auth/registrationOtp");
 const userRole_1 = require("@/shared/utils/userRole");
+const config_1 = require("@/config");
 const resolveClientUrl = () => {
-    return (process.env.CLIENT_URL ||
-        process.env.CLIENT_URL_DEV ||
-        process.env.CLIENT_URL_PROD ||
-        "");
+    return config_1.config.isProduction ? config_1.config.urls.clientProd : config_1.config.urls.clientDev;
 };
 const resolveNotificationRecipients = () => {
-    return (process.env.BILLING_NOTIFICATION_EMAILS || "")
+    return (config_1.config.raw.BILLING_NOTIFICATION_EMAILS || "")
         .split(",")
         .map((email) => email.trim())
         .filter(Boolean)
@@ -364,11 +362,7 @@ class AuthService {
             if (yield authUtils_1.tokenUtils.isTokenBlacklisted(oldRefreshToken)) {
                 throw new NotFoundError_1.default("Refresh token");
             }
-            const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
-            if (!refreshSecret) {
-                throw new AppError_1.default(500, "Refresh token secret is not configured.");
-            }
-            const decoded = jsonwebtoken_1.default.verify(oldRefreshToken, refreshSecret);
+            const decoded = jsonwebtoken_1.default.verify(oldRefreshToken, config_1.config.auth.refreshTokenSecret);
             const absoluteExpiration = decoded.absExp;
             const now = Math.floor(Date.now() / 1000);
             if (now > absoluteExpiration) {

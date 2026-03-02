@@ -4,9 +4,11 @@ exports.buildInvoiceEmailTemplate = void 0;
 const branding_1 = require("@/shared/utils/branding");
 const dateTime_1 = require("@/shared/utils/dateTime");
 const currency_1 = require("@/shared/utils/currency");
-const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel, invoiceNumber, orderId, customerType, orderDate, totalAmount, }) => {
+const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel, invoiceNumber, orderId, customerType, orderDate, subtotalAmount, deliveryCharge, deliveryMode, totalAmount, }) => {
     const normalizedName = (recipientName === null || recipientName === void 0 ? void 0 : recipientName.trim()) || "Customer";
     const amount = (0, currency_1.formatINRCurrency)(totalAmount);
+    const subtotal = typeof subtotalAmount === "number" ? (0, currency_1.formatINRCurrency)(subtotalAmount) : null;
+    const delivery = typeof deliveryCharge === "number" ? (0, currency_1.formatINRCurrency)(deliveryCharge) : null;
     const placedOn = (0, dateTime_1.formatDateTimeInIST)(orderDate);
     const generatedAt = (0, dateTime_1.formatDateTimeInIST)(new Date());
     const platformName = (0, branding_1.getPlatformName)();
@@ -23,6 +25,8 @@ const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel,
             customerType ? `Customer Type: ${customerType}` : null,
             `Order Date: ${placedOn}`,
             `Generated At: ${generatedAt}`,
+            subtotal ? `Subtotal: ${subtotal}` : null,
+            delivery ? `Delivery (${deliveryMode || "DELIVERY"}): ${delivery}` : null,
             `Total Amount: ${amount}`,
             `Support: ${supportEmail}`,
             "",
@@ -42,6 +46,12 @@ const buildInvoiceEmailTemplate = ({ recipientName, accountReference, copyLabel,
           ${customerType ? `<strong>Customer Type:</strong> ${customerType}<br />` : ""}
           <strong>Order Date:</strong> ${placedOn}<br />
           <strong>Generated At:</strong> ${generatedAt}<br />
+          ${subtotal
+            ? `<strong>Subtotal:</strong> ${subtotal}<br />`
+            : ""}
+          ${delivery
+            ? `<strong>Delivery (${deliveryMode || "DELIVERY"}):</strong> ${delivery}<br />`
+            : ""}
           <strong>Total Amount:</strong> ${amount}
         </p>
         <p>

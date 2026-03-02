@@ -5,12 +5,15 @@ import {
   CART_STATUS,
   ORDER_QUOTATION_LOG_EVENT,
   PAYMENT_STATUS,
-  ROLE,
   DELIVERY_MODE,
+  ROLE,
   type Prisma,
 } from "@prisma/client";
 import sendEmail from "@/shared/utils/sendEmail";
-import { getPlatformName, getSupportEmail } from "@/shared/utils/branding";
+import {
+  getPlatformName,
+  getSupportEmail,
+} from "@/shared/utils/branding";
 import {
   toAccountReference,
   toOrderReference,
@@ -29,6 +32,7 @@ import {
   getPickupLocationSnapshot,
   resolveDeliveryQuote,
 } from "@/shared/utils/pricing/checkoutPricing";
+import { config } from "@/config";
 
 export class OrderService {
   private logsService = makeLogsService();
@@ -39,20 +43,14 @@ export class OrderService {
   constructor(private orderRepository: OrderRepository) {}
 
   private resolvePortalUrl(): string {
-    const configuredUrl =
-      process.env.CLIENT_URL ||
-      process.env.CLIENT_URL_DEV ||
-      process.env.CLIENT_URL_PROD ||
-      "http://localhost:3000";
-
+    const configuredUrl = config.isProduction
+      ? config.urls.clientProd
+      : config.urls.clientDev;
     return configuredUrl.replace(/\/+$/, "");
   }
 
   private isMockPaymentEnabled(): boolean {
-    const flag = String(process.env.ENABLE_MOCK_PAYMENT || "")
-      .trim()
-      .toLowerCase();
-    return flag === "true" && process.env.NODE_ENV !== "production";
+    return config.payment.enableMockPayment && !config.isProduction;
   }
 
   private buildMockCheckoutUrl(orderReference: string): string {
@@ -273,7 +271,7 @@ export class OrderService {
       );
     }
 
-    const currency = (process.env.STRIPE_CURRENCY || "inr").toLowerCase();
+    const currency = config.payment.stripeCurrency.toLowerCase();
     const lineItems = order.orderItems.map((item) => ({
       quantity: item.quantity,
       price_data: {

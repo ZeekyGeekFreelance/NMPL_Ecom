@@ -15,34 +15,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const logger_1 = __importDefault(require("@/infra/winston/logger"));
 const branding_1 = require("./branding");
-const parsePort = (value, fallback) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-};
-const parseSecureFlag = (value, fallback) => {
-    if (!value) {
-        return fallback;
-    }
-    const normalized = value.trim().toLowerCase();
-    if (normalized === "true" || normalized === "1") {
-        return true;
-    }
-    if (normalized === "false" || normalized === "0") {
-        return false;
-    }
-    return fallback;
-};
+const config_1 = require("@/config");
 const resolveCredentials = () => {
-    const user = (process.env.SMTP_USER || process.env.EMAIL_USER || "").trim();
-    const pass = (process.env.SMTP_PASS || process.env.EMAIL_PASS || "").trim();
+    const user = config_1.config.email.smtpUser;
+    const pass = config_1.config.email.smtpPass;
     return { user, pass };
 };
 const createTransporter = (user, pass) => {
-    var _a, _b;
-    const smtpHost = (_a = process.env.SMTP_HOST) === null || _a === void 0 ? void 0 : _a.trim();
+    const smtpHost = config_1.config.email.smtpHost;
     if (smtpHost) {
-        const port = parsePort(process.env.SMTP_PORT, 587);
-        const secure = parseSecureFlag(process.env.SMTP_SECURE, port === 465);
+        const port = config_1.config.email.smtpPort;
+        const secure = config_1.config.email.smtpSecure;
         return nodemailer_1.default.createTransport({
             host: smtpHost,
             port,
@@ -53,7 +36,7 @@ const createTransporter = (user, pass) => {
             },
         });
     }
-    const service = ((_b = process.env.EMAIL_SERVICE) === null || _b === void 0 ? void 0 : _b.trim()) || "gmail";
+    const service = config_1.config.email.emailService;
     return nodemailer_1.default.createTransport({
         service,
         auth: {
@@ -71,8 +54,8 @@ const sendEmail = (_a) => __awaiter(void 0, [_a], void 0, function* ({ to, subje
             return false;
         }
         const transporter = createTransporter(emailUser, emailPass);
-        const fromAddress = (process.env.EMAIL_FROM || emailUser).trim();
-        const fromName = (process.env.EMAIL_FROM_NAME || `${platformName} Support`).trim();
+        const fromAddress = config_1.config.email.from;
+        const fromName = config_1.config.email.fromName || `${platformName} Support`;
         const mailOptions = {
             from: `"${fromName}" <${fromAddress}>`,
             to,

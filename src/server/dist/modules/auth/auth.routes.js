@@ -16,20 +16,17 @@ const express_1 = __importDefault(require("express"));
 const auth_factory_1 = require("./auth.factory");
 const passport_1 = __importDefault(require("passport"));
 const constants_1 = require("@/shared/constants");
-const cart_service_1 = require("../cart/cart.service");
-const cart_repository_1 = require("../cart/cart.repository");
 const handleSocialLogin_1 = __importDefault(require("@/shared/utils/auth/handleSocialLogin"));
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
+const optionalAuth_1 = __importDefault(require("@/shared/middlewares/optionalAuth"));
 const rateLimiter_1 = require("@/shared/middlewares/rateLimiter");
 const validateDto_1 = require("@/shared/middlewares/validateDto");
 const auth_dto_1 = require("./auth.dto");
+const config_1 = require("@/config");
 const router = express_1.default.Router();
 const authController = (0, auth_factory_1.makeAuthController)();
-const cartService = new cart_service_1.CartService(new cart_repository_1.CartRepository());
-const CLIENT_URL_DEV = process.env.CLIENT_URL_DEV;
-const CLIENT_URL_PROD = process.env.CLIENT_URL_PROD;
-const env = process.env.NODE_ENV;
-const clientRedirectUrl = env === "production" ? CLIENT_URL_PROD : CLIENT_URL_DEV;
+const env = config_1.config.nodeEnv;
+const clientRedirectUrl = env === "production" ? config_1.config.urls.clientProd : config_1.config.urls.clientDev;
 if (!clientRedirectUrl) {
     throw new Error("CLIENT_URL_DEV/CLIENT_URL_PROD must be configured.");
 }
@@ -37,14 +34,14 @@ const isConfigured = (...values) => values.every((value) => value && value.trim(
 const isProviderConfigured = (provider) => {
     const isProd = env === "production";
     if (provider === "google") {
-        return isConfigured(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, isProd ? process.env.GOOGLE_CALLBACK_URL_PROD : process.env.GOOGLE_CALLBACK_URL_DEV);
+        return isConfigured(config_1.config.raw.GOOGLE_CLIENT_ID, config_1.config.raw.GOOGLE_CLIENT_SECRET, isProd ? config_1.config.raw.GOOGLE_CALLBACK_URL_PROD : config_1.config.raw.GOOGLE_CALLBACK_URL_DEV);
     }
     if (provider === "facebook") {
-        return isConfigured(process.env.FACEBOOK_APP_ID, process.env.FACEBOOK_APP_SECRET, isProd
-            ? process.env.FACEBOOK_CALLBACK_URL_PROD
-            : process.env.FACEBOOK_CALLBACK_URL_DEV);
+        return isConfigured(config_1.config.raw.FACEBOOK_APP_ID, config_1.config.raw.FACEBOOK_APP_SECRET, isProd
+            ? config_1.config.raw.FACEBOOK_CALLBACK_URL_PROD
+            : config_1.config.raw.FACEBOOK_CALLBACK_URL_DEV);
     }
-    return isConfigured(process.env.TWITTER_CONSUMER_KEY, process.env.TWITTER_CONSUMER_SECRET, isProd ? process.env.TWITTER_CALLBACK_URL_PROD : process.env.TWITTER_CALLBACK_URL_DEV);
+    return isConfigured(config_1.config.raw.TWITTER_CONSUMER_KEY, config_1.config.raw.TWITTER_CONSUMER_SECRET, isProd ? config_1.config.raw.TWITTER_CALLBACK_URL_PROD : config_1.config.raw.TWITTER_CALLBACK_URL_DEV);
 };
 const ensureProviderEnabled = (provider) => (req, res, next) => {
     if (!isProviderConfigured(provider)) {
@@ -72,11 +69,6 @@ router.get("/google/callback", passport_1.default.authenticate("google", {
     const { accessToken, refreshToken } = user;
     res.cookie("refreshToken", refreshToken, constants_1.cookieOptions);
     res.cookie("accessToken", accessToken, constants_1.cookieOptions);
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-        yield (cartService === null || cartService === void 0 ? void 0 : cartService.mergeCartsOnLogin(sessionId, userId));
-    }
     res.redirect(clientRedirectUrl);
 }));
 /**
@@ -108,11 +100,6 @@ router.get("/facebook/callback", passport_1.default.authenticate("facebook", {
     const { accessToken, refreshToken } = user;
     res.cookie("refreshToken", refreshToken, constants_1.cookieOptions);
     res.cookie("accessToken", accessToken, constants_1.cookieOptions);
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-        yield (cartService === null || cartService === void 0 ? void 0 : cartService.mergeCartsOnLogin(sessionId, userId));
-    }
     res.redirect(clientRedirectUrl);
 }));
 /**
@@ -147,11 +134,6 @@ router.get("/twitter/callback", passport_1.default.authenticate("twitter", {
     const { accessToken, refreshToken } = user;
     res.cookie("refreshToken", refreshToken, constants_1.cookieOptions);
     res.cookie("accessToken", accessToken, constants_1.cookieOptions);
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-        yield (cartService === null || cartService === void 0 ? void 0 : cartService.mergeCartsOnLogin(sessionId, userId));
-    }
     res.redirect(clientRedirectUrl);
 }));
 /**
@@ -174,7 +156,7 @@ router.get("/twitter/callback", passport_1.default.authenticate("twitter", {
  *       200:
  *         description: OTP sent successfully.
  */
-router.post("/request-registration-otp", rateLimiter_1.registrationLimiter, (0, validateDto_1.validateDto)(auth_dto_1.RequestRegistrationOtpDto), authController.requestRegistrationOtp);
+router.post("/request-registration-otp", rateLimiter_1.otpRateLimiter, (0, validateDto_1.validateDto)(auth_dto_1.RequestRegistrationOtpDto), authController.requestRegistrationOtp);
 /**
  * @swagger
  * /sign-up:
@@ -339,5 +321,5 @@ router.post("/reset-password", rateLimiter_1.passwordResetLimiter, (0, validateD
  *       200:
  *         description: User successfully signed out.
  */
-router.get("/sign-out", authController.signout);
+router.get("/sign-out", optionalAuth_1.default, authController.signout);
 exports.default = router;

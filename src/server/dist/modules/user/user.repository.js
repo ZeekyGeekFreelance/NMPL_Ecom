@@ -262,6 +262,7 @@ class UserRepository {
             u."id",
             u."name",
             u."email",
+            u."phone",
             u."role",
             u."avatar",
             u."createdAt",

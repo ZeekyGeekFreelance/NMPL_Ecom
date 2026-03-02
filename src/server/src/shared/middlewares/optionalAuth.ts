@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import prisma from "@/infra/database/database.config";
 import { User } from "../types/userTypes";
+import { config } from "@/config";
 
 const optionalAuth = async (
   req: Request,
@@ -14,14 +15,10 @@ const optionalAuth = async (
     return next();
   }
 
-  if (!process.env.ACCESS_TOKEN_SECRET) {
-    return next();
-  }
-
   try {
     const decoded = jwt.verify(
       accessToken,
-      process.env.ACCESS_TOKEN_SECRET
+      config.auth.accessTokenSecret
     ) as User;
 
     const user = await prisma.user.findUnique({

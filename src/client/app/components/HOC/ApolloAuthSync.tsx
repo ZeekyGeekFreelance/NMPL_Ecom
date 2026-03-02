@@ -3,6 +3,7 @@
 import { useApolloClient } from "@apollo/client";
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 const getAuthSignature = (
   user:
@@ -48,7 +49,7 @@ export default function ApolloAuthSync() {
 
     // Ensure role-sensitive GraphQL data (e.g., dealer pricing) is refreshed.
     apolloClient.resetStore().catch((error) => {
-      if (process.env.NODE_ENV !== "production") {
+      if (!runtimeEnv.isProduction) {
         console.error("Apollo resetStore failed after auth change", error);
       }
     });

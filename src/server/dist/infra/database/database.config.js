@@ -9,9 +9,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.connectDB = void 0;
+exports.pingDB = exports.disconnectDB = exports.connectDB = void 0;
 const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const config_1 = require("@/config");
+const prisma = new client_1.PrismaClient({
+    datasources: {
+        db: {
+            url: config_1.config.database.url,
+        },
+    },
+});
 const connectDB = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield prisma.$connect();
@@ -23,4 +30,18 @@ const connectDB = () => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.connectDB = connectDB;
+const disconnectDB = () => __awaiter(void 0, void 0, void 0, function* () {
+    yield prisma.$disconnect();
+});
+exports.disconnectDB = disconnectDB;
+const pingDB = () => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield prisma.$queryRaw `SELECT 1`;
+        return true;
+    }
+    catch (_a) {
+        return false;
+    }
+});
+exports.pingDB = pingDB;
 exports.default = prisma;

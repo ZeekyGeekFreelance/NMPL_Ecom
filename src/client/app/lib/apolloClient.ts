@@ -3,8 +3,9 @@ import { onError } from "@apollo/client/link/error";
 import { RetryLink } from "@apollo/client/link/retry";
 import { loadDevMessages, loadErrorMessages } from "@apollo/client/dev";
 import { GRAPHQL_URL } from "./constants/config";
+import { runtimeEnv } from "./runtimeEnv";
 
-if (process.env.NODE_ENV !== "production") {
+if (!runtimeEnv.isProduction) {
   loadDevMessages();
   loadErrorMessages();
 }
@@ -65,7 +66,7 @@ const isEndpointUnreachableError = (error: unknown) => {
 };
 
 const errorLink = onError(({ graphQLErrors, networkError }) => {
-  if (process.env.NODE_ENV !== "production") {
+  if (!runtimeEnv.isProduction) {
     if (graphQLErrors) console.error("GraphQL Error", graphQLErrors);
     if (networkError) {
       if (isEndpointUnreachableError(networkError)) {

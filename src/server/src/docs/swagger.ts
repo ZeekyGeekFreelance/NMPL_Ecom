@@ -1,5 +1,6 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
+import { config } from "@/config";
 
 const options = {
   definition: {
@@ -11,8 +12,8 @@ const options = {
     },
     servers: [
       {
-        url: "http://localhost:5000/api/v1",
-        description: "Development server",
+        url: `${config.server.publicApiBaseUrl.replace(/\/+$/, "")}/api/v1`,
+        description: `${config.nodeEnv} server`,
       },
     ],
     components: {

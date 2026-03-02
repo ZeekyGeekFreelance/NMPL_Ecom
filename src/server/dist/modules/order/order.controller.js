@@ -59,9 +59,12 @@ class OrderController {
                 throw new AppError_1.default(400, "User not found");
             }
             const paymentSession = yield this.orderService.acceptQuotationForOrder(orderId, userId);
+            const message = (paymentSession === null || paymentSession === void 0 ? void 0 : paymentSession.isMockPayment)
+                ? "Quotation accepted. Mock payment confirmed for testing."
+                : "Quotation accepted. Redirect to payment gateway.";
             (0, sendResponse_1.default)(res, 200, {
                 data: paymentSession,
-                message: "Quotation accepted. Redirect to payment gateway.",
+                message,
             });
         }));
         this.rejectQuotation = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
@@ -80,14 +83,20 @@ class OrderController {
         this.createOrder = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            const { cartId } = req.body;
+            const { cartId, addressId, deliveryMode } = req.body || {};
             if (!userId) {
                 throw new AppError_1.default(400, "User not found");
             }
             if (!cartId) {
                 throw new AppError_1.default(400, "Cart ID is required");
             }
-            const order = yield this.orderService.createOrderFromCart(userId, cartId);
+            if (deliveryMode !== "PICKUP" && deliveryMode !== "DELIVERY") {
+                throw new AppError_1.default(400, "Delivery mode must be PICKUP or DELIVERY");
+            }
+            if (deliveryMode === "DELIVERY" && !addressId) {
+                throw new AppError_1.default(400, "Address selection is required for delivery");
+            }
+            const order = yield this.orderService.createOrderFromCart(userId, cartId, addressId, deliveryMode);
             (0, sendResponse_1.default)(res, 201, {
                 data: { order },
                 message: "Order created successfully",

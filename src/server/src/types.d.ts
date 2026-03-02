@@ -5,6 +5,7 @@ declare namespace Express {
       role: string;
       effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
     };
+    traceId?: string;
     session: {
       id: string;
     };

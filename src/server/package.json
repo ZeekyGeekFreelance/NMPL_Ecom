@@ -7,11 +7,17 @@
   },
   "scripts": {
     "dev": "prisma generate && nodemon",
-    "build": "tsc",
+    "repo:sanity": "node ./scripts/repo-sanity-proxy.js",
+    "env:check": "ts-node --transpile-only -r dotenv/config src/config/index.ts",
+    "build": "npm run repo:sanity && npm run env:check && node ./scripts/clean-build.js && node ./scripts/assert-determinism.js pre && tsc && node ./scripts/assert-determinism.js post",
     "start": "node dist/server.js",
     "prisma": "prisma",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status",
     "seed": "ts-node seeds/seed.ts"
+  },
+  "engines": {
+    "node": ">=22 <23"
   },
   "keywords": [],
   "author": "",
@@ -51,6 +57,7 @@
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
     "http": "^0.0.1-security",
+    "ioredis": "^5.8.1",
     "jsonwebtoken": "^9.0.2",
     "module-alias": "^2.2.3",
     "morgan": "^1.10.0",
@@ -70,7 +77,8 @@
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "xlsx": "^0.18.5",
-    "xss-clean": "^0.1.4"
+    "xss-clean": "^0.1.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -100,6 +108,7 @@
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.9",
     "prisma": "^6.13.0",
+    "reflect-metadata": "^0.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }

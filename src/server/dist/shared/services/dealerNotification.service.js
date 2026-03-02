@@ -17,16 +17,13 @@ const logger_1 = __importDefault(require("@/infra/winston/logger"));
 const dealerNotifications_1 = require("@/shared/templates/dealerNotifications");
 const branding_1 = require("@/shared/utils/branding");
 const sendEmail_1 = __importDefault(require("@/shared/utils/sendEmail"));
-const fallbackPortalUrl = "http://localhost:3000";
+const config_1 = require("@/config");
 class DealerNotificationService {
     getPortalUrl() {
-        const clientUrl = process.env.NODE_ENV === "production"
-            ? process.env.CLIENT_URL_PROD
-            : process.env.CLIENT_URL_DEV;
-        if (clientUrl && clientUrl.trim()) {
-            return clientUrl.replace(/\/+$/, "");
-        }
-        return fallbackPortalUrl;
+        const clientUrl = config_1.config.isProduction
+            ? config_1.config.urls.clientProd
+            : config_1.config.urls.clientDev;
+        return clientUrl.replace(/\/+$/, "");
     }
     getSupportEmail() {
         return (0, branding_1.getSupportEmail)();

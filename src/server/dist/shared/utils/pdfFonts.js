@@ -6,8 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.configurePdfFonts = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
-const CUSTOM_REGULAR_ENV = process.env.PDF_FONT_REGULAR_PATH;
-const CUSTOM_BOLD_ENV = process.env.PDF_FONT_BOLD_PATH;
+const config_1 = require("@/config");
+const CUSTOM_REGULAR_ENV = config_1.config.raw.PDF_FONT_REGULAR_PATH;
+const CUSTOM_BOLD_ENV = config_1.config.raw.PDF_FONT_BOLD_PATH;
 const REGULAR_FONT_NAME = "NMPL-Regular";
 const BOLD_FONT_NAME = "NMPL-Bold";
 const toAbsolutePath = (inputPath) => path_1.default.isAbsolute(inputPath)

@@ -12,6 +12,7 @@ import { InvoiceRepository, InvoiceWithDetails } from "./invoice.repository";
 import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
 import { ORDER_LIFECYCLE_STATUS } from "@/shared/utils/orderLifecycle";
 import { getPickupLocationSnapshot } from "@/shared/utils/pricing/checkoutPricing";
+import { config } from "@/config";
 
 interface RequesterContext {
   id: string;
@@ -60,14 +61,12 @@ export class InvoiceService {
   }
 
   private getInternalRecipients(customerEmail: string): string[] {
-    const configuredRecipients = (process.env.BILLING_NOTIFICATION_EMAILS || "")
+    const configuredRecipients = config.branding.billingNotificationEmails
       .split(",")
       .map((email) => email.trim())
       .filter(Boolean);
 
-    const fallback = process.env.EMAIL_USER?.trim()
-      ? [process.env.EMAIL_USER.trim()]
-      : [];
+    const fallback = config.email.smtpUser?.trim() ? [config.email.smtpUser.trim()] : [];
 
     const recipients =
       configuredRecipients.length > 0 ? configuredRecipients : fallback;
@@ -240,13 +239,10 @@ export class InvoiceService {
     const normalizedStatus =
       normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
 
-    if (
-      normalizedStatus !== ORDER_LIFECYCLE_STATUS.CONFIRMED &&
-      normalizedStatus !== ORDER_LIFECYCLE_STATUS.DELIVERED
-    ) {
+    if (normalizedStatus !== ORDER_LIFECYCLE_STATUS.DELIVERED) {
       throw new AppError(
         409,
-        "Invoice is available only after payment confirmation."
+        "Invoice is available only after the order is marked delivered."
       );
     }
 
@@ -282,9 +278,23 @@ export class InvoiceService {
       .trim()
       .toUpperCase();
     const isPickup = normalizedDeliveryMode === "PICKUP";
+    const snapshotAddress = invoice.order.address;
     const pickupLocation = isPickup ? getPickupLocationSnapshot() : null;
-    const locationAddress = isPickup
+    const locationAddress = snapshotAddress
       ? {
+          fullName: snapshotAddress.fullName,
+          phoneNumber: snapshotAddress.phoneNumber,
+          line1: snapshotAddress.line1,
+          line2: snapshotAddress.line2,
+          landmark: snapshotAddress.landmark,
+          city: snapshotAddress.city,
+          state: snapshotAddress.state,
+          pincode: snapshotAddress.pincode,
+          country: snapshotAddress.country,
+        }
+      : isPickup
+      ? {
+          // Legacy compatibility only: modern orders always snapshot pickup address.
           fullName: pickupLocation?.fullName,
           phoneNumber: pickupLocation?.phoneNumber,
           line1: pickupLocation?.line1 || "",
@@ -294,18 +304,6 @@ export class InvoiceService {
           state: pickupLocation?.state || "",
           pincode: pickupLocation?.pincode || "",
           country: pickupLocation?.country || "",
-        }
-      : invoice.order.address
-      ? {
-          fullName: invoice.order.address.fullName,
-          phoneNumber: invoice.order.address.phoneNumber,
-          line1: invoice.order.address.line1,
-          line2: invoice.order.address.line2,
-          landmark: invoice.order.address.landmark,
-          city: invoice.order.address.city,
-          state: invoice.order.address.state,
-          pincode: invoice.order.address.pincode,
-          country: invoice.order.address.country,
         }
       : null;
 

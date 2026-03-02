@@ -4,6 +4,7 @@ import AppError from "../errors/AppError";
 import prisma from "@/infra/database/database.config";
 import { User } from "../types/userTypes";
 import { resolveEffectiveRoleFromUser } from "@/shared/utils/userRole";
+import { config } from "@/config";
 
 const protect = async (
   req: Request,
@@ -16,13 +17,9 @@ const protect = async (
       return next(new AppError(401, "Unauthorized, please log in"));
     }
 
-    if (!process.env.ACCESS_TOKEN_SECRET) {
-      return next(new AppError(500, "Authentication secret is not configured"));
-    }
-
     const decoded = jwt.verify(
       accessToken,
-      process.env.ACCESS_TOKEN_SECRET!
+      config.auth.accessTokenSecret
     ) as User;
 
     const user = await prisma.user.findUnique({

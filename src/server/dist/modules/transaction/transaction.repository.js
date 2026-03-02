@@ -259,6 +259,8 @@ class TransactionRepository {
                 select: {
                     id: true,
                     userId: true,
+                    subtotalAmount: true,
+                    deliveryCharge: true,
                     amount: true,
                     orderDate: true,
                     verificationQueuedAt: true,
@@ -343,10 +345,10 @@ class TransactionRepository {
             if (sanitizedUpdates.size !== order.orderItems.length) {
                 throw new AppError_1.default(400, "Quotation update must include every order item exactly once.");
             }
-            let quotedAmount = 0;
+            let quotedSubtotal = 0;
             for (const item of order.orderItems) {
                 const update = sanitizedUpdates.get(item.id);
-                quotedAmount += update.quantity * update.price;
+                quotedSubtotal += update.quantity * update.price;
                 yield tx.orderItem.update({
                     where: {
                         id: item.id,
@@ -357,12 +359,16 @@ class TransactionRepository {
                     },
                 });
             }
+            const normalizedSubtotal = Number(quotedSubtotal.toFixed(2));
+            const normalizedDeliveryCharge = Number(order.deliveryCharge || 0);
+            const finalAmount = Number((normalizedSubtotal + normalizedDeliveryCharge).toFixed(2));
             yield tx.order.update({
                 where: {
                     id: order.id,
                 },
                 data: {
-                    amount: Number(quotedAmount.toFixed(2)),
+                    subtotalAmount: normalizedSubtotal,
+                    amount: finalAmount,
                 },
             });
             if (order.payment) {
@@ -371,7 +377,7 @@ class TransactionRepository {
                         id: order.payment.id,
                     },
                     data: {
-                        amount: Number(quotedAmount.toFixed(2)),
+                        amount: finalAmount,
                         status: client_1.PAYMENT_STATUS.PENDING,
                     },
                 });
@@ -895,6 +901,7 @@ class TransactionRepository {
                             include: {
                                 payment: true,
                                 reservation: true,
+                                address: true,
                                 quotationLogs: {
                                     orderBy: {
                                         createdAt: "desc",

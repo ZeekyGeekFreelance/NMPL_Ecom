@@ -3,6 +3,7 @@ import toastReducer from "./slices/ToastSlice";
 import { apiSlice } from "./slices/ApiSlice";
 import authReducer from "./slices/AuthSlice";
 import guestCartReducer from "./slices/GuestCartSlice";
+import { runtimeEnv } from "../lib/runtimeEnv";
 
 export const store = configureStore({
   reducer: {
@@ -15,7 +16,7 @@ export const store = configureStore({
     getDefaultMiddleware({
       serializableCheck: false,
     }).concat(apiSlice.middleware),
-  devTools: process.env.NODE_ENV !== "production",
+  devTools: !runtimeEnv.isProduction,
   preloadedState: {},
 });
 

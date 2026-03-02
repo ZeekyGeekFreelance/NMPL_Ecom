@@ -28,8 +28,9 @@ import {
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import formatDate from "@/app/utils/formatDate";
 import usePageQuery from "@/app/hooks/network/usePageQuery";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = runtimeEnv.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);

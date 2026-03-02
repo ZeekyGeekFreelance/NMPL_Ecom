@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 interface GlobalErrorProps {
   error?: Error;
@@ -212,7 +213,7 @@ const GlobalError: React.FC<GlobalErrorProps> = ({ error, reset }) => {
         </motion.div>
 
         {/* Error details (for development) */}
-        {process.env.NODE_ENV === "development" && error && (
+        {runtimeEnv.isDevelopment && error && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

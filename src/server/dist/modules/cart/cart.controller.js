@@ -16,16 +16,15 @@ exports.CartController = void 0;
 const asyncHandler_1 = __importDefault(require("@/shared/utils/asyncHandler"));
 const sendResponse_1 = __importDefault(require("@/shared/utils/sendResponse"));
 const logs_factory_1 = require("../logs/logs.factory");
+const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 class CartController {
     constructor(cartService) {
         this.cartService = cartService;
         this.logsService = (0, logs_factory_1.makeLogsService)();
         this.getCart = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const startedAt = Date.now();
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            const sessionId = req.session.id;
-            const cart = yield this.cartService.getOrCreateCart(userId, sessionId);
+            const userId = this.getRequiredUserId(req);
+            const cart = yield this.cartService.getOrCreateCart(userId);
             (0, sendResponse_1.default)(res, 200, {
                 data: { cart },
                 message: "Cart fetched successfully",
@@ -33,22 +32,18 @@ class CartController {
             yield this.logAction("Cart fetched", req, startedAt);
         }));
         this.getCartCount = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            const sessionId = req.session.id;
-            const cartCount = yield this.cartService.getCartCount(userId, sessionId);
+            const userId = this.getRequiredUserId(req);
+            const cartCount = yield this.cartService.getCartCount(userId);
             (0, sendResponse_1.default)(res, 200, {
                 data: { cartCount },
                 message: "Cart count fetched successfully",
             });
         }));
         this.addToCart = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const startedAt = Date.now();
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            const sessionId = req.session.id;
+            const userId = this.getRequiredUserId(req);
             const { variantId, quantity } = req.body;
-            const item = yield this.cartService.addToCart(variantId, quantity, userId, sessionId);
+            const item = yield this.cartService.addToCart(variantId, quantity, userId);
             (0, sendResponse_1.default)(res, 200, {
                 data: { item },
                 message: "Item added to cart successfully",
@@ -56,13 +51,11 @@ class CartController {
             yield this.logAction("Item added to cart", req, startedAt);
         }));
         this.updateCartItem = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const startedAt = Date.now();
             const { itemId } = req.params;
             const { quantity } = req.body;
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            const sessionId = req.session.id;
-            const updatedItem = yield this.cartService.updateCartItemQuantity(itemId, quantity, userId, sessionId);
+            const userId = this.getRequiredUserId(req);
+            const updatedItem = yield this.cartService.updateCartItemQuantity(itemId, quantity, userId);
             (0, sendResponse_1.default)(res, 200, {
                 data: { item: updatedItem },
                 message: "Item quantity updated successfully",
@@ -70,12 +63,10 @@ class CartController {
             yield this.logAction("Item quantity updated", req, startedAt);
         }));
         this.removeFromCart = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const startedAt = Date.now();
             const { itemId } = req.params;
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            const sessionId = req.session.id;
-            yield this.cartService.removeFromCart(itemId, userId, sessionId);
+            const userId = this.getRequiredUserId(req);
+            yield this.cartService.removeFromCart(itemId, userId);
             (0, sendResponse_1.default)(res, 200, {
                 message: "Item removed from cart successfully",
             });
@@ -100,6 +91,14 @@ class CartController {
                 timePeriod: Date.now() - start,
             });
         });
+    }
+    getRequiredUserId(req) {
+        var _a;
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        if (!userId) {
+            throw new AppError_1.default(401, "Authentication required for cart access");
+        }
+        return userId;
     }
 }
 exports.CartController = CartController;

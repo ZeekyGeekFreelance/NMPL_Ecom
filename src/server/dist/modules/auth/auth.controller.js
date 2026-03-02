@@ -31,6 +31,7 @@ const sendResponse_1 = __importDefault(require("@/shared/utils/sendResponse"));
 const authUtils_1 = require("@/shared/utils/authUtils");
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const logs_factory_1 = require("../logs/logs.factory");
+const config_1 = require("@/config");
 const clearCookieOptions = __rest(constants_1.cookieOptions, []);
 class AuthController {
     constructor(authService, cartService) {
@@ -53,7 +54,6 @@ class AuthController {
             });
         }));
         this.signup = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const start = Date.now();
             const { name, email, phone, password, emailOtpCode, phoneOtpCode, requestDealerAccess, businessName, contactPhone, } = req.body;
             const { user, accessToken, refreshToken, requiresApproval } = yield this.authService.registerUser({
@@ -70,9 +70,6 @@ class AuthController {
             if (accessToken && refreshToken) {
                 res.cookie("refreshToken", refreshToken, constants_1.cookieOptions);
                 res.cookie("accessToken", accessToken, constants_1.cookieOptions);
-                if (user.role === "USER") {
-                    yield ((_a = this.cartService) === null || _a === void 0 ? void 0 : _a.mergeCartsOnLogin(req.session.id, user.id));
-                }
             }
             (0, sendResponse_1.default)(res, 201, {
                 message: requiresApproval
@@ -105,7 +102,6 @@ class AuthController {
             });
         }));
         this.signin = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const { email, password } = req.body;
             const { user, accessToken, refreshToken } = yield this.authService.signin({
                 email,
@@ -114,10 +110,6 @@ class AuthController {
             res.cookie("refreshToken", refreshToken, constants_1.cookieOptions);
             res.cookie("accessToken", accessToken, constants_1.cookieOptions);
             const userId = user.id;
-            const sessionId = req.session.id;
-            if (user.role === "USER") {
-                yield ((_a = this.cartService) === null || _a === void 0 ? void 0 : _a.mergeCartsOnLogin(sessionId, userId));
-            }
             (0, sendResponse_1.default)(res, 200, {
                 data: {
                     user: {
@@ -146,10 +138,33 @@ class AuthController {
             });
         }));
         this.signout = (0, asyncHandler_1.default)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
+            var _a, _b, _c;
             const start = Date.now();
             const refreshToken = (_a = req === null || req === void 0 ? void 0 : req.cookies) === null || _a === void 0 ? void 0 : _a.refreshToken;
-            const userId = (_b = req.user) === null || _b === void 0 ? void 0 : _b.id;
+            let userId = (_b = req.user) === null || _b === void 0 ? void 0 : _b.id;
+            if (!userId && refreshToken) {
+                try {
+                    const decoded = jsonwebtoken_1.default.verify(refreshToken, config_1.config.auth.refreshTokenSecret);
+                    if (typeof decoded.id === "string") {
+                        userId = decoded.id;
+                    }
+                }
+                catch (_d) {
+                    // Ignore invalid refresh token and continue clearing cookies.
+                }
+            }
+            if (userId) {
+                try {
+                    yield ((_c = this.cartService) === null || _c === void 0 ? void 0 : _c.clearCartOnSignOut(userId));
+                }
+                catch (error) {
+                    yield this.logsService.warn("Failed to clear cart on sign out", {
+                        userId,
+                        sessionId: req.session.id,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            }
             if (refreshToken) {
                 const decoded = jsonwebtoken_1.default.decode(refreshToken);
                 if (decoded && decoded.absExp) {

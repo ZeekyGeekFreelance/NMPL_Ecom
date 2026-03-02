@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { config } from "@/config";
 
 interface PdfFontConfig {
   regular: string;
@@ -7,8 +8,8 @@ interface PdfFontConfig {
   supportsUnicode: boolean;
 }
 
-const CUSTOM_REGULAR_ENV = process.env.PDF_FONT_REGULAR_PATH;
-const CUSTOM_BOLD_ENV = process.env.PDF_FONT_BOLD_PATH;
+const CUSTOM_REGULAR_ENV = config.raw.PDF_FONT_REGULAR_PATH;
+const CUSTOM_BOLD_ENV = config.raw.PDF_FONT_BOLD_PATH;
 
 const REGULAR_FONT_NAME = "NMPL-Regular";
 const BOLD_FONT_NAME = "NMPL-Bold";
@@ -81,4 +82,3 @@ export const configurePdfFonts = (doc: PDFKit.PDFDocument): PdfFontConfig => {
     supportsUnicode: true,
   };
 };
-

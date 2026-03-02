@@ -28,18 +28,14 @@ import {
   verifyAndConsumeRegistrationOtp,
 } from "@/shared/utils/auth/registrationOtp";
 import { resolveEffectiveRole } from "@/shared/utils/userRole";
+import { config } from "@/config";
 
 const resolveClientUrl = (): string => {
-  return (
-    process.env.CLIENT_URL ||
-    process.env.CLIENT_URL_DEV ||
-    process.env.CLIENT_URL_PROD ||
-    ""
-  );
+  return config.isProduction ? config.urls.clientProd : config.urls.clientDev;
 };
 
 const resolveNotificationRecipients = (): string => {
-  return (process.env.BILLING_NOTIFICATION_EMAILS || "")
+  return (config.raw.BILLING_NOTIFICATION_EMAILS || "")
     .split(",")
     .map((email) => email.trim())
     .filter(Boolean)
@@ -535,14 +531,9 @@ export class AuthService {
       throw new NotFoundError("Refresh token");
     }
 
-    const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
-    if (!refreshSecret) {
-      throw new AppError(500, "Refresh token secret is not configured.");
-    }
-
     const decoded = jwt.verify(
       oldRefreshToken,
-      refreshSecret
+      config.auth.refreshTokenSecret
     ) as { id: string; absExp: number };
 
     const absoluteExpiration = decoded.absExp;

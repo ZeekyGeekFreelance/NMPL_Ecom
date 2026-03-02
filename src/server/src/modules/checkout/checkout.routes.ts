@@ -3,6 +3,7 @@ import protect from "@/shared/middlewares/protect";
 import { makeCheckoutController } from "./checkout.factory";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import { CheckoutSelectionDto } from "./checkout.dto";
+import { orderRateLimiter } from "@/shared/middlewares/rateLimiter";
 
 const router = express.Router();
 const checkoutController = makeCheckoutController();
@@ -35,6 +36,7 @@ router.post(
 router.post(
   "/",
   protect,
+  orderRateLimiter,
   validateDto(CheckoutSelectionDto),
   checkoutController.initiateCheckout
 );

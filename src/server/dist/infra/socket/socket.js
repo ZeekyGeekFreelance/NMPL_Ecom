@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocketManager = void 0;
 const socket_io_1 = require("socket.io");
-const isDevelopment = process.env.NODE_ENV !== "production";
+const config_1 = require("@/config");
 const debugLog = (...args) => {
-    if (isDevelopment) {
+    if (config_1.config.isDevelopment) {
         console.log(...args);
     }
 };
@@ -12,9 +12,13 @@ class SocketManager {
     constructor(httpServer) {
         this.io = new socket_io_1.Server(httpServer, {
             cors: {
-                origin: process.env.NODE_ENV === "production"
-                    ? ["https://ecommerce-nu-rosy.vercel.app"]
-                    : ["http://localhost:3000", "http://localhost:5173"],
+                origin: (origin, callback) => {
+                    if ((0, config_1.isAllowedOrigin)(origin)) {
+                        callback(null, true);
+                        return;
+                    }
+                    callback(new Error(`Origin not allowed by Socket CORS: ${origin}`));
+                },
                 methods: ["GET", "POST"],
                 credentials: true,
             },

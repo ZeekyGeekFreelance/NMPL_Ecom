@@ -10,8 +10,7 @@ import {
 } from "@/shared/templates/dealerNotifications";
 import { getSupportEmail } from "@/shared/utils/branding";
 import sendEmail from "@/shared/utils/sendEmail";
-
-const fallbackPortalUrl = "http://localhost:3000";
+import { config } from "@/config";
 
 type EmailPayload = {
   to: string;
@@ -22,16 +21,10 @@ type EmailPayload = {
 
 export class DealerNotificationService {
   private getPortalUrl(): string {
-    const clientUrl =
-      process.env.NODE_ENV === "production"
-        ? process.env.CLIENT_URL_PROD
-        : process.env.CLIENT_URL_DEV;
-
-    if (clientUrl && clientUrl.trim()) {
-      return clientUrl.replace(/\/+$/, "");
-    }
-
-    return fallbackPortalUrl;
+    const clientUrl = config.isProduction
+      ? config.urls.clientProd
+      : config.urls.clientDev;
+    return clientUrl.replace(/\/+$/, "");
   }
 
   private getSupportEmail(): string {

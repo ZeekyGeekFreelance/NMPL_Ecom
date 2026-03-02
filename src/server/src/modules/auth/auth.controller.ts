@@ -8,6 +8,7 @@ import { tokenUtils } from "@/shared/utils/authUtils";
 import AppError from "@/shared/errors/AppError";
 import { CartService } from "../cart/cart.service";
 import { makeLogsService } from "../logs/logs.factory";
+import { config } from "@/config";
 
 const { ...clearCookieOptions } = cookieOptions;
 
@@ -147,11 +148,11 @@ export class AuthController {
     const refreshToken = req?.cookies?.refreshToken;
     let userId = req.user?.id;
 
-    if (!userId && refreshToken && process.env.REFRESH_TOKEN_SECRET) {
+    if (!userId && refreshToken) {
       try {
         const decoded = jwt.verify(
           refreshToken,
-          process.env.REFRESH_TOKEN_SECRET
+          config.auth.refreshTokenSecret
         ) as { id?: string };
         if (typeof decoded.id === "string") {
           userId = decoded.id;

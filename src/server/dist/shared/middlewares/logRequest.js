@@ -20,14 +20,22 @@ const logRequest = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
         const duration = Date.now() - start;
         const status = res.statusCode;
         const userId = ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "anonymous";
-        yield logsService.info(`API Request`, {
-            method,
-            url,
-            status,
-            timePeriod: duration,
-            ip,
-            userId,
-        });
+        const traceId = req.traceId || "unknown";
+        try {
+            yield logsService.info(`API Request`, {
+                method,
+                url,
+                status,
+                timePeriod: duration,
+                ip,
+                userId,
+                traceId,
+            });
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[logRequest] Failed to persist request log: ${message}`);
+        }
     }));
     next();
 });

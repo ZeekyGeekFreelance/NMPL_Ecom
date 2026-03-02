@@ -14,6 +14,7 @@ import Image from "next/image";
 import { AUTH_API_BASE_URL } from "@/app/lib/constants/config";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 interface InputForm {
   email: string;
@@ -25,7 +26,7 @@ const SignIn = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const apiErrorMessage = getApiErrorMessage(error);
-  const showDevCredentials = process.env.NODE_ENV !== "production";
+  const showDevCredentials = !runtimeEnv.isProduction;
 
   const {
     control,

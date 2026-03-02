@@ -1,7 +1,8 @@
 import { CART_STATUS, Prisma } from "@prisma/client";
 import prisma from "@/infra/database/database.config";
+import { config } from "@/config";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = config.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);

@@ -1,62 +1,61 @@
 import rateLimit from "express-rate-limit";
+import { config } from "@/config";
 
-/**
- * Rate limiter for authentication endpoints (brute force protection)
- * Maximum 5 login attempts per 15 minutes per IP
- */
-export const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
-  message: "Too many authentication attempts. Please try again later.",
-  standardHeaders: false, // Don't return RateLimit-* headers
-  skip: (req) => {
-    // Skip rate limiting in development
-    return process.env.NODE_ENV !== "production";
-  },
-  handler: (req, res) => {
-    res.status(429).json({
-      success: false,
-      message: "Too many authentication attempts. Please try again in 15 minutes.",
-    });
-  },
+if (config.isProduction && !config.rateLimit.enabled) {
+  throw new Error(
+    "[rate-limit] Production boot blocked: RATE_LIMIT_ENABLED must be true."
+  );
+}
+
+const createLimiter = ({
+  windowMs,
+  max,
+  message,
+}: {
+  windowMs: number;
+  max: number;
+  message: string;
+}) =>
+  rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => !config.rateLimit.enabled,
+    handler: (_req, res) => {
+      res.status(429).json({
+        success: false,
+        message,
+      });
+    },
+  });
+
+export const authRateLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: config.rateLimit.loginMax,
+  message: "Too many login attempts. Please try again later.",
 });
 
-/**
- * Rate limiter for password reset endpoints
- * Maximum 3 attempts per hour per IP
- */
-export const passwordResetLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 attempts per hour
+export const otpRateLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: config.rateLimit.otpMax,
+  message: "Too many OTP attempts. Please try again later.",
+});
+
+export const passwordResetLimiter = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: config.rateLimit.otpMax,
   message: "Too many password reset attempts. Please try again later.",
-  standardHeaders: false,
-  skip: (req) => {
-    return process.env.NODE_ENV !== "production";
-  },
-  handler: (req, res) => {
-    res.status(429).json({
-      success: false,
-      message: "Too many password reset attempts. Please try again in 1 hour.",
-    });
-  },
 });
 
-/**
- * Rate limiter for registration endpoints
- * Maximum 10 registrations per hour per IP
- */
-export const registrationLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // 10 attempts per hour
+export const registrationLimiter = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: config.rateLimit.otpMax,
   message: "Too many registration attempts. Please try again later.",
-  standardHeaders: false,
-  skip: (req) => {
-    return process.env.NODE_ENV !== "production";
-  },
-  handler: (req, res) => {
-    res.status(429).json({
-      success: false,
-      message: "Too many registration attempts. Please try again in 1 hour.",
-    });
-  },
+});
+
+export const orderRateLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: config.rateLimit.orderMax,
+  message: "Too many order placement attempts. Please try again later.",
 });

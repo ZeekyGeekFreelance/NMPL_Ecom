@@ -5,6 +5,7 @@ import { Package } from "lucide-react";
 import { ApolloError } from "@apollo/client";
 import ProductCard from "./ProductCard";
 import { Product } from "@/app/types/productTypes";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 interface ProductSectionProps {
   title: string;
@@ -36,7 +37,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                 Error loading {title.toLowerCase()}
               </h3>
               <p className="text-red-600 text-sm">{friendlyErrorMessage}</p>
-              {process.env.NODE_ENV !== "production" && (
+              {!runtimeEnv.isProduction && (
                 <p className="text-red-500 text-xs mt-2">{error.message}</p>
               )}
             </div>

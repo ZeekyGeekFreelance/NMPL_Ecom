@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const AppError_1 = __importDefault(require("./AppError"));
 const logger_1 = __importDefault(require("@/infra/winston/logger"));
 const logs_factory_1 = require("@/modules/logs/logs.factory");
+const config_1 = require("@/config");
 const logsService = (0, logs_factory_1.makeLogsService)();
 const errorHandlers = {
     ValidationError: (err) => new AppError_1.default(400, Object.values(err.errors || {})
@@ -41,8 +42,9 @@ const errorHandlers = {
 const globalError = (err, req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     let error = err instanceof AppError_1.default ? err : new AppError_1.default(500, err.message);
-    const isDev = process.env.NODE_ENV === "development";
-    const isProd = process.env.NODE_ENV === "production";
+    const isDev = config_1.config.isDevelopment;
+    const isProd = config_1.config.isProduction;
+    const traceId = req.traceId || "unknown";
     const handler = errorHandlers[err.name] ||
         errorHandlers[err.constructor.name] ||
         ("code" in err ? errorHandlers[err.code || 500] : undefined);
@@ -52,19 +54,20 @@ const globalError = (err, req, res, _next) => __awaiter(void 0, void 0, void 0, 
     if (isDev) {
         console.error("Error Name:", err.name);
         console.error("Stack Trace:", (_a = err.stack) === null || _a === void 0 ? void 0 : _a.split("\n").slice(0, 5).join("\n"));
-        logger_1.default.error(Object.assign({ message: error.message, statusCode: error.statusCode, method: req.method, path: req.originalUrl, stack: error.stack }, (error.details && { details: error.details })));
+        logger_1.default.error(Object.assign({ message: error.message, statusCode: error.statusCode, method: req.method, path: req.originalUrl, traceId, stack: error.stack }, (error.details && { details: error.details })));
     }
     if (isProd && error.isOperational) {
-        logger_1.default.error(`[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message}`);
+        logger_1.default.error(`[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message} - traceId=${traceId}`);
     }
     const start = Date.now();
     const end = Date.now();
     try {
         yield logsService.error(`Error: ${error.message}`, {
             statusCode: error.statusCode,
-            stack: err.stack,
+            stack: isDev ? err.stack : undefined,
             method: req.method,
             url: req.originalUrl,
+            traceId,
             userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || null,
             timePeriod: end - start,
         });
@@ -73,7 +76,7 @@ const globalError = (err, req, res, _next) => __awaiter(void 0, void 0, void 0, 
         const logErrorMessage = loggingError instanceof Error ? loggingError.message : String(loggingError);
         logger_1.default.error(`[globalError] Failed to persist error log: ${logErrorMessage}`);
     }
-    res.status(error.statusCode || 500).json(Object.assign(Object.assign({ status: error.statusCode >= 400 && error.statusCode < 500 ? "fail" : "error", message: error.message }, (error.details && { errors: error.details })), (isDev && {
+    res.status(error.statusCode || 500).json(Object.assign(Object.assign({ status: error.statusCode >= 400 && error.statusCode < 500 ? "fail" : "error", traceId, message: error.message }, (error.details && { errors: error.details })), (isDev && {
         stack: error.stack,
         error,
     })));

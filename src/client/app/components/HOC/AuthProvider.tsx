@@ -12,8 +12,9 @@ import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import useToast from "@/app/hooks/ui/useToast";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = runtimeEnv.isDevelopment;
 const MIN_REVALIDATE_INTERVAL_MS = 800;
 
 const debugLog = (...args: unknown[]) => {

@@ -15,6 +15,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReportsService = void 0;
 const date_fns_1 = require("date-fns");
 const redis_1 = __importDefault(require("@/infra/cache/redis"));
+const config_1 = require("@/config");
+const cacheKey_1 = require("@/shared/utils/cacheKey");
 const userRole_1 = require("@/shared/utils/userRole");
 class ReportsService {
     constructor(reportsRepository, analyticsRepository) {
@@ -25,8 +27,8 @@ class ReportsService {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c, _d, _e, _f, _g, _h;
             const { timePeriod, year, startDate, endDate } = query;
-            const cacheKey = `reports:sales:${timePeriod}:${year || "all"}:${(startDate === null || startDate === void 0 ? void 0 : startDate.toISOString()) || "none"}:${(endDate === null || endDate === void 0 ? void 0 : endDate.toISOString()) || "none"}`;
-            const cachedData = yield redis_1.default.get(cacheKey);
+            const reportCacheKey = (0, cacheKey_1.cacheKey)("reports", "sales", `${timePeriod}:${year || "all"}:${(startDate === null || startDate === void 0 ? void 0 : startDate.toISOString()) || "none"}:${(endDate === null || endDate === void 0 ? void 0 : endDate.toISOString()) || "none"}`);
+            const cachedData = yield redis_1.default.get(reportCacheKey);
             if (cachedData) {
                 return JSON.parse(cachedData);
             }
@@ -92,15 +94,15 @@ class ReportsService {
                 byCategory,
                 topProducts,
             };
-            yield redis_1.default.setex(cacheKey, 300, JSON.stringify(result));
+            yield redis_1.default.setex(reportCacheKey, config_1.config.cache.reportsTtlSeconds, JSON.stringify(result));
             return result;
         });
     }
     generateUserRetentionReport(query) {
         return __awaiter(this, void 0, void 0, function* () {
             const { timePeriod, year, startDate, endDate } = query;
-            const cacheKey = `reports:user_retention:${timePeriod}:${year || "all"}:${(startDate === null || startDate === void 0 ? void 0 : startDate.toISOString()) || "none"}:${(endDate === null || endDate === void 0 ? void 0 : endDate.toISOString()) || "none"}`;
-            const cachedData = yield redis_1.default.get(cacheKey);
+            const reportCacheKey = (0, cacheKey_1.cacheKey)("reports", "user_retention", `${timePeriod}:${year || "all"}:${(startDate === null || startDate === void 0 ? void 0 : startDate.toISOString()) || "none"}:${(endDate === null || endDate === void 0 ? void 0 : endDate.toISOString()) || "none"}`);
+            const cachedData = yield redis_1.default.get(reportCacheKey);
             if (cachedData) {
                 return JSON.parse(cachedData);
             }
@@ -149,7 +151,7 @@ class ReportsService {
                 lifetimeValue: Number(lifetimeValue.toFixed(2)),
                 topUsers: topCustomers,
             };
-            yield redis_1.default.setex(cacheKey, 300, JSON.stringify(result));
+            yield redis_1.default.setex(reportCacheKey, config_1.config.cache.reportsTtlSeconds, JSON.stringify(result));
             return result;
         });
     }

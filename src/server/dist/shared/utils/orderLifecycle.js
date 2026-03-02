@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getReservationSweepSeconds = exports.getReservationExpiryHours = exports.DEFAULT_RESERVATION_SWEEP_SECONDS = exports.DEFAULT_RESERVATION_EXPIRY_HOURS = exports.TERMINAL_ORDER_STATUSES = exports.NON_REVENUE_ORDER_STATUSES = exports.REVENUE_RECOGNIZED_ORDER_STATUSES = exports.ORDER_STATUS_TRANSITIONS = exports.ORDER_LIFECYCLE_STATUS = void 0;
+exports.getReservationSweepSeconds = exports.getReservationExpiryHours = exports.TERMINAL_ORDER_STATUSES = exports.NON_REVENUE_ORDER_STATUSES = exports.REVENUE_RECOGNIZED_ORDER_STATUSES = exports.ORDER_STATUS_TRANSITIONS = exports.ORDER_LIFECYCLE_STATUS = void 0;
+const config_1 = require("@/config");
 exports.ORDER_LIFECYCLE_STATUS = {
     PENDING_VERIFICATION: "PENDING_VERIFICATION",
     WAITLISTED: "WAITLISTED",
@@ -42,13 +43,7 @@ exports.TERMINAL_ORDER_STATUSES = [
     exports.ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
     exports.ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
 ];
-exports.DEFAULT_RESERVATION_EXPIRY_HOURS = 48;
-exports.DEFAULT_RESERVATION_SWEEP_SECONDS = 60;
-const parsePositiveInteger = (value, fallback) => {
-    const parsed = Number.parseInt(String(value !== null && value !== void 0 ? value : ""), 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-const getReservationExpiryHours = () => parsePositiveInteger(process.env.ORDER_RESERVATION_EXPIRY_HOURS, exports.DEFAULT_RESERVATION_EXPIRY_HOURS);
+const getReservationExpiryHours = () => config_1.config.orderLifecycle.reservationExpiryHours;
 exports.getReservationExpiryHours = getReservationExpiryHours;
-const getReservationSweepSeconds = () => parsePositiveInteger(process.env.ORDER_RESERVATION_SWEEP_SECONDS, exports.DEFAULT_RESERVATION_SWEEP_SECONDS);
+const getReservationSweepSeconds = () => config_1.config.orderLifecycle.reservationSweepSeconds;
 exports.getReservationSweepSeconds = getReservationSweepSeconds;

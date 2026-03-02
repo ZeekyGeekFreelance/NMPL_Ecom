@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import logger from "@/infra/winston/logger";
 import { getPlatformName } from "./branding";
+import { config } from "@/config";
 
 interface EmailAttachment {
   filename: string;
@@ -29,34 +30,9 @@ interface MailOptions {
   attachments?: EmailAttachment[];
 }
 
-const parsePort = (value: string | undefined, fallback: number): number => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const parseSecureFlag = (
-  value: string | undefined,
-  fallback: boolean
-): boolean => {
-  if (!value) {
-    return fallback;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "true" || normalized === "1") {
-    return true;
-  }
-
-  if (normalized === "false" || normalized === "0") {
-    return false;
-  }
-
-  return fallback;
-};
-
 const resolveCredentials = (): { user: string; pass: string } => {
-  const user = (process.env.SMTP_USER || process.env.EMAIL_USER || "").trim();
-  const pass = (process.env.SMTP_PASS || process.env.EMAIL_PASS || "").trim();
+  const user = config.email.smtpUser;
+  const pass = config.email.smtpPass;
   return { user, pass };
 };
 
@@ -64,10 +40,10 @@ const createTransporter = (
   user: string,
   pass: string
 ): nodemailer.Transporter => {
-  const smtpHost = process.env.SMTP_HOST?.trim();
+  const smtpHost = config.email.smtpHost;
   if (smtpHost) {
-    const port = parsePort(process.env.SMTP_PORT, 587);
-    const secure = parseSecureFlag(process.env.SMTP_SECURE, port === 465);
+    const port = config.email.smtpPort;
+    const secure = config.email.smtpSecure;
 
     return nodemailer.createTransport({
       host: smtpHost,
@@ -80,7 +56,7 @@ const createTransporter = (
     });
   }
 
-  const service = process.env.EMAIL_SERVICE?.trim() || "gmail";
+  const service = config.email.emailService;
   return nodemailer.createTransport({
     service,
     auth: {
@@ -111,8 +87,8 @@ const sendEmail = async ({
     }
 
     const transporter = createTransporter(emailUser, emailPass);
-    const fromAddress = (process.env.EMAIL_FROM || emailUser).trim();
-    const fromName = (process.env.EMAIL_FROM_NAME || `${platformName} Support`).trim();
+    const fromAddress = config.email.from;
+    const fromName = config.email.fromName || `${platformName} Support`;
 
     const mailOptions: MailOptions = {
       from: `"${fromName}" <${fromAddress}>`,

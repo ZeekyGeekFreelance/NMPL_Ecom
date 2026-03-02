@@ -3,8 +3,9 @@ import { CartRepository } from "./cart.repository";
 import prisma from "@/infra/database/database.config";
 import { CART_EVENT } from "@prisma/client";
 import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
+import { config } from "@/config";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = config.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);

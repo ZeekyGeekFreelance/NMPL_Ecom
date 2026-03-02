@@ -12,7 +12,7 @@ import compression from "compression";
 import passport from "passport";
 import session from "express-session";
 import { RedisStore } from "connect-redis";
-import redisClient from "./infra/cache/redis";
+import redisClient, { connectRedis } from "./infra/cache/redis";
 import configurePassport from "./infra/passport/passport";
 import { cookieParserOptions } from "./shared/constants";
 import globalError from "./shared/errors/globalError";
@@ -21,134 +21,106 @@ import { configureRoutes } from "./routes";
 import { configureGraphQL } from "./graphql";
 import webhookRoutes from "./modules/webhook/webhook.routes";
 import healthRoutes from "./routes/health.routes";
-// import { preflightHandler } from "./shared/middlewares/preflightHandler";
 import { Server as HTTPServer } from "http";
 import { SocketManager } from "@/infra/socket/socket";
 import { connectDB } from "./infra/database/database.config";
 import { setupSwagger } from "./docs/swagger";
 import { startQuotationExpiryWorker } from "./modules/transaction/quotationExpiry.worker";
+import { config, isAllowedOrigin } from "@/config";
+import { randomUUID } from "crypto";
 
-const defaultDevOrigins = [
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "http://localhost:5173",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3001",
-  "http://127.0.0.1:5173",
-];
-
-const parseAllowedOrigins = (): string[] => {
-  const configuredOrigins = [
-    process.env.ALLOWED_ORIGINS || "",
-    process.env.CLIENT_URL_DEV || "",
-    process.env.CLIENT_URL_PROD || "",
-  ]
-    .join(",")
-    .split(",")
-    .map((value) => value.trim())
+const parseCspDirectives = (value: string): Record<string, string[]> => {
+  const directives = value
+    .split(";")
+    .map((directive) => directive.trim())
     .filter(Boolean);
 
-  if (process.env.NODE_ENV !== "production") {
-    return [...new Set([...defaultDevOrigins, ...configuredOrigins])];
+  if (directives.length === 0) {
+    throw new Error("[app] CSP_DIRECTIVES is empty or invalid");
   }
 
-  if (configuredOrigins.length > 0) return configuredOrigins;
-
-  return process.env.NODE_ENV === "production"
-    ? ["https://ecommerce-nu-rosy.vercel.app"]
-    : defaultDevOrigins;
-};
-
-const isDevPreviewOrigin = (origin: string): boolean => {
-  if (process.env.NODE_ENV === "production") {
-    return false;
+  const parsed: Record<string, string[]> = {};
+  for (const directive of directives) {
+    const [name, ...items] = directive.split(" ").map((token) => token.trim());
+    if (!name) {
+      throw new Error(`[app] Invalid CSP directive segment: ${directive}`);
+    }
+    parsed[name] = items.length > 0 ? items : ["'none'"];
   }
 
-  try {
-    const url = new URL(origin);
-    const hostname = url.hostname.toLowerCase();
-
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname.endsWith(".replit.dev") ||
-      hostname.endsWith(".repl.co") ||
-      hostname.endsWith(".ngrok-free.app") ||
-      hostname.endsWith(".trycloudflare.com")
-    );
-  } catch {
-    return false;
-  }
+  return parsed;
 };
 
 export const createApp = async () => {
   const app = express();
-  const sessionSecret = process.env.SESSION_SECRET;
 
-  if (!sessionSecret) {
-    throw new Error("SESSION_SECRET is required");
-  }
-
-  try {
-    await connectDB();
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Database bootstrap failed. Verify DATABASE_URL and database availability. Details: ${errorMessage}`
-    );
+  await connectDB();
+  if (config.redis.enabled) {
+    await connectRedis();
   }
 
   startQuotationExpiryWorker();
 
   const httpServer = new HTTPServer(app);
-
-  // Initialize Socket.IO
   const socketManager = new SocketManager(httpServer);
   const io = socketManager.getIO();
 
-  // Swagger Documentation
   setupSwagger(app);
+  app.disable("x-powered-by");
+  app.set("trust proxy", config.server.trustProxy ? 1 : 0);
+  app.use((req, res, next) => {
+    const incomingTraceId = String(req.headers["x-trace-id"] || "").trim();
+    const traceId = incomingTraceId || randomUUID();
+    req.traceId = traceId;
+    res.setHeader("x-trace-id", traceId);
+    next();
+  });
 
-  // Health check routes (no middleware applied)
   app.use("/", healthRoutes);
-
-  // Basic
   app.use(
     "/api/v1/webhook",
-    bodyParser.raw({ type: "application/json" }),
+    bodyParser.raw({ type: "application/json", limit: config.server.bodyJsonLimit }),
     webhookRoutes
   );
-  app.use(express.json());
-  app.use(bodyParser.urlencoded({ extended: true }));
-  app.use(cookieParser(process.env.COOKIE_SECRET, cookieParserOptions));
 
-  app.set("trust proxy", 1);
+  app.use(express.json({ limit: config.server.bodyJsonLimit }));
   app.use(
-    session({
-      store: new RedisStore({ client: redisClient }),
-      secret: sessionSecret,
-      resave: false,
-      saveUninitialized: true, // Keeps guest sessionId from the first request
-      proxy: true, // Ensures secure cookies work with proxy
-      cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production", // true in prod
-        sameSite:
-          process.env.NODE_ENV === "production"
-            ? ("none" as const)
-            : ("lax" as const),
-        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      },
+    bodyParser.urlencoded({
+      extended: true,
+      limit: config.server.bodyUrlEncodedLimit,
+      parameterLimit: 500,
     })
   );
+  app.use(cookieParser(config.security.cookieSecret, cookieParserOptions));
+
+  const sessionConfig: session.SessionOptions = {
+    secret: config.security.sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    proxy: config.server.trustProxy,
+    cookie: {
+      httpOnly: true,
+      secure: config.isProduction,
+      sameSite: config.security.cookieSameSite,
+      domain: config.security.cookieDomain,
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    },
+  };
+
+  if (config.redis.enabled) {
+    sessionConfig.store = new RedisStore({ client: redisClient as any });
+  } else if (config.isDevelopment) {
+    console.warn(
+      "[session] Redis is disabled in development. Using in-memory session store."
+    );
+  }
+
+  app.use(session(sessionConfig));
+
   app.use(passport.initialize());
   app.use(passport.session());
   configurePassport();
 
-  // Preflight handler removed to avoid conflicts
-
-  // CORS must be applied BEFORE GraphQL setup
-  const allowedOrigins = parseAllowedOrigins();
   app.use((req, res, next) => {
     if (req.headers["access-control-request-private-network"] === "true") {
       res.setHeader("Access-Control-Allow-Private-Network", "true");
@@ -159,16 +131,10 @@ export const createApp = async () => {
   app.use(
     cors({
       origin: (origin, callback) => {
-        // Allow non-browser requests (curl/postman/mobile apps without Origin).
-        if (
-          !origin ||
-          allowedOrigins.includes(origin) ||
-          isDevPreviewOrigin(origin)
-        ) {
+        if (isAllowedOrigin(origin)) {
           callback(null, true);
           return;
         }
-
         callback(new Error(`Origin not allowed by CORS: ${origin}`));
       },
       credentials: true,
@@ -178,33 +144,35 @@ export const createApp = async () => {
         "Authorization",
         "X-Requested-With",
         "x-confirmation-handled",
-        "Apollo-Require-Preflight", // For GraphQL
+        "Apollo-Require-Preflight",
       ],
     })
   );
 
-  app.use(helmet());
-  app.use(helmet.frameguard({ action: "deny" }));
-  app.use(
-    helmet.hsts({
-      maxAge: 31536000, // 1 year in seconds
-      includeSubDomains: true,
-      preload: true,
-    })
-  );
-  app.use(helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
-    },
-  }));
-  app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
-  app.use(helmet.permittedCrossDomainPolicies());
+  if (config.isProduction && config.security.helmetEnabled) {
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: parseCspDirectives(config.security.csp),
+        },
+      })
+    );
+    app.use(helmet.frameguard({ action: "deny" }));
+    app.use(
+      helmet.hsts({
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      })
+    );
+    app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
+    app.use(helmet.permittedCrossDomainPolicies());
+    app.use((_req, res, next) => {
+      res.setHeader("X-Frame-Options", "DENY");
+      next();
+    });
+  }
 
-  // Extra Security
   app.use(ExpressMongoSanitize());
   app.use(
     hpp({
@@ -222,11 +190,8 @@ export const createApp = async () => {
   app.use(compression());
 
   app.use("/api", configureRoutes(io));
-
-  // GraphQL setup
   await configureGraphQL(app);
 
-  // Error & Logging
   app.use(globalError);
   app.use(logRequest);
 

@@ -2,6 +2,7 @@ import prisma from "@/infra/database/database.config";
 import AppError from "@/shared/errors/AppError";
 import { getPlatformName } from "@/shared/utils/branding";
 import { ADDRESS_TYPE, DELIVERY_MODE } from "@prisma/client";
+import { config } from "@/config";
 
 type LineItem = {
   quantity: number;
@@ -30,27 +31,19 @@ export type CheckoutAddressSnapshot = {
   pincode: string;
 };
 
-const parseNumber = (value: unknown, fallback: number) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
 const normalizeText = (value: unknown) =>
   String(value ?? "")
     .trim()
     .toUpperCase();
 
 const getBangaloreAliases = () => {
-  const rawAliases =
-    process.env.BANGALORE_CITY_ALIASES || "BANGALORE,BENGALURU";
-  return rawAliases
+  return config.delivery.bangaloreCityAliases
     .split(",")
     .map((value) => normalizeText(value))
     .filter(Boolean);
 };
 
-const getBangaloreDeliveryCharge = () =>
-  parseNumber(process.env.BANGALORE_DELIVERY_CHARGE, 75);
+const getBangaloreDeliveryCharge = () => config.delivery.bangaloreCharge;
 
 const normalizeDeliveryMode = (mode: unknown): DELIVERY_MODE => {
   const normalizedMode = normalizeText(mode);
@@ -119,20 +112,15 @@ export const getPickupLocationSnapshot = (): CheckoutAddressSnapshot => {
     id: "PICKUP_LOCATION",
     sourceAddressId: null,
     type: ADDRESS_TYPE.OTHER,
-    fullName:
-      String(process.env.PICKUP_STORE_NAME || "").trim() ||
-      `${platformName} Pickup Desk`,
-    phoneNumber:
-      String(process.env.PICKUP_STORE_PHONE || "").trim() || "Not Available",
-    line1:
-      String(process.env.PICKUP_STORE_LINE1 || "").trim() ||
-      `${platformName} Store Pickup Counter`,
-    line2: String(process.env.PICKUP_STORE_LINE2 || "").trim() || null,
-    landmark: String(process.env.PICKUP_STORE_LANDMARK || "").trim() || null,
-    city: String(process.env.PICKUP_STORE_CITY || "").trim() || "Bangalore",
-    state: String(process.env.PICKUP_STORE_STATE || "").trim() || "Karnataka",
-    country: String(process.env.PICKUP_STORE_COUNTRY || "").trim() || "India",
-    pincode: String(process.env.PICKUP_STORE_PINCODE || "").trim() || "560001",
+    fullName: config.delivery.pickupStoreName || `${platformName} Pickup Desk`,
+    phoneNumber: config.delivery.pickupStorePhone,
+    line1: config.delivery.pickupStoreLine1,
+    line2: config.delivery.pickupStoreLine2 || null,
+    landmark: config.delivery.pickupStoreLandmark || null,
+    city: config.delivery.pickupStoreCity,
+    state: config.delivery.pickupStoreState,
+    country: config.delivery.pickupStoreCountry,
+    pincode: config.delivery.pickupStorePincode,
   };
 };
 

@@ -22,6 +22,8 @@ const branding_1 = require("@/shared/utils/branding");
 const accountReference_1 = require("@/shared/utils/accountReference");
 const userRole_1 = require("@/shared/utils/userRole");
 const orderLifecycle_1 = require("@/shared/utils/orderLifecycle");
+const checkoutPricing_1 = require("@/shared/utils/pricing/checkoutPricing");
+const config_1 = require("@/config");
 class InvoiceService {
     constructor(invoiceRepository) {
         this.invoiceRepository = invoiceRepository;
@@ -53,13 +55,11 @@ class InvoiceService {
     }
     getInternalRecipients(customerEmail) {
         var _a;
-        const configuredRecipients = (process.env.BILLING_NOTIFICATION_EMAILS || "")
+        const configuredRecipients = config_1.config.branding.billingNotificationEmails
             .split(",")
             .map((email) => email.trim())
             .filter(Boolean);
-        const fallback = ((_a = process.env.EMAIL_USER) === null || _a === void 0 ? void 0 : _a.trim())
-            ? [process.env.EMAIL_USER.trim()]
-            : [];
+        const fallback = ((_a = config_1.config.email.smtpUser) === null || _a === void 0 ? void 0 : _a.trim()) ? [config_1.config.email.smtpUser.trim()] : [];
         const recipients = configuredRecipients.length > 0 ? configuredRecipients : fallback;
         const customerEmailLower = customerEmail.toLowerCase();
         return Array.from(new Set(recipients.filter((email) => email.toLowerCase() !== customerEmailLower)));
@@ -105,6 +105,9 @@ class InvoiceService {
                     orderId: orderReference,
                     customerType,
                     orderDate: invoice.order.orderDate,
+                    subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+                    deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+                    deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
                     totalAmount: invoice.order.amount,
                 });
                 customerEmailSent = yield (0, sendEmail_1.default)({
@@ -133,6 +136,9 @@ class InvoiceService {
                     orderId: orderReference,
                     customerType,
                     orderDate: invoice.order.orderDate,
+                    subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+                    deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+                    deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
                     totalAmount: invoice.order.amount,
                 });
                 const internalResults = yield Promise.all(internalRecipients.map((recipient) => (0, sendEmail_1.default)({
@@ -206,6 +212,7 @@ class InvoiceService {
     }
     buildInvoicePdf(invoice) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const items = invoice.order.orderItems.map((item) => ({
                 productName: item.variant.product.name,
                 sku: item.variant.sku,
@@ -214,25 +221,54 @@ class InvoiceService {
                 subtotal: item.price * item.quantity,
             }));
             const customerType = this.resolveCustomerType(invoice);
+            const normalizedDeliveryMode = String(invoice.order.deliveryMode || "DELIVERY")
+                .trim()
+                .toUpperCase();
+            const isPickup = normalizedDeliveryMode === "PICKUP";
+            const snapshotAddress = invoice.order.address;
+            const pickupLocation = isPickup ? (0, checkoutPricing_1.getPickupLocationSnapshot)() : null;
+            const locationAddress = snapshotAddress
+                ? {
+                    fullName: snapshotAddress.fullName,
+                    phoneNumber: snapshotAddress.phoneNumber,
+                    line1: snapshotAddress.line1,
+                    line2: snapshotAddress.line2,
+                    landmark: snapshotAddress.landmark,
+                    city: snapshotAddress.city,
+                    state: snapshotAddress.state,
+                    pincode: snapshotAddress.pincode,
+                    country: snapshotAddress.country,
+                }
+                : isPickup
+                    ? {
+                        // Legacy compatibility only: modern orders always snapshot pickup address.
+                        fullName: pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.fullName,
+                        phoneNumber: pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.phoneNumber,
+                        line1: (pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.line1) || "",
+                        line2: (pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.line2) || null,
+                        landmark: (pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.landmark) || null,
+                        city: (pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.city) || "",
+                        state: (pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.state) || "",
+                        pincode: (pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.pincode) || "",
+                        country: (pickupLocation === null || pickupLocation === void 0 ? void 0 : pickupLocation.country) || "",
+                    }
+                    : null;
             return (0, generateInvoicePdf_1.default)({
                 invoiceNumber: invoice.invoiceNumber,
                 orderId: (0, accountReference_1.toOrderReference)(invoice.orderId),
                 orderDate: invoice.order.orderDate,
                 customerName: invoice.user.name,
+                customerPhone: invoice.user.phone || ((_a = invoice.order.address) === null || _a === void 0 ? void 0 : _a.phoneNumber) || null,
                 accountReference: (0, accountReference_1.toAccountReference)(invoice.user.id),
                 customerEmail: invoice.customerEmail,
                 customerType,
                 items,
+                subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+                deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+                deliveryMode: normalizedDeliveryMode,
                 totalAmount: invoice.order.amount,
-                billingAddress: invoice.order.address
-                    ? {
-                        street: invoice.order.address.street,
-                        city: invoice.order.address.city,
-                        state: invoice.order.address.state,
-                        zip: invoice.order.address.zip,
-                        country: invoice.order.address.country,
-                    }
-                    : null,
+                locationLabel: isPickup ? "Pickup Location" : "Delivery To",
+                locationAddress,
             });
         });
     }

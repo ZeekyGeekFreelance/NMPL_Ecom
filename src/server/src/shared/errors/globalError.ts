@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import AppError from "./AppError";
 import logger from "@/infra/winston/logger";
 import { makeLogsService } from "@/modules/logs/logs.factory";
+import { config } from "@/config";
 
 interface CustomError extends Error {
   name: string;
@@ -64,8 +65,9 @@ const globalError = async (
   let error: AppError =
     err instanceof AppError ? err : new AppError(500, err.message);
 
-  const isDev = process.env.NODE_ENV === "development";
-  const isProd = process.env.NODE_ENV === "production";
+  const isDev = config.isDevelopment;
+  const isProd = config.isProduction;
+  const traceId = req.traceId || "unknown";
 
   const handler =
     errorHandlers[err.name] ||
@@ -85,6 +87,7 @@ const globalError = async (
       statusCode: error.statusCode,
       method: req.method,
       path: req.originalUrl,
+      traceId,
       stack: error.stack,
       ...(error.details && { details: error.details }),
     });
@@ -92,7 +95,7 @@ const globalError = async (
 
   if (isProd && error.isOperational) {
     logger.error(
-      `[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message}`
+      `[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message} - traceId=${traceId}`
     );
   }
 
@@ -102,9 +105,10 @@ const globalError = async (
   try {
     await logsService.error(`Error: ${error.message}`, {
       statusCode: error.statusCode,
-      stack: err.stack,
+      stack: isDev ? err.stack : undefined,
       method: req.method,
       url: req.originalUrl,
+      traceId,
       userId: (req as { user?: { id?: string } }).user?.id || null,
       timePeriod: end - start,
     });
@@ -117,6 +121,7 @@ const globalError = async (
   res.status(error.statusCode || 500).json({
     status:
       error.statusCode >= 400 && error.statusCode < 500 ? "fail" : "error",
+    traceId,
     message: error.message,
     ...(error.details && { errors: error.details }),
     ...(isDev && {

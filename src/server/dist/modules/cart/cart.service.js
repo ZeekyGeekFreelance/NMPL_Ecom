@@ -16,7 +16,8 @@ exports.CartService = void 0;
 const AppError_1 = __importDefault(require("@/shared/errors/AppError"));
 const database_config_1 = __importDefault(require("@/infra/database/database.config"));
 const dealerAccess_1 = require("@/shared/utils/dealerAccess");
-const isDevelopment = process.env.NODE_ENV !== "production";
+const config_1 = require("@/config");
+const isDevelopment = config_1.config.isDevelopment;
 const debugLog = (...args) => {
     if (isDevelopment) {
         console.log(...args);
@@ -44,34 +45,15 @@ class CartService {
             return cart;
         });
     }
-    getOrCreateCart(userId, sessionId) {
+    getOrCreateCart(userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            debugLog("[CART SERVICE] getOrCreateCart called", { userId, sessionId });
-            let cart;
-            if (userId) {
-                cart = yield this.cartRepository.getCartByUserId(userId);
-                if (!cart) {
-                    cart = yield this.cartRepository.createCart({ userId });
-                }
-                if (sessionId) {
-                    const sessionCart = yield this.cartRepository.getCartBySessionId(sessionId);
-                    if (sessionCart && sessionCart.id !== cart.id) {
-                        yield this.cartRepository.mergeCarts(sessionCart.id, cart.id);
-                        cart = yield this.cartRepository.getCartByUserId(userId);
-                        if (!cart) {
-                            throw new AppError_1.default(500, "Failed to load merged cart");
-                        }
-                    }
-                }
+            debugLog("[CART SERVICE] getOrCreateCart called", { userId });
+            if (!userId) {
+                throw new AppError_1.default(401, "Authentication required for cart access");
             }
-            else if (sessionId) {
-                cart = yield this.cartRepository.getCartBySessionId(sessionId);
-                if (!cart) {
-                    cart = yield this.cartRepository.createCart({ sessionId });
-                }
-            }
-            else {
-                throw new AppError_1.default(400, "User ID or Session ID is required");
+            let cart = yield this.cartRepository.getCartByUserId(userId);
+            if (!cart) {
+                cart = yield this.cartRepository.createCart({ userId });
             }
             return this.applyDealerPricingToCart(cart, userId);
         });
@@ -138,18 +120,18 @@ class CartService {
             };
         });
     }
-    getCartCount(userId, sessionId) {
+    getCartCount(userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const cart = yield this.getOrCreateCart(userId, sessionId);
+            const cart = yield this.getOrCreateCart(userId);
             return cart.cartItems.length;
         });
     }
-    addToCart(variantId, quantity, userId, sessionId) {
+    addToCart(variantId, quantity, userId) {
         return __awaiter(this, void 0, void 0, function* () {
             if (quantity <= 0) {
                 throw new AppError_1.default(400, "Quantity must be greater than 0");
             }
-            const cart = yield this.getOrCreateCart(userId, sessionId);
+            const cart = yield this.getOrCreateCart(userId);
             const existingItem = yield this.cartRepository.findCartItem(cart.id, variantId);
             if (existingItem) {
                 const newQuantity = existingItem.quantity + quantity;
@@ -166,48 +148,50 @@ class CartService {
             return item;
         });
     }
-    assertCartItemOwnership(itemId, userId, sessionId) {
+    assertCartItemOwnership(itemId, userId) {
         return __awaiter(this, void 0, void 0, function* () {
+            if (!userId) {
+                throw new AppError_1.default(401, "Authentication required for cart access");
+            }
             const cartItem = yield this.cartRepository.findCartItemById(itemId);
             if (!cartItem) {
                 throw new AppError_1.default(404, "Cart item not found");
             }
-            const isUserCart = !!userId && cartItem.cart.userId === userId;
-            const isSessionCart = !!sessionId && cartItem.cart.sessionId === sessionId;
-            if (!isUserCart && !isSessionCart) {
+            if (cartItem.cart.userId !== userId) {
                 throw new AppError_1.default(403, "You are not authorized to access this cart");
             }
         });
     }
-    updateCartItemQuantity(itemId, quantity, userId, sessionId) {
+    updateCartItemQuantity(itemId, quantity, userId) {
         return __awaiter(this, void 0, void 0, function* () {
             if (quantity <= 0) {
                 throw new AppError_1.default(400, "Quantity must be greater than 0");
             }
-            yield this.assertCartItemOwnership(itemId, userId, sessionId);
+            yield this.assertCartItemOwnership(itemId, userId);
             return this.cartRepository.updateCartItemQuantity(itemId, quantity);
         });
     }
-    removeFromCart(itemId, userId, sessionId) {
+    removeFromCart(itemId, userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            yield this.assertCartItemOwnership(itemId, userId, sessionId);
+            yield this.assertCartItemOwnership(itemId, userId);
             return this.cartRepository.removeCartItem(itemId);
         });
     }
     mergeCartsOnLogin(sessionId, userId) {
         return __awaiter(this, void 0, void 0, function* () {
+            if (!userId || !sessionId) {
+                return;
+            }
+            // Cart now uses authenticated user ownership as the single source of truth.
+            yield this.getOrCreateCart(userId);
+        });
+    }
+    clearCartOnSignOut(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
             if (!userId) {
                 return;
             }
-            const sessionCart = yield this.cartRepository.getCartBySessionId(sessionId);
-            if (!sessionCart) {
-                return;
-            }
-            const userCart = yield this.getOrCreateCart(userId);
-            if (sessionCart.id === userCart.id) {
-                return;
-            }
-            yield this.cartRepository.mergeCarts(sessionCart.id, userCart.id);
+            yield this.cartRepository.clearCart(userId);
         });
     }
 }

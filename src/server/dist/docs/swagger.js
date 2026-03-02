@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupSwagger = void 0;
 const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const config_1 = require("@/config");
 const options = {
     definition: {
         openapi: "3.0.0",
@@ -16,8 +17,8 @@ const options = {
         },
         servers: [
             {
-                url: "http://localhost:5000/api/v1",
-                description: "Development server",
+                url: `${config_1.config.server.publicApiBaseUrl.replace(/\/+$/, "")}/api/v1`,
+                description: `${config_1.config.nodeEnv} server`,
             },
         ],
         components: {

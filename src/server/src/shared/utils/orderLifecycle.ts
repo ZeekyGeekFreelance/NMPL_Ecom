@@ -1,3 +1,5 @@
+import { config } from "@/config";
+
 export const ORDER_LIFECYCLE_STATUS = {
   PENDING_VERIFICATION: "PENDING_VERIFICATION",
   WAITLISTED: "WAITLISTED",
@@ -50,25 +52,8 @@ export const TERMINAL_ORDER_STATUSES: OrderLifecycleStatus[] = [
   ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
 ];
 
-export const DEFAULT_RESERVATION_EXPIRY_HOURS = 48;
-export const DEFAULT_RESERVATION_SWEEP_SECONDS = 60;
-
-const parsePositiveInteger = (
-  value: string | undefined,
-  fallback: number
-): number => {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
 export const getReservationExpiryHours = (): number =>
-  parsePositiveInteger(
-    process.env.ORDER_RESERVATION_EXPIRY_HOURS,
-    DEFAULT_RESERVATION_EXPIRY_HOURS
-  );
+  config.orderLifecycle.reservationExpiryHours;
 
 export const getReservationSweepSeconds = (): number =>
-  parsePositiveInteger(
-    process.env.ORDER_RESERVATION_SWEEP_SECONDS,
-    DEFAULT_RESERVATION_SWEEP_SECONDS
-  );
+  config.orderLifecycle.reservationSweepSeconds;

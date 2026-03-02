@@ -156,6 +156,9 @@ class UserService {
             if (data.name !== undefined) {
                 payload.name = this.normalizeDisplayName(data.name, "Name");
             }
+            if (data.phone !== undefined) {
+                payload.phone = this.normalizePhone(data.phone, "Phone number");
+            }
             const updatedUser = yield this.userRepository.updateUser(userId, payload);
             return this.withAccountReference(updatedUser);
         });
@@ -167,9 +170,17 @@ class UserService {
             if (!user) {
                 throw new AppError_1.default(404, "User not found");
             }
-            const updatedUser = yield this.userRepository.updateUser(userId, {
-                name: this.normalizeDisplayName(data.name, "Name"),
-            });
+            const payload = {};
+            if (data.name !== undefined) {
+                payload.name = this.normalizeDisplayName(data.name, "Name");
+            }
+            if (data.phone !== undefined) {
+                payload.phone = this.normalizePhone(data.phone, "Phone number");
+            }
+            if (Object.keys(payload).length === 0) {
+                throw new AppError_1.default(400, "At least one profile field is required");
+            }
+            const updatedUser = yield this.userRepository.updateUser(userId, payload);
             return this.withAccountReference(updatedUser);
         });
     }
@@ -225,6 +236,7 @@ class UserService {
                 accountReference: (0, accountReference_1.toAccountReference)(dealer.id),
                 name: dealer.name,
                 email: dealer.email,
+                phone: dealer.phone,
                 role: dealer.role,
                 effectiveRole: (0, userRole_1.resolveEffectiveRoleFromUser)({
                     role: dealer.role,

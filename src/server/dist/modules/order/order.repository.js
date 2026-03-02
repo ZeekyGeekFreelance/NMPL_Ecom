@@ -130,7 +130,15 @@ class OrderRepository {
     createOrder(data) {
         return __awaiter(this, void 0, void 0, function* () {
             return database_config_1.default.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
-                const computedAmount = data.orderItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
+                var _a;
+                const computedSubtotal = data.orderItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
+                const normalizedSubtotal = Number(computedSubtotal.toFixed(2));
+                const subtotalFromPricing = Number(data.pricing.subtotalAmount.toFixed(2));
+                if (Math.abs(normalizedSubtotal - subtotalFromPricing) > 0.01) {
+                    throw new AppError_1.default(409, "Pricing mismatch detected. Please refresh checkout summary and retry.");
+                }
+                const deliveryCharge = Number(data.pricing.deliveryCharge.toFixed(2));
+                const computedAmount = Number((normalizedSubtotal + deliveryCharge).toFixed(2));
                 // Validate variants and quantities, but do not deduct stock at placement time.
                 for (const item of data.orderItems) {
                     if (item.quantity <= 0) {
@@ -149,8 +157,30 @@ class OrderRepository {
                     data: {
                         userId: data.userId,
                         customerRoleSnapshot: data.customerRoleSnapshot,
+                        subtotalAmount: normalizedSubtotal,
+                        deliveryCharge,
+                        deliveryMode: data.pricing.deliveryMode,
                         amount: computedAmount,
                         status: orderLifecycle_1.ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+                        address: {
+                            create: {
+                                sourceAddressId: data.addressSnapshot.sourceAddressId,
+                                addressType: data.addressSnapshot.addressType,
+                                fullName: data.addressSnapshot.fullName,
+                                phoneNumber: data.addressSnapshot.phoneNumber,
+                                line1: data.addressSnapshot.line1,
+                                line2: data.addressSnapshot.line2,
+                                landmark: data.addressSnapshot.landmark,
+                                city: data.addressSnapshot.city,
+                                state: data.addressSnapshot.state,
+                                country: data.addressSnapshot.country,
+                                pincode: data.addressSnapshot.pincode,
+                                deliveryMode: data.pricing.deliveryMode,
+                                deliveryCharge,
+                                deliveryLabel: data.pricing.deliveryLabel,
+                                serviceArea: (_a = data.pricing.serviceArea) !== null && _a !== void 0 ? _a : null,
+                            },
+                        },
                         orderItems: {
                             create: data.orderItems.map((item) => ({
                                 variantId: item.variantId,
@@ -191,6 +221,7 @@ class OrderRepository {
                         payment: true,
                         transaction: true,
                         reservation: true,
+                        address: true,
                     },
                 });
                 const initialLineItems = order.orderItems.map((item) => {

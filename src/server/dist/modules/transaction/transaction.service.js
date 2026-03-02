@@ -24,7 +24,7 @@ const client_1 = require("@prisma/client");
 const dateTime_1 = require("@/shared/utils/dateTime");
 const userRole_1 = require("@/shared/utils/userRole");
 const orderLifecycle_1 = require("@/shared/utils/orderLifecycle");
-const fallbackPortalUrl = "http://localhost:3000";
+const config_1 = require("@/config");
 const userFacingStatusLabel = {
     PENDING_VERIFICATION: "Pending Verification",
     WAITLISTED: "Waitlisted",
@@ -115,14 +115,10 @@ class TransactionService {
         }
     }
     resolvePortalUrl() {
-        const configuredUrl = process.env.CLIENT_URL ||
-            process.env.CLIENT_URL_DEV ||
-            process.env.CLIENT_URL_PROD ||
-            "";
-        if (configuredUrl.trim()) {
-            return configuredUrl.replace(/\/+$/, "");
-        }
-        return fallbackPortalUrl;
+        const configuredUrl = config_1.config.isProduction
+            ? config_1.config.urls.clientProd
+            : config_1.config.urls.clientDev;
+        return configuredUrl.replace(/\/+$/, "");
     }
     formatCurrency(value) {
         const amount = Number(value);

@@ -1,35 +1,13 @@
 import crypto from "crypto";
 import redisClient from "@/infra/cache/redis";
 import type { RegistrationPurpose } from "@/modules/auth/auth.types";
+import { config } from "@/config";
+import { cacheKey } from "@/shared/utils/cacheKey";
 
-const OTP_KEY_PREFIX = "registration:otp:";
-const OTP_ATTEMPT_KEY_PREFIX = "registration:otp:attempts:";
-const OTP_COOLDOWN_KEY_PREFIX = "registration:otp:cooldown:";
-
-const toPositiveInteger = (
-  value: string | undefined,
-  fallbackValue: number
-): number => {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackValue;
-};
-
-const OTP_EXPIRY_SECONDS = toPositiveInteger(
-  process.env.REGISTRATION_OTP_EXPIRY_SECONDS,
-  10 * 60
-);
-const OTP_RESEND_COOLDOWN_SECONDS = toPositiveInteger(
-  process.env.REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS,
-  60
-);
-const OTP_MAX_VERIFY_ATTEMPTS = toPositiveInteger(
-  process.env.REGISTRATION_OTP_MAX_ATTEMPTS,
-  5
-);
-const REGISTRATION_PHONE_OTP_ENABLED =
-  (process.env.REGISTRATION_PHONE_OTP_ENABLED || "false")
-    .trim()
-    .toLowerCase() === "true";
+const OTP_EXPIRY_SECONDS = config.registrationOtp.expirySeconds;
+const OTP_RESEND_COOLDOWN_SECONDS = config.registrationOtp.resendCooldownSeconds;
+const OTP_MAX_VERIFY_ATTEMPTS = config.registrationOtp.maxAttempts;
+const REGISTRATION_PHONE_OTP_ENABLED = config.registrationOtp.phoneOtpEnabled;
 
 export interface StoredRegistrationOtp {
   hashedEmailOtp: string;
@@ -74,13 +52,13 @@ const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 const normalizePhone = (phone: string): string => phone.trim();
 
 const buildOtpKey = (email: string): string =>
-  `${OTP_KEY_PREFIX}${normalizeEmail(email)}`;
+  cacheKey("registration", "otp", normalizeEmail(email));
 
 const buildAttemptKey = (email: string): string =>
-  `${OTP_ATTEMPT_KEY_PREFIX}${normalizeEmail(email)}`;
+  cacheKey("registration", "otp", "attempts", normalizeEmail(email));
 
 const buildCooldownKey = (email: string): string =>
-  `${OTP_COOLDOWN_KEY_PREFIX}${normalizeEmail(email)}`;
+  cacheKey("registration", "otp", "cooldown", normalizeEmail(email));
 
 const hashOtp = (
   identifier: string,

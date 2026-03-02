@@ -659,7 +659,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                 </div>
               ) : (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                  No saved address found. Choose "Deliver to New Address" to continue.
+                  No saved address found. Choose &quot;Deliver to New Address&quot; to continue.
                 </p>
               )
             ) : (

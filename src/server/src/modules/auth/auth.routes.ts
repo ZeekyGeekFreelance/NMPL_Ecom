@@ -7,6 +7,7 @@ import AppError from "@/shared/errors/AppError";
 import optionalAuth from "@/shared/middlewares/optionalAuth";
 import {
   authRateLimiter,
+  otpRateLimiter,
   passwordResetLimiter,
   registrationLimiter,
 } from "@/shared/middlewares/rateLimiter";
@@ -18,13 +19,13 @@ import {
   ResetPasswordDto,
   SigninDto,
 } from "./auth.dto";
+import { config } from "@/config";
 
 const router = express.Router();
 const authController = makeAuthController();
-const CLIENT_URL_DEV = process.env.CLIENT_URL_DEV;
-const CLIENT_URL_PROD = process.env.CLIENT_URL_PROD;
-const env = process.env.NODE_ENV;
-const clientRedirectUrl = env === "production" ? CLIENT_URL_PROD : CLIENT_URL_DEV;
+const env = config.nodeEnv;
+const clientRedirectUrl =
+  env === "production" ? config.urls.clientProd : config.urls.clientDev;
 
 if (!clientRedirectUrl) {
   throw new Error("CLIENT_URL_DEV/CLIENT_URL_PROD must be configured.");
@@ -40,26 +41,26 @@ const isProviderConfigured = (provider: "google" | "facebook" | "twitter") => {
 
   if (provider === "google") {
     return isConfigured(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      isProd ? process.env.GOOGLE_CALLBACK_URL_PROD : process.env.GOOGLE_CALLBACK_URL_DEV
+      config.raw.GOOGLE_CLIENT_ID,
+      config.raw.GOOGLE_CLIENT_SECRET,
+      isProd ? config.raw.GOOGLE_CALLBACK_URL_PROD : config.raw.GOOGLE_CALLBACK_URL_DEV
     );
   }
 
   if (provider === "facebook") {
     return isConfigured(
-      process.env.FACEBOOK_APP_ID,
-      process.env.FACEBOOK_APP_SECRET,
+      config.raw.FACEBOOK_APP_ID,
+      config.raw.FACEBOOK_APP_SECRET,
       isProd
-        ? process.env.FACEBOOK_CALLBACK_URL_PROD
-        : process.env.FACEBOOK_CALLBACK_URL_DEV
+        ? config.raw.FACEBOOK_CALLBACK_URL_PROD
+        : config.raw.FACEBOOK_CALLBACK_URL_DEV
     );
   }
 
   return isConfigured(
-    process.env.TWITTER_CONSUMER_KEY,
-    process.env.TWITTER_CONSUMER_SECRET,
-    isProd ? process.env.TWITTER_CALLBACK_URL_PROD : process.env.TWITTER_CALLBACK_URL_DEV
+    config.raw.TWITTER_CONSUMER_KEY,
+    config.raw.TWITTER_CONSUMER_SECRET,
+    isProd ? config.raw.TWITTER_CALLBACK_URL_PROD : config.raw.TWITTER_CALLBACK_URL_DEV
   );
 };
 
@@ -211,7 +212,7 @@ router.get(
  */
 router.post(
   "/request-registration-otp",
-  registrationLimiter,
+  otpRateLimiter,
   validateDto(RequestRegistrationOtpDto),
   authController.requestRegistrationOtp
 );

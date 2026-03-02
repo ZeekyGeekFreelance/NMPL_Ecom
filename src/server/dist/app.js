@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -27,7 +60,7 @@ const compression_1 = __importDefault(require("compression"));
 const passport_1 = __importDefault(require("passport"));
 const express_session_1 = __importDefault(require("express-session"));
 const connect_redis_1 = require("connect-redis");
-const redis_1 = __importDefault(require("./infra/cache/redis"));
+const redis_1 = __importStar(require("./infra/cache/redis"));
 const passport_2 = __importDefault(require("./infra/passport/passport"));
 const constants_1 = require("./shared/constants");
 const globalError_1 = __importDefault(require("./shared/errors/globalError"));
@@ -36,103 +69,83 @@ const routes_1 = require("./routes");
 const graphql_1 = require("./graphql");
 const webhook_routes_1 = __importDefault(require("./modules/webhook/webhook.routes"));
 const health_routes_1 = __importDefault(require("./routes/health.routes"));
-// import { preflightHandler } from "./shared/middlewares/preflightHandler";
 const http_1 = require("http");
 const socket_1 = require("@/infra/socket/socket");
 const database_config_1 = require("./infra/database/database.config");
 const swagger_1 = require("./docs/swagger");
 const quotationExpiry_worker_1 = require("./modules/transaction/quotationExpiry.worker");
-const defaultDevOrigins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-    "http://127.0.0.1:5173",
-];
-const parseAllowedOrigins = () => {
-    const configuredOrigins = [
-        process.env.ALLOWED_ORIGINS || "",
-        process.env.CLIENT_URL_DEV || "",
-        process.env.CLIENT_URL_PROD || "",
-    ]
-        .join(",")
-        .split(",")
-        .map((value) => value.trim())
+const config_1 = require("@/config");
+const crypto_1 = require("crypto");
+const parseCspDirectives = (value) => {
+    const directives = value
+        .split(";")
+        .map((directive) => directive.trim())
         .filter(Boolean);
-    if (process.env.NODE_ENV !== "production") {
-        return [...new Set([...defaultDevOrigins, ...configuredOrigins])];
+    if (directives.length === 0) {
+        throw new Error("[app] CSP_DIRECTIVES is empty or invalid");
     }
-    if (configuredOrigins.length > 0)
-        return configuredOrigins;
-    return process.env.NODE_ENV === "production"
-        ? ["https://ecommerce-nu-rosy.vercel.app"]
-        : defaultDevOrigins;
-};
-const isDevPreviewOrigin = (origin) => {
-    if (process.env.NODE_ENV === "production") {
-        return false;
+    const parsed = {};
+    for (const directive of directives) {
+        const [name, ...items] = directive.split(" ").map((token) => token.trim());
+        if (!name) {
+            throw new Error(`[app] Invalid CSP directive segment: ${directive}`);
+        }
+        parsed[name] = items.length > 0 ? items : ["'none'"];
     }
-    try {
-        const url = new URL(origin);
-        const hostname = url.hostname.toLowerCase();
-        return (hostname === "localhost" ||
-            hostname === "127.0.0.1" ||
-            hostname.endsWith(".replit.dev") ||
-            hostname.endsWith(".repl.co") ||
-            hostname.endsWith(".ngrok-free.app") ||
-            hostname.endsWith(".trycloudflare.com"));
-    }
-    catch (_a) {
-        return false;
-    }
+    return parsed;
 };
 const createApp = () => __awaiter(void 0, void 0, void 0, function* () {
     const app = (0, express_1.default)();
-    const sessionSecret = process.env.SESSION_SECRET;
-    if (!sessionSecret) {
-        throw new Error("SESSION_SECRET is required");
+    yield (0, database_config_1.connectDB)();
+    if (config_1.config.redis.enabled) {
+        yield (0, redis_1.connectRedis)();
     }
-    yield (0, database_config_1.connectDB)().catch((err) => {
-        console.error("Failed to connect to DB:", err);
-        process.exit(1);
-    });
     (0, quotationExpiry_worker_1.startQuotationExpiryWorker)();
     const httpServer = new http_1.Server(app);
-    // Initialize Socket.IO
     const socketManager = new socket_1.SocketManager(httpServer);
     const io = socketManager.getIO();
-    // Swagger Documentation
     (0, swagger_1.setupSwagger)(app);
-    // Health check routes (no middleware applied)
+    app.disable("x-powered-by");
+    app.set("trust proxy", config_1.config.server.trustProxy ? 1 : 0);
+    app.use((req, res, next) => {
+        const incomingTraceId = String(req.headers["x-trace-id"] || "").trim();
+        const traceId = incomingTraceId || (0, crypto_1.randomUUID)();
+        req.traceId = traceId;
+        res.setHeader("x-trace-id", traceId);
+        next();
+    });
     app.use("/", health_routes_1.default);
-    // Basic
-    app.use("/api/v1/webhook", body_parser_1.default.raw({ type: "application/json" }), webhook_routes_1.default);
-    app.use(express_1.default.json());
-    app.use(body_parser_1.default.urlencoded({ extended: true }));
-    app.use((0, cookie_parser_1.default)(process.env.COOKIE_SECRET, constants_1.cookieParserOptions));
-    app.set("trust proxy", 1);
-    app.use((0, express_session_1.default)({
-        store: new connect_redis_1.RedisStore({ client: redis_1.default }),
-        secret: sessionSecret,
+    app.use("/api/v1/webhook", body_parser_1.default.raw({ type: "application/json", limit: config_1.config.server.bodyJsonLimit }), webhook_routes_1.default);
+    app.use(express_1.default.json({ limit: config_1.config.server.bodyJsonLimit }));
+    app.use(body_parser_1.default.urlencoded({
+        extended: true,
+        limit: config_1.config.server.bodyUrlEncodedLimit,
+        parameterLimit: 500,
+    }));
+    app.use((0, cookie_parser_1.default)(config_1.config.security.cookieSecret, constants_1.cookieParserOptions));
+    const sessionConfig = {
+        secret: config_1.config.security.sessionSecret,
         resave: false,
-        saveUninitialized: true, // Keeps guest sessionId from the first request
-        proxy: true, // Ensures secure cookies work with proxy
+        saveUninitialized: false,
+        proxy: config_1.config.server.trustProxy,
         cookie: {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production", // true in prod
-            sameSite: process.env.NODE_ENV === "production"
-                ? "none"
-                : "lax",
-            maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+            secure: config_1.config.isProduction,
+            sameSite: config_1.config.security.cookieSameSite,
+            domain: config_1.config.security.cookieDomain,
+            maxAge: 1000 * 60 * 60 * 24 * 7,
         },
-    }));
+    };
+    if (config_1.config.redis.enabled) {
+        sessionConfig.store = new connect_redis_1.RedisStore({ client: redis_1.default });
+    }
+    else if (config_1.config.isDevelopment) {
+        console.warn("[session] Redis is disabled in development. Using in-memory session store.");
+    }
+    app.use((0, express_session_1.default)(sessionConfig));
     app.use(passport_1.default.initialize());
     app.use(passport_1.default.session());
     (0, passport_2.default)();
-    // Preflight handler removed to avoid conflicts
-    // CORS must be applied BEFORE GraphQL setup
-    const allowedOrigins = parseAllowedOrigins();
     app.use((req, res, next) => {
         if (req.headers["access-control-request-private-network"] === "true") {
             res.setHeader("Access-Control-Allow-Private-Network", "true");
@@ -141,10 +154,7 @@ const createApp = () => __awaiter(void 0, void 0, void 0, function* () {
     });
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
-            // Allow non-browser requests (curl/postman/mobile apps without Origin).
-            if (!origin ||
-                allowedOrigins.includes(origin) ||
-                isDevPreviewOrigin(origin)) {
+            if ((0, config_1.isAllowedOrigin)(origin)) {
                 callback(null, true);
                 return;
             }
@@ -157,28 +167,28 @@ const createApp = () => __awaiter(void 0, void 0, void 0, function* () {
             "Authorization",
             "X-Requested-With",
             "x-confirmation-handled",
-            "Apollo-Require-Preflight", // For GraphQL
+            "Apollo-Require-Preflight",
         ],
     }));
-    app.use((0, helmet_1.default)());
-    app.use(helmet_1.default.frameguard({ action: "deny" }));
-    app.use(helmet_1.default.hsts({
-        maxAge: 31536000, // 1 year in seconds
-        includeSubDomains: true,
-        preload: true,
-    }));
-    app.use(helmet_1.default.contentSecurityPolicy({
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            imgSrc: ["'self'", "data:", "https:"],
-            connectSrc: ["'self'"],
-        },
-    }));
-    app.use(helmet_1.default.referrerPolicy({ policy: "no-referrer" }));
-    app.use(helmet_1.default.permittedCrossDomainPolicies());
-    // Extra Security
+    if (config_1.config.isProduction && config_1.config.security.helmetEnabled) {
+        app.use((0, helmet_1.default)({
+            contentSecurityPolicy: {
+                directives: parseCspDirectives(config_1.config.security.csp),
+            },
+        }));
+        app.use(helmet_1.default.frameguard({ action: "deny" }));
+        app.use(helmet_1.default.hsts({
+            maxAge: 31536000,
+            includeSubDomains: true,
+            preload: true,
+        }));
+        app.use(helmet_1.default.referrerPolicy({ policy: "no-referrer" }));
+        app.use(helmet_1.default.permittedCrossDomainPolicies());
+        app.use((_req, res, next) => {
+            res.setHeader("X-Frame-Options", "DENY");
+            next();
+        });
+    }
     app.use((0, express_mongo_sanitize_1.default)());
     app.use((0, hpp_1.default)({
         whitelist: ["sort", "filter", "fields", "page", "limit"],
@@ -190,9 +200,7 @@ const createApp = () => __awaiter(void 0, void 0, void 0, function* () {
     }));
     app.use((0, compression_1.default)());
     app.use("/api", (0, routes_1.configureRoutes)(io));
-    // GraphQL setup
     yield (0, graphql_1.configureGraphQL)(app);
-    // Error & Logging
     app.use(globalError_1.default);
     app.use(logRequest_1.logRequest);
     return { app, httpServer };
