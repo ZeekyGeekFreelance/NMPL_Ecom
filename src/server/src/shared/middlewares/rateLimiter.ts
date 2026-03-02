@@ -1,4 +1,5 @@
 import rateLimit from "express-rate-limit";
+import { Request } from "express";
 import { config } from "@/config";
 
 if (config.isProduction && !config.rateLimit.enabled) {
@@ -11,16 +12,22 @@ const createLimiter = ({
   windowMs,
   max,
   message,
+  keyGenerator,
+  skipSuccessfulRequests = false,
 }: {
   windowMs: number;
   max: number;
   message: string;
+  keyGenerator?: (req: Request) => string;
+  skipSuccessfulRequests?: boolean;
 }) =>
   rateLimit({
     windowMs,
     max,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator,
+    skipSuccessfulRequests,
     skip: () => !config.rateLimit.enabled,
     handler: (_req, res) => {
       res.status(429).json({
@@ -30,10 +37,38 @@ const createLimiter = ({
     },
   });
 
+const resolveClientIp = (req: Request): string => {
+  const forwardedFor = req.headers["x-forwarded-for"];
+
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0].trim().toLowerCase();
+  }
+
+  if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+    return String(forwardedFor[0]).trim().toLowerCase();
+  }
+
+  return String(req.ip || req.socket.remoteAddress || "unknown")
+    .trim()
+    .toLowerCase();
+};
+
+const authRateLimitKey = (req: Request): string => {
+  const ip = resolveClientIp(req);
+  const email =
+    typeof req.body?.email === "string"
+      ? req.body.email.trim().toLowerCase()
+      : "";
+
+  return email ? `${ip}:${email}` : ip;
+};
+
 export const authRateLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
   max: config.rateLimit.loginMax,
   message: "Too many login attempts. Please try again later.",
+  keyGenerator: authRateLimitKey,
+  skipSuccessfulRequests: true,
 });
 
 export const otpRateLimiter = createLimiter({

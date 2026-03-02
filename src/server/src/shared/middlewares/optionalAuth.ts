@@ -19,15 +19,23 @@ const optionalAuth = async (
     const decoded = jwt.verify(
       accessToken,
       config.auth.accessTokenSecret
-    ) as User;
+    ) as User & { tv?: number };
 
     const user = await prisma.user.findUnique({
       where: { id: String(decoded.id) },
-      select: { id: true, role: true },
+      select: { id: true, role: true, tokenVersion: true },
     });
 
     if (user) {
-      req.user = user;
+      const accessTokenVersion = typeof decoded.tv === "number" ? decoded.tv : 0;
+      if (accessTokenVersion !== user.tokenVersion) {
+        return next();
+      }
+
+      req.user = {
+        id: user.id,
+        role: user.role,
+      };
     }
   } catch {
     // Optional auth should gracefully continue for guests or invalid tokens.

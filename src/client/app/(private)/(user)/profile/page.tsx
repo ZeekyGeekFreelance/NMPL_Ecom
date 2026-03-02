@@ -321,6 +321,8 @@ const UserProfile = () => {
   const accountKind: AccountKind = isDealerAccount ? "DEALER" : role;
   const isPrivilegedAccount =
     accountKind === "ADMIN" || accountKind === "SUPERADMIN";
+  const canSelfResetPassword =
+    accountKind === "USER" || accountKind === "DEALER";
   const accountReference =
     user?.accountReference || (user?.id ? toAccountReference(user.id) : "ACC-UNKNOWN");
   const accountMeta = ACCOUNT_META[accountKind];
@@ -1104,13 +1106,20 @@ const UserProfile = () => {
                       Security
                     </p>
                   </div>
-                  <Link
-                    href="/password-reset"
-                    className="inline-flex items-center gap-1 text-sm text-indigo-700 hover:text-indigo-900"
-                  >
-                    <ReceiptText size={14} />
-                    Reset Password
-                  </Link>
+                  {canSelfResetPassword ? (
+                    <Link
+                      href="/password-reset"
+                      className="inline-flex items-center gap-1 text-sm text-indigo-700 hover:text-indigo-900"
+                    >
+                      <ReceiptText size={14} />
+                      Reset Password
+                    </Link>
+                  ) : (
+                    <p className="text-sm text-gray-600">
+                      Admin/SuperAdmin password changes are handled by SuperAdmin via
+                      offline channels.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

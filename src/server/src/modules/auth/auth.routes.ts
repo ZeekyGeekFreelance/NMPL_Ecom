@@ -13,9 +13,9 @@ import {
 } from "@/shared/middlewares/rateLimiter";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
-  ForgotPasswordDto,
   RegisterDto,
   RequestRegistrationOtpDto,
+  ForgotPasswordDto,
   ResetPasswordDto,
   SigninDto,
 } from "./auth.dto";

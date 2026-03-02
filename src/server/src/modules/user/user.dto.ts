@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsNotEmpty,
@@ -85,6 +86,10 @@ export class CreateAdminDto {
   @MinLength(6, { message: "Password must be at least 6 characters long" })
   @IsString({ message: "Password must be a string" })
   password!: string;
+
+  @IsOptional()
+  @IsBoolean({ message: "assignBillingSupervisor must be a boolean" })
+  assignBillingSupervisor?: boolean;
 }
 
 export class CreateDealerDto {
@@ -138,4 +143,30 @@ export class SetDealerPricesDto {
   @ValidateNested({ each: true })
   @Type(() => DealerPriceItemDto)
   prices!: DealerPriceItemDto[];
+}
+
+export class UpdateBillingSupervisorDto {
+  @IsNotEmpty({ message: "isBillingSupervisor is required" })
+  @IsBoolean({ message: "isBillingSupervisor must be a boolean" })
+  isBillingSupervisor!: boolean;
+}
+
+export class UpdateAdminPasswordDto {
+  @IsNotEmpty({ message: "newPassword is required" })
+  @MinLength(8, {
+    message: "Password must be at least 8 characters long",
+  })
+  @Matches(/[A-Z]/, {
+    message: "Password must contain at least one uppercase letter",
+  })
+  @Matches(/[a-z]/, {
+    message: "Password must contain at least one lowercase letter",
+  })
+  @Matches(/[0-9]/, {
+    message: "Password must contain at least one number",
+  })
+  @Matches(/[!@#$%^&*]/, {
+    message: "Password must contain at least one special character (!@#$%^&*)",
+  })
+  newPassword!: string;
 }

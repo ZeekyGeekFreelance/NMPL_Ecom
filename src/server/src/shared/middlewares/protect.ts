@@ -20,13 +20,14 @@ const protect = async (
     const decoded = jwt.verify(
       accessToken,
       config.auth.accessTokenSecret
-    ) as User;
+    ) as User & { tv?: number };
 
     const user = await prisma.user.findUnique({
       where: { id: String(decoded.id) },
       select: {
         id: true,
         role: true,
+        tokenVersion: true,
         dealerProfile: {
           select: {
             status: true,
@@ -37,6 +38,11 @@ const protect = async (
 
     if (!user) {
       return next(new AppError(401, "User no longer exists."));
+    }
+
+    const accessTokenVersion = typeof decoded.tv === "number" ? decoded.tv : 0;
+    if (accessTokenVersion !== user.tokenVersion) {
+      return next(new AppError(401, "Your session has expired, please login again."));
     }
 
     req.user = {

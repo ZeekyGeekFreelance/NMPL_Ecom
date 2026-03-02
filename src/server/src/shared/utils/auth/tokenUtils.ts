@@ -4,22 +4,30 @@ import crypto from "crypto";
 import { config } from "@/config";
 import { assertFiniteTtl, cacheKey } from "@/shared/utils/cacheKey";
 
-export function generateAccessToken(id: string) {
-  return jwt.sign({ id }, config.auth.accessTokenSecret, {
+export function generateAccessToken(id: string, tokenVersion = 0) {
+  return jwt.sign({ id, tv: tokenVersion }, config.auth.accessTokenSecret, {
     expiresIn: config.auth.accessTtlSeconds,
   });
 }
 
-export function generateRefreshToken(id: string, absExp?: number) {
+export function generateRefreshToken(
+  id: string,
+  absExp?: number,
+  tokenVersion = 0
+) {
   const absoluteExpiration =
     absExp ||
     Math.floor(Date.now() / 1000) + config.auth.refreshAbsoluteTtlSeconds;
   const ttl = absoluteExpiration - Math.floor(Date.now() / 1000);
   assertFiniteTtl(ttl, "refresh-token");
 
-  return jwt.sign({ id, absExp: absoluteExpiration }, config.auth.refreshTokenSecret, {
-    expiresIn: ttl,
-  });
+  return jwt.sign(
+    { id, absExp: absoluteExpiration, tv: tokenVersion },
+    config.auth.refreshTokenSecret,
+    {
+      expiresIn: ttl,
+    }
+  );
 }
 
 const tokenHash = (token: string): string =>

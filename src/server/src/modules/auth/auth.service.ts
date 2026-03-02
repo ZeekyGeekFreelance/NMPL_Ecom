@@ -71,11 +71,40 @@ export class AuthService {
 
     if (storedPassword === inputPassword) {
       // Upgrade legacy plain-text passwords after first successful login.
-      await this.authRepository.updateUserPassword(userId, inputPassword);
+      await this.authRepository.updateUserPassword(userId, inputPassword, {
+        invalidateSessions: false,
+      });
       return true;
     }
 
     return false;
+  }
+
+  private async issuePasswordResetLink(user: {
+    id: string;
+    email: string;
+  }): Promise<void> {
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    await this.authRepository.updateUserPasswordReset(user.email, {
+      resetPasswordToken: hashedToken,
+      resetPasswordTokenExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    const clientUrl = resolveClientUrl();
+    const resetUrl = `${clientUrl}/password-reset/${resetToken}`;
+    const htmlTemplate = passwordResetTemplate(resetUrl);
+
+    await sendEmail({
+      to: user.email,
+      subject: "Reset your password",
+      html: htmlTemplate,
+      text: "Reset your password",
+    });
   }
 
   async requestRegistrationOtp({
@@ -329,8 +358,15 @@ export class AuthService {
       };
     }
 
-    const accessToken = tokenUtils.generateAccessToken(newUser.id);
-    const refreshToken = tokenUtils.generateRefreshToken(newUser.id);
+    const accessToken = tokenUtils.generateAccessToken(
+      newUser.id,
+      newUser.tokenVersion
+    );
+    const refreshToken = tokenUtils.generateRefreshToken(
+      newUser.id,
+      undefined,
+      newUser.tokenVersion
+    );
 
     return {
       user: {
@@ -409,8 +445,15 @@ export class AuthService {
       );
     }
 
-    const accessToken = tokenUtils.generateAccessToken(user.id);
-    const refreshToken = tokenUtils.generateRefreshToken(user.id);
+    const accessToken = tokenUtils.generateAccessToken(
+      user.id,
+      user.tokenVersion
+    );
+    const refreshToken = tokenUtils.generateRefreshToken(
+      user.id,
+      undefined,
+      user.tokenVersion
+    );
 
     return {
       accessToken,
@@ -434,44 +477,49 @@ export class AuthService {
     return { message: "User logged out successfully" };
   }
 
+  async requestOwnPasswordResetLink(
+    userId: string
+  ): Promise<{ message: string }> {
+    const normalizedUserId = userId.trim();
+    const user = await this.authRepository.findUserById(normalizedUserId);
+
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    if (user.role !== ROLE.USER) {
+      throw new AppError(
+        403,
+        "Admin/SuperAdmin passwords must be managed by SuperAdmin offline procedures."
+      );
+    }
+
+    await this.issuePasswordResetLink({
+      id: user.id,
+      email: user.email,
+    });
+
+    return {
+      message: `Password reset link sent to registered email address: ${user.email}`,
+    };
+  }
+
   async forgotPassword(email: string): Promise<{ message: string }> {
     const normalizedEmail = this.normalizeEmail(email);
     const user = await this.authRepository.findUserByEmail(normalizedEmail);
-    const platformName = getPlatformName();
-    const supportEmail = getSupportEmail();
-    const successResponse = {
-      message:
-        `If an account exists for this email, a ${platformName} password reset link has been sent.`,
-    };
 
     if (!user) {
-      // Avoid email enumeration.
-      return successResponse;
+      throw new AppError(404, "This email is not registered with us.");
     }
 
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const hashedToken = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
-
-    await this.authRepository.updateUserPasswordReset(normalizedEmail, {
-      resetPasswordToken: hashedToken,
-      resetPasswordTokenExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    await this.issuePasswordResetLink({
+      id: user.id,
+      email: user.email,
     });
 
-    const clientUrl = resolveClientUrl();
-    const resetUrl = `${clientUrl}/password-reset/${resetToken}`;
-    const htmlTemplate = passwordResetTemplate(resetUrl);
-
-    await sendEmail({
-      to: user.email,
-      subject: "Reset your password",
-      html: htmlTemplate,
-      text: "Reset your password",
-    });
-
-    return { message: "Password reset email sent successfully" };
+    return {
+      message: `A password reset link has been sent to ${user.email}.`,
+    };
   }
 
   async resetPassword(
@@ -488,17 +536,20 @@ export class AuthService {
       throw new BadRequestError("Invalid or expired reset token");
     }
 
-    await this.authRepository.updateUserPassword(user.id, newPassword);
+    await this.authRepository.updateUserPassword(user.id, newPassword, {
+      invalidateSessions: true,
+    });
 
     await sendEmail({
       to: user.email,
       subject: `${platformName} | Your password was changed`,
       text:
-        `Your ${platformName} account password was changed successfully. If this was not you, contact ${supportEmail} immediately.`,
+        `Your ${platformName} account password was changed successfully. All active sessions have been logged out. If this was not you, contact ${supportEmail} immediately.`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
           <p>Hello,</p>
           <p>Your <strong>${platformName}</strong> account password was changed successfully.</p>
+          <p>For your security, all active sessions have been logged out.</p>
           <p>If this was not you, contact <a href="mailto:${supportEmail}">${supportEmail}</a> immediately and reset your password again.</p>
         </div>
       `,
@@ -534,7 +585,7 @@ export class AuthService {
     const decoded = jwt.verify(
       oldRefreshToken,
       config.auth.refreshTokenSecret
-    ) as { id: string; absExp: number };
+    ) as { id: string; absExp: number; tv?: number };
 
     const absoluteExpiration = decoded.absExp;
     const now = Math.floor(Date.now() / 1000);
@@ -546,6 +597,11 @@ export class AuthService {
 
     if (!user) {
       throw new NotFoundError("User");
+    }
+
+    const refreshTokenVersion = typeof decoded.tv === "number" ? decoded.tv : 0;
+    if (refreshTokenVersion !== user.tokenVersion) {
+      throw new AppError(401, "Session expired. Please log in again.");
     }
 
     if (user.dealerProfile && user.dealerProfile.status !== "APPROVED") {
@@ -580,10 +636,14 @@ export class AuthService {
       dealerContactPhone: user.dealerProfile?.contactPhone ?? null,
     };
 
-    const newAccessToken = tokenUtils.generateAccessToken(user.id);
+    const newAccessToken = tokenUtils.generateAccessToken(
+      user.id,
+      user.tokenVersion
+    );
     const newRefreshToken = tokenUtils.generateRefreshToken(
       user.id,
-      absoluteExpiration
+      absoluteExpiration,
+      user.tokenVersion
     );
 
     const oldTokenTTL = absoluteExpiration - now;

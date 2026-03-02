@@ -13,6 +13,7 @@ import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
 import { ORDER_LIFECYCLE_STATUS } from "@/shared/utils/orderLifecycle";
 import { getPickupLocationSnapshot } from "@/shared/utils/pricing/checkoutPricing";
 import { config } from "@/config";
+import { resolveBillingNotificationEmails } from "@/shared/utils/billingNotificationEmails";
 
 interface RequesterContext {
   id: string;
@@ -60,11 +61,8 @@ export class InvoiceService {
     throw new AppError(403, "You are not authorized to access this invoice.");
   }
 
-  private getInternalRecipients(customerEmail: string): string[] {
-    const configuredRecipients = config.branding.billingNotificationEmails
-      .split(",")
-      .map((email) => email.trim())
-      .filter(Boolean);
+  private async getInternalRecipients(customerEmail: string): Promise<string[]> {
+    const configuredRecipients = (await resolveBillingNotificationEmails()).emails;
 
     const fallback = config.email.smtpUser?.trim() ? [config.email.smtpUser.trim()] : [];
 
@@ -101,7 +99,9 @@ export class InvoiceService {
   }
 
   private async sendInvoiceEmails(invoice: InvoiceWithDetails): Promise<void> {
-    const internalRecipients = this.getInternalRecipients(invoice.customerEmail);
+    const internalRecipients = await this.getInternalRecipients(
+      invoice.customerEmail
+    );
     const shouldSendCustomerCopy = !invoice.customerEmailSentAt;
     const shouldSendInternalCopy =
       internalRecipients.length > 0 && !invoice.internalEmailSentAt;

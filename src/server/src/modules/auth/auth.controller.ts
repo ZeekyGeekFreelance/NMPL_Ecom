@@ -203,20 +203,33 @@ export class AuthController {
     });
   });
 
-  forgotPassword = asyncHandler(
+  requestOwnPasswordResetLink = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email } = req.body;
-      const response = await this.authService.forgotPassword(email);
       const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const response = await this.authService.requestOwnPasswordResetLink(userId);
 
       sendResponse(res, 200, { message: response.message });
-      const start = Date.now();
-      const end = Date.now();
 
-      this.logsService.info("Forgot Password", {
+      this.logsService.info("Self Password Reset Link Requested", {
         userId,
         sessionId: req.session.id,
-        timePeriod: end - start,
+      });
+    }
+  );
+
+  forgotPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { email } = req.body as { email: string };
+      const response = await this.authService.forgotPassword(email);
+
+      sendResponse(res, 200, { message: response.message });
+
+      this.logsService.info("Forgot Password Link Requested", {
+        sessionId: req.session.id,
       });
     }
   );

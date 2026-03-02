@@ -126,12 +126,11 @@ const SignIn = () => {
                 className="py-2.5 text-sm"
               />
 
-              <Link
-                href="/password-reset"
-                className="block text-sm text-indigo-600 hover:underline mb-4"
-              >
-                Forgot password?
-              </Link>
+              <div className="-mt-1 text-left">
+                <Link href="/password-reset" className="text-xs text-indigo-600 hover:underline">
+                  Forgot Password?
+                </Link>
+              </div>
 
               <button
                 type="submit"

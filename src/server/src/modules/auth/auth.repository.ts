@@ -48,6 +48,7 @@ export class AuthRepository {
       select: {
         id: true,
         password: true,
+        tokenVersion: true,
         role: true,
         name: true,
         email: true,
@@ -67,6 +68,7 @@ export class AuthRepository {
         phone: true,
         role: true,
         avatar: true,
+        tokenVersion: true,
       },
     });
 
@@ -103,6 +105,7 @@ export class AuthRepository {
         phone: true,
         role: true,
         avatar: true,
+        tokenVersion: true,
       },
     });
   }
@@ -243,8 +246,13 @@ export class AuthRepository {
     });
   }
 
-  async updateUserPassword(userId: string, password: string) {
+  async updateUserPassword(
+    userId: string,
+    password: string,
+    options?: { invalidateSessions?: boolean }
+  ) {
     const hashedPassword = await passwordUtils.hashPassword(password);
+    const invalidateSessions = options?.invalidateSessions ?? true;
 
     return prisma.user.update({
       where: { id: userId },
@@ -252,6 +260,9 @@ export class AuthRepository {
         password: hashedPassword,
         resetPasswordToken: null,
         resetPasswordTokenExpiresAt: null,
+        ...(invalidateSessions
+          ? { tokenVersion: { increment: 1 } }
+          : {}),
       },
     });
   }

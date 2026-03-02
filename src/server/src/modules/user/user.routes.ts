@@ -11,6 +11,8 @@ import {
   CreateDealerDto,
   UpdateDealerStatusDto,
   SetDealerPricesDto,
+  UpdateBillingSupervisorDto,
+  UpdateAdminPasswordDto,
 } from "./user.dto";
 
 const router = Router();
@@ -109,6 +111,22 @@ router.post(
   authorizeRole("SUPERADMIN"),
   validateDto(CreateAdminDto),
   userController.createAdmin
+);
+
+router.patch(
+  "/:id/billing-supervisor",
+  protect,
+  authorizeRole("SUPERADMIN"),
+  validateDto(UpdateBillingSupervisorDto),
+  userController.updateBillingSupervisor
+);
+
+router.patch(
+  "/:id/admin-password",
+  protect,
+  authorizeRole("SUPERADMIN"),
+  validateDto(UpdateAdminPasswordDto),
+  userController.updateAdminPassword
 );
 
 /**

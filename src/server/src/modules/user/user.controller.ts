@@ -129,7 +129,7 @@ export class UserController {
 
   createAdmin = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { name, email, phone, password } = req.body;
+      const { name, email, phone, password, assignBillingSupervisor } = req.body;
       const currentUserId = req.user?.id;
 
       if (!currentUserId) {
@@ -137,13 +137,15 @@ export class UserController {
       }
 
       const newAdmin = await this.userService.createAdmin(
-        { name, email, phone, password },
+        { name, email, phone, password, assignBillingSupervisor },
         currentUserId
       );
 
       sendResponse(res, 201, {
         data: { user: newAdmin },
-        message: "Admin created successfully",
+        message: assignBillingSupervisor
+          ? "Admin created and assigned to billing successfully"
+          : "Admin created successfully",
       });
 
       const start = Date.now();
@@ -153,6 +155,56 @@ export class UserController {
         userId: req.user?.id,
         sessionId: req.session.id,
         timePeriod: end - start,
+      });
+    }
+  );
+
+  updateBillingSupervisor = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const { id } = req.params;
+      const { isBillingSupervisor } = req.body as {
+        isBillingSupervisor: boolean;
+      };
+
+      const user = await this.userService.updateBillingSupervisor(
+        id,
+        isBillingSupervisor,
+        currentUserId
+      );
+
+      sendResponse(res, 200, {
+        data: { user },
+        message: isBillingSupervisor
+          ? "Billing supervisor assigned successfully"
+          : "Billing supervisor removed successfully",
+      });
+    }
+  );
+
+  updateAdminPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const { id } = req.params;
+      const { newPassword } = req.body as { newPassword: string };
+
+      const user = await this.userService.updateAdminPassword(
+        id,
+        newPassword,
+        currentUserId
+      );
+
+      sendResponse(res, 200, {
+        data: { user },
+        message: "Admin password updated successfully",
       });
     }
   );

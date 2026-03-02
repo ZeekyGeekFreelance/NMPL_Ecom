@@ -92,9 +92,11 @@ model User {
   password                    String?
   name                        String
   avatar                      String?
+  tokenVersion                Int           @default(0)
   resetPasswordToken          String?
   resetPasswordTokenExpiresAt DateTime?
   role                        ROLE          @default(USER)
+  isBillingSupervisor         Boolean       @default(false)
   orders                      Order[]
   payments                    Payment[]
   addresses                   Address[]
@@ -581,6 +583,16 @@ model Log {
   message   String
   context   Json?
   createdAt DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
 }
 
 enum SECTION_TYPE {

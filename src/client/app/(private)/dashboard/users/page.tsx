@@ -4,7 +4,8 @@ import {
   useGetAllUsersQuery,
   useUpdateUserMutation,
   useDeleteUserMutation,
-  useCreateAdminMutation,
+  useUpdateBillingSupervisorMutation,
+  useUpdateAdminPasswordMutation,
 } from "@/app/store/apis/UserApi";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,14 +17,16 @@ import {
   Pencil,
   Trash2,
   X,
-  UserPlus,
   Crown,
   Shield,
+  BadgeCheck,
+  FileText,
+  ChevronDown,
+  KeyRound,
 } from "lucide-react";
 import useToast from "@/app/hooks/ui/useToast";
 import { useForm } from "react-hook-form";
 import UserForm, { UserFormData } from "./UserForm";
-import CreateAdminForm, { CreateAdminFormData } from "./CreateAdminForm";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import { usePathname } from "next/navigation";
 import ToggleableText from "@/app/components/atoms/ToggleableText";
@@ -35,6 +38,13 @@ import { toAccountReference } from "@/app/lib/utils/accountReference";
 import formatDate from "@/app/utils/formatDate";
 import { getRoleBadgeClass, resolveDisplayRole } from "@/app/lib/userRole";
 
+type UserDirectoryFilter =
+  | "ALL"
+  | "EMPLOYEES"
+  | "CUSTOMERS"
+  | "DEALERS"
+  | "BILLING_TEAM";
+
 const UsersDashboard = () => {
   const { showToast } = useToast();
   const pathname = usePathname();
@@ -43,20 +53,32 @@ const UsersDashboard = () => {
 
   const { data, isLoading, error, refetch } = useGetAllUsersQuery(undefined, {
     skip: !shouldFetchUsers,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    pollingInterval: 7000,
   });
 
   const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();
   const [deleteUser, { isLoading: isDeleting }] = useDeleteUserMutation();
-  const [createAdmin, { isLoading: isCreatingAdmin }] =
-    useCreateAdminMutation();
+  const [updateBillingSupervisor, { isLoading: isUpdatingBillingSupervisor }] =
+    useUpdateBillingSupervisorMutation();
+  const [updateAdminPassword, { isLoading: isUpdatingAdminPassword }] =
+    useUpdateAdminPasswordMutation();
   const users = data?.users || [];
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCreateAdminModalOpen, setIsCreateAdminModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [directoryFilter, setDirectoryFilter] = useState<UserDirectoryFilter>("ALL");
   const [userToDelete, setUserToDelete] = useState<string | number | null>(
     null
   );
+  const [passwordTargetUser, setPasswordTargetUser] = useState<any | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [billingActionUserId, setBillingActionUserId] = useState<
+    string | number | null
+  >(null);
 
   const form = useForm<UserFormData>({
     defaultValues: {
@@ -65,16 +87,6 @@ const UsersDashboard = () => {
       email: "",
       role: "USER",
       emailVerified: false,
-    },
-  });
-
-  const createAdminForm = useForm<CreateAdminFormData>({
-    defaultValues: {
-      name: "",
-      email: "",
-      phone: "",
-      password: "",
-      confirmPassword: "",
     },
   });
 
@@ -90,6 +102,79 @@ const UsersDashboard = () => {
       default:
         return <Users className="w-4 h-4" />;
     }
+  };
+
+  const getDirectoryAffiliation = (
+    row: any
+  ): "EMPLOYEE" | "CUSTOMER" | "DEALER" => {
+    const displayRole = resolveDisplayRole(row);
+    if (displayRole === "ADMIN" || displayRole === "SUPERADMIN") {
+      return "EMPLOYEE";
+    }
+    if (displayRole === "DEALER") {
+      return "DEALER";
+    }
+    return "CUSTOMER";
+  };
+
+  const directoryFilterCounts = users.reduce(
+    (acc, user) => {
+      const affiliation = getDirectoryAffiliation(user);
+      acc.ALL += 1;
+      if (affiliation === "EMPLOYEE") acc.EMPLOYEES += 1;
+      if (affiliation === "CUSTOMER") acc.CUSTOMERS += 1;
+      if (affiliation === "DEALER") acc.DEALERS += 1;
+      if (
+        resolveDisplayRole(user) === "ADMIN" &&
+        user?.isBillingSupervisor === true
+      ) {
+        acc.BILLING_TEAM += 1;
+      }
+      return acc;
+    },
+    {
+      ALL: 0,
+      EMPLOYEES: 0,
+      CUSTOMERS: 0,
+      DEALERS: 0,
+      BILLING_TEAM: 0,
+    } as Record<UserDirectoryFilter, number>
+  );
+
+  const filteredUsers = users.filter((user) => {
+    if (directoryFilter === "ALL") return true;
+    if (directoryFilter === "BILLING_TEAM") {
+      return (
+        resolveDisplayRole(user) === "ADMIN" &&
+        user?.isBillingSupervisor === true
+      );
+    }
+    if (directoryFilter === "EMPLOYEES")
+      return getDirectoryAffiliation(user) === "EMPLOYEE";
+    if (directoryFilter === "CUSTOMERS")
+      return getDirectoryAffiliation(user) === "CUSTOMER";
+    if (directoryFilter === "DEALERS")
+      return getDirectoryAffiliation(user) === "DEALER";
+    return true;
+  });
+
+  const validateStrongPassword = (password: string): string | null => {
+    if (password.length < 8) {
+      return "Password must be at least 8 characters long";
+    }
+    if (!/[A-Z]/.test(password)) {
+      return "Password must contain at least one uppercase letter";
+    }
+    if (!/[a-z]/.test(password)) {
+      return "Password must contain at least one lowercase letter";
+    }
+    if (!/[0-9]/.test(password)) {
+      return "Password must contain at least one number";
+    }
+    if (!/[!@#$%^&*]/.test(password)) {
+      return "Password must contain at least one special character (!@#$%^&*)";
+    }
+    return null;
   };
 
   const columns = [
@@ -161,6 +246,51 @@ const UsersDashboard = () => {
         );
       },
     },
+    {
+      key: "affiliation",
+      label: "Directory",
+      sortable: true,
+      searchAccessor: (row: any) => getDirectoryAffiliation(row),
+      sortAccessor: (row: any) => getDirectoryAffiliation(row),
+      render: (row: any) => {
+        const affiliation = getDirectoryAffiliation(row);
+        const styleByAffiliation: Record<string, string> = {
+          EMPLOYEE: "bg-indigo-100 text-indigo-800 border-indigo-200",
+          CUSTOMER: "bg-sky-100 text-sky-800 border-sky-200",
+          DEALER: "bg-emerald-100 text-emerald-800 border-emerald-200",
+        };
+        return (
+          <span
+            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${styleByAffiliation[affiliation]}`}
+          >
+            {affiliation}
+          </span>
+        );
+      },
+    },
+    {
+      key: "isBillingSupervisor",
+      label: "Billing Team",
+      sortable: true,
+      searchAccessor: (row: any) =>
+        row?.isBillingSupervisor ? "BILLING_SUPERVISOR" : "STANDARD",
+      sortAccessor: (row: any) => (row?.isBillingSupervisor ? 1 : 0),
+      render: (row: any) => {
+        const isAdmin = resolveDisplayRole(row) === "ADMIN";
+        if (isAdmin && row?.isBillingSupervisor) {
+          return (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+            <BadgeCheck className="h-3.5 w-3.5" />
+            Billing Supervisor
+          </span>
+          );
+        }
+        if (isAdmin) {
+          return <span className="text-xs text-gray-500">Not Assigned</span>;
+        }
+        return <span className="text-xs text-gray-400">N/A</span>;
+      },
+    },
 
     {
       key: "createdAt",
@@ -186,7 +316,81 @@ const UsersDashboard = () => {
       key: "actions",
       label: "Actions",
       render: (row: any) => (
-        <div className="flex space-x-2">
+        <div className="flex items-center gap-2">
+          {resolveDisplayRole(row) === "ADMIN" && (
+            <AdminActionGuard action="create_admin" showFallback={false}>
+              <div className="relative">
+                <FileText
+                  size={14}
+                  className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-amber-700"
+                />
+                <ChevronDown
+                  size={14}
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-amber-700"
+                />
+                <select
+                  value=""
+                  aria-label="Billing assignment"
+                  onChange={async (event) => {
+                    const action = event.target.value;
+                    if (!action) {
+                      return;
+                    }
+
+                    try {
+                      setBillingActionUserId(row.id);
+                      await updateBillingSupervisor({
+                        id: String(row.id),
+                        isBillingSupervisor: action === "assign",
+                      }).unwrap();
+                      showToast(
+                        action === "remove"
+                          ? "Billing responsibility removed"
+                          : "Billing assigned successfully",
+                        "success"
+                      );
+                    } catch (err: any) {
+                      const errorMessage =
+                        err?.data?.message || "Failed to update billing assignment";
+                      showToast(errorMessage, "error");
+                    } finally {
+                      setBillingActionUserId(null);
+                    }
+                  }}
+                disabled={
+                  isUpdatingBillingSupervisor && billingActionUserId === row.id
+                }
+                  className="h-8 appearance-none rounded-md border border-amber-200 bg-amber-50 pl-7 pr-6 text-xs font-semibold text-amber-800 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="" disabled>
+                    Billing
+                  </option>
+                  <option value={row?.isBillingSupervisor ? "remove" : "assign"}>
+                    {row?.isBillingSupervisor ? "Remove" : "Assign"}
+                  </option>
+                </select>
+              </div>
+            </AdminActionGuard>
+          )}
+
+          {resolveDisplayRole(row) === "ADMIN" && (
+            <AdminActionGuard action="create_admin" showFallback={false}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPasswordTargetUser(row);
+                  setNewPassword("");
+                  setConfirmNewPassword("");
+                  setIsPasswordModalOpen(true);
+                }}
+                className="inline-flex h-8 items-center rounded-md border border-indigo-200 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+              >
+                <KeyRound size={14} className="mr-1" />
+                Change Password
+              </button>
+            </AdminActionGuard>
+          )}
+
           <RoleHierarchyGuard
             targetUserRole={row.role}
             targetUserId={row.id}
@@ -199,9 +403,10 @@ const UsersDashboard = () => {
                   form.reset(row);
                   setIsModalOpen(true);
                 }}
-                className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                className="inline-flex h-8 items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                aria-label="Edit user"
               >
-                <Pencil size={16} />
+                <Pencil size={14} className="mr-1" />
                 Edit
               </button>
             </AdminActionGuard>
@@ -219,13 +424,21 @@ const UsersDashboard = () => {
                   setUserToDelete(row.id);
                   setIsConfirmModalOpen(true);
                 }}
-                className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                className="inline-flex h-8 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-700 hover:bg-red-100"
                 disabled={isDeleting}
+                aria-label="Delete user"
               >
-                <Trash2 size={16} />
-                {isDeleting && userToDelete === row.id
-                  ? "Deleting..."
-                  : "Delete"}
+                {isDeleting && userToDelete === row.id ? (
+                  <>
+                    <Loader2 size={14} className="mr-1 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} className="mr-1" />
+                    Delete
+                  </>
+                )}
               </button>
             </AdminActionGuard>
           </RoleHierarchyGuard>
@@ -247,16 +460,36 @@ const UsersDashboard = () => {
     }
   };
 
-  const handleCreateAdminSubmit = async (data: CreateAdminFormData) => {
+  const handleAdminPasswordSubmit = async () => {
+    if (!passwordTargetUser?.id) {
+      return;
+    }
+
+    const normalizedPassword = newPassword.trim();
+    const policyError = validateStrongPassword(normalizedPassword);
+    if (policyError) {
+      showToast(policyError, "error");
+      return;
+    }
+
+    if (normalizedPassword !== confirmNewPassword.trim()) {
+      showToast("Confirm password does not match", "error");
+      return;
+    }
+
     try {
-      const { name, email, phone, password } = data;
-      await createAdmin({ name, email, phone, password }).unwrap();
-      setIsCreateAdminModalOpen(false);
-      createAdminForm.reset();
-      showToast("Admin created successfully", "success");
+      await updateAdminPassword({
+        id: String(passwordTargetUser.id),
+        newPassword: normalizedPassword,
+      }).unwrap();
+      setIsPasswordModalOpen(false);
+      setPasswordTargetUser(null);
+      setNewPassword("");
+      setConfirmNewPassword("");
+      showToast("Admin password updated and all active sessions logged out", "success");
     } catch (err: any) {
-      console.error("Failed to create admin:", err);
-      const errorMessage = err?.data?.message || "Failed to create admin";
+      const errorMessage =
+        err?.data?.message || "Failed to update admin password";
       showToast(errorMessage, "error");
     }
   };
@@ -294,20 +527,35 @@ const UsersDashboard = () => {
             </div>
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-500">
-                {users.length} {users.length === 1 ? "user" : "users"} found
+                {filteredUsers.length}{" "}
+                {filteredUsers.length === 1 ? "entry" : "entries"} shown
               </div>
-
-              {/* Create Admin Button - Only for SuperAdmins */}
-              <AdminActionGuard action="create_admin" showFallback={false}>
-                <button
-                  onClick={() => setIsCreateAdminModalOpen(true)}
-                  className="inline-flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Create Admin</span>
-                </button>
-              </AdminActionGuard>
             </div>
+          </div>
+
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            {(
+              [
+                ["ALL", "All"],
+                ["EMPLOYEES", "Employees"],
+                ["CUSTOMERS", "Customers"],
+                ["DEALERS", "Dealers"],
+                ["BILLING_TEAM", "Billing Team"],
+              ] as Array<[UserDirectoryFilter, string]>
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setDirectoryFilter(key)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  directoryFilter === key
+                    ? "border-indigo-300 bg-indigo-100 text-indigo-800"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {label} ({directoryFilterCounts[key]})
+              </button>
+            ))}
           </div>
 
           {/* Card Container */}
@@ -333,7 +581,7 @@ const UsersDashboard = () => {
 
             {!isLoading && !error && (
               <Table
-                data={users}
+                data={filteredUsers}
                 columns={columns}
                 isLoading={isLoading}
                 className="w-full"
@@ -382,16 +630,21 @@ const UsersDashboard = () => {
           )}
         </AnimatePresence>
 
-        {/* Create Admin Modal */}
+        {/* Change Admin Password Modal */}
         <AnimatePresence>
-          {isCreateAdminModalOpen && (
+          {isPasswordModalOpen && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
-              onClick={() => setIsCreateAdminModalOpen(false)}
+              onClick={() => {
+                setIsPasswordModalOpen(false);
+                setPasswordTargetUser(null);
+                setNewPassword("");
+                setConfirmNewPassword("");
+              }}
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -403,21 +656,66 @@ const UsersDashboard = () => {
               >
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-bold text-gray-800">
-                    Create New Admin
+                    Change Admin Password
                   </h2>
                   <button
-                    onClick={() => setIsCreateAdminModalOpen(false)}
+                    onClick={() => {
+                      setIsPasswordModalOpen(false);
+                      setPasswordTargetUser(null);
+                      setNewPassword("");
+                      setConfirmNewPassword("");
+                    }}
                     className="text-gray-500 hover:text-gray-700"
                   >
                     <X size={20} />
                   </button>
                 </div>
-                <CreateAdminForm
-                  form={createAdminForm}
-                  onSubmit={handleCreateAdminSubmit}
-                  isLoading={isCreatingAdmin}
-                  submitLabel="Create Admin"
-                />
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    Admin:{" "}
+                    <span className="font-semibold text-gray-800">
+                      {passwordTargetUser?.email || "N/A"}
+                    </span>
+                  </p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                      placeholder="Enter new password"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Confirm Password
+                    </label>
+                    <input
+                      type="password"
+                      value={confirmNewPassword}
+                      onChange={(event) => setConfirmNewPassword(event.target.value)}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                      placeholder="Confirm new password"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Password policy: 8+ chars, uppercase, lowercase, number, special
+                    character.
+                  </p>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAdminPasswordSubmit}
+                      disabled={isUpdatingAdminPassword}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isUpdatingAdminPassword ? "Updating..." : "Update Password"}
+                    </button>
+                  </div>
+                </div>
               </motion.div>
             </motion.div>
           )}

@@ -79,12 +79,42 @@ export const userApi = apiSlice.injectEndpoints({
 
     createAdmin: builder.mutation<
       { user: User },
-      { name: string; email: string; phone: string; password: string }
+      {
+        name: string;
+        email: string;
+        phone: string;
+        password: string;
+        assignBillingSupervisor?: boolean;
+      }
     >({
       query: (data) => ({
         url: "/users/admin",
         method: "POST",
         body: data,
+      }),
+      invalidatesTags: ["User"],
+    }),
+    updateBillingSupervisor: builder.mutation<
+      { user: User },
+      { id: string; isBillingSupervisor: boolean }
+    >({
+      query: ({ id, isBillingSupervisor }) => ({
+        url: `/users/${id}/billing-supervisor`,
+        method: "PATCH",
+        body: { isBillingSupervisor },
+        headers: { "x-confirmation-handled": "true" },
+      }),
+      invalidatesTags: ["User"],
+    }),
+    updateAdminPassword: builder.mutation<
+      { user: User },
+      { id: string; newPassword: string }
+    >({
+      query: ({ id, newPassword }) => ({
+        url: `/users/${id}/admin-password`,
+        method: "PATCH",
+        body: { newPassword },
+        headers: { "x-confirmation-handled": "true" },
       }),
       invalidatesTags: ["User"],
     }),
@@ -168,6 +198,8 @@ export const {
   useGetAllAdminsQuery,
   useUpdateUserMutation,
   useCreateAdminMutation,
+  useUpdateBillingSupervisorMutation,
+  useUpdateAdminPasswordMutation,
   useDeleteUserMutation,
   useGetProfileQuery,
   useGetMeQuery,

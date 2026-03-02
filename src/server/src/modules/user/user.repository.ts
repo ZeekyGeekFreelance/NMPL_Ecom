@@ -84,6 +84,7 @@ export class UserRepository {
         phone: true,
         avatar: true,
         role: true,
+        isBillingSupervisor: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -116,6 +117,9 @@ export class UserRepository {
         phone: true,
         avatar: true,
         role: true,
+        isBillingSupervisor: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -146,6 +150,7 @@ export class UserRepository {
         phone: true,
         avatar: true,
         role: true,
+        isBillingSupervisor: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -161,6 +166,7 @@ export class UserRepository {
       password?: string;
       avatar?: string;
       role?: ROLE;
+      isBillingSupervisor?: boolean;
       emailVerified?: boolean;
       emailVerificationToken?: string | null;
       emailVerificationTokenExpiresAt?: Date | null;
@@ -169,6 +175,20 @@ export class UserRepository {
     }>
   ) {
     return await prisma.user.update({ where: { id }, data });
+  }
+
+  async updateUserPassword(userId: string, password: string) {
+    const hashedPassword = await passwordUtils.hashPassword(password);
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordTokenExpiresAt: null,
+        tokenVersion: { increment: 1 },
+      },
+    });
   }
 
   async deleteUser(id: string) {
@@ -201,6 +221,7 @@ export class UserRepository {
     phone: string;
     password: string;
     role: string;
+    isBillingSupervisor?: boolean;
   }) {
     // Hash the password before storing
     const hashedPassword = await passwordUtils.hashPassword(data.password);
@@ -210,6 +231,7 @@ export class UserRepository {
         ...data,
         password: hashedPassword,
         role: data.role as any,
+        isBillingSupervisor: data.isBillingSupervisor ?? false,
       },
       select: {
         id: true,
@@ -217,7 +239,10 @@ export class UserRepository {
         email: true,
         phone: true,
         role: true,
+        isBillingSupervisor: true,
         avatar: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
   }

@@ -1,6 +1,6 @@
 "use client";
 import { Controller, UseFormReturn } from "react-hook-form";
-import { UserPlus, Mail, User, Lock, Phone } from "lucide-react";
+import { UserPlus, Mail, User, Lock, Phone, FileText } from "lucide-react";
 
 export interface CreateAdminFormData {
   name: string;
@@ -15,6 +15,7 @@ interface CreateAdminFormProps {
   onSubmit: (data: CreateAdminFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
+  accountType?: "ADMIN" | "BILLING";
 }
 
 const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
@@ -22,6 +23,7 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
   onSubmit,
   isLoading,
   submitLabel = "Create Admin",
+  accountType = "ADMIN",
 }) => {
   const {
     control,
@@ -31,6 +33,8 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
   } = form;
 
   const password = watch("password");
+
+  const isBillingAccount = accountType === "BILLING";
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -198,14 +202,19 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
       {/* Role Info */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center space-x-2">
-          <UserPlus className="w-5 h-5 text-blue-600" />
+          {isBillingAccount ? (
+            <FileText className="w-5 h-5 text-blue-600" />
+          ) : (
+            <UserPlus className="w-5 h-5 text-blue-600" />
+          )}
           <span className="text-sm font-medium text-blue-800">
-            Admin Account
+            {isBillingAccount ? "Billing Account" : "Admin Account"}
           </span>
         </div>
         <p className="text-sm text-blue-700 mt-1">
-          This user will be created with Admin privileges and can manage users
-          and system settings.
+          {isBillingAccount
+            ? "This user will be included in billing/invoice email copy notifications only. No admin privileges will be granted."
+            : "This user will be created with Admin privileges and can manage users and system settings."}
         </p>
       </div>
 

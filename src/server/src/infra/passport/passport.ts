@@ -63,8 +63,12 @@ export default function configurePassport() {
             const id = user.id;
             return done(null, {
               ...user,
-              accessToken: generateAccessToken(id),
-              refreshToken: generateRefreshToken(id),
+              accessToken: generateAccessToken(id, user.tokenVersion ?? 0),
+              refreshToken: generateRefreshToken(
+                id,
+                undefined,
+                user.tokenVersion ?? 0
+              ),
             });
           } catch (error) {
             return done(error);
@@ -124,8 +128,12 @@ export default function configurePassport() {
             const id = user.id;
             return done(null, {
               ...user,
-              accessToken: generateAccessToken(id),
-              refreshToken: generateRefreshToken(id),
+              accessToken: generateAccessToken(id, user.tokenVersion ?? 0),
+              refreshToken: generateRefreshToken(
+                id,
+                undefined,
+                user.tokenVersion ?? 0
+              ),
             });
           } catch (error) {
             return done(error);
@@ -195,8 +203,12 @@ export default function configurePassport() {
             const id = user.id;
             return done(null, {
               ...user,
-              accessToken: generateAccessToken(id),
-              refreshToken: generateRefreshToken(id),
+              accessToken: generateAccessToken(id, user.tokenVersion ?? 0),
+              refreshToken: generateRefreshToken(
+                id,
+                undefined,
+                user.tokenVersion ?? 0
+              ),
             });
           } catch (error) {
             return done(error);
