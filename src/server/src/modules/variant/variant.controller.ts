@@ -105,7 +105,7 @@ export class VariantController {
           if (!attr.attributeId || !attr.valueId) {
             throw new AppError(
               400,
-              `Invalid attribute structure at index ${index}`
+              `Invalid attribute structure at attribute #${index + 1}.`
             );
           }
         });
@@ -176,7 +176,7 @@ export class VariantController {
             if (!attr.attributeId || !attr.valueId) {
               throw new AppError(
                 400,
-                `Invalid attribute structure at index ${index}`
+                `Invalid attribute structure at attribute #${index + 1}.`
               );
             }
           });

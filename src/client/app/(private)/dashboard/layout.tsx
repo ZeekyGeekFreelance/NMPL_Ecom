@@ -97,7 +97,7 @@ export default function DashboardLayout({
         title: "New dealer enquiries",
         description: `${pendingDealerCount} dealer request${
           pendingDealerCount > 1 ? "s are" : " is"
-        } waiting for review.`,
+        } pending evaluation.`,
         href: "/dashboard/dealers",
         count: pendingDealerCount,
       });

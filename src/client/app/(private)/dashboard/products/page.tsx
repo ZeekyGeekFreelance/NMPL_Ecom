@@ -16,6 +16,21 @@ import { usePathname } from "next/navigation";
 import { ProductFormData } from "./product.types";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import usePageQuery from "@/app/hooks/network/usePageQuery";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+
+const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
+
+const normalizeVariantAttributes = (
+  attributes: any[] | undefined
+): { attributeId: string; valueId: string }[] =>
+  (Array.isArray(attributes) ? attributes : [])
+    .map((attribute) => ({
+      attributeId: String(
+        attribute?.attributeId || attribute?.attribute?.id || ""
+      ).trim(),
+      valueId: String(attribute?.valueId || attribute?.value?.id || "").trim(),
+    }))
+    .filter((attribute) => attribute.attributeId && attribute.valueId);
 
 const ProductsDashboard = () => {
   const { showToast } = useToast();
@@ -30,7 +45,7 @@ const ProductsDashboard = () => {
   const { page, setPage } = usePageQuery();
 
   const { data, isLoading, refetch } = useGetAllProductsQuery(
-    { select: { variants: true }, page }, // Ensure variants are included
+    { page },
     { skip: !shouldFetchProducts }
   );
   const products = data?.products || [];
@@ -63,10 +78,11 @@ const ProductsDashboard = () => {
         variant.lowStockThreshold?.toString() || "10"
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
+      const normalizedAttributes = normalizeVariantAttributes(variant.attributes);
       // Append attributes as JSON
       payload.append(
         `variants[${index}][attributes]`,
-        JSON.stringify(variant.attributes || [])
+        JSON.stringify(normalizedAttributes)
       );
       // Track image indexes for this variant
       if (Array.isArray(variant.images) && variant.images.length > 0) {
@@ -99,7 +115,7 @@ const ProductsDashboard = () => {
   };
 
   const handleUpdateProduct = async (data: ProductFormData) => {
-    if (!editingProduct) return;
+    if (!editingProduct || isUpdating) return;
 
     const payload = new FormData();
     payload.append("name", data.name || "");
@@ -121,27 +137,29 @@ const ProductsDashboard = () => {
         String(variant.lowStockThreshold ?? 10)
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
+      const normalizedAttributes = normalizeVariantAttributes(variant.attributes);
       payload.append(
         `variants[${index}][attributes]`,
-        JSON.stringify(variant.attributes || [])
+        JSON.stringify(normalizedAttributes)
       );
 
-      const existingImages: string[] = [];
+      const orderedImages: string[] = [];
       const imageIndexes: number[] = [];
 
       (variant.images || []).forEach((image) => {
         if (image instanceof File) {
           payload.append("images", image);
+          orderedImages.push(`${UPLOADED_IMAGE_TOKEN_PREFIX}${imageIndex}`);
           imageIndexes.push(imageIndex);
           imageIndex += 1;
         } else if (typeof image === "string" && image.trim()) {
-          existingImages.push(image);
+          orderedImages.push(image);
         }
       });
 
       payload.append(
         `variants[${index}][images]`,
-        JSON.stringify(existingImages)
+        JSON.stringify(orderedImages)
       );
       payload.append(
         `variants[${index}][imageIndexes]`,
@@ -150,16 +168,25 @@ const ProductsDashboard = () => {
     });
 
     try {
-      await updateProduct({
+      const response = await updateProduct({
         id: editingProduct.id!,
         data: payload,
       }).unwrap();
+      const didChange = Boolean(
+        (response as any)?.didChange ?? (response as any)?.data?.didChange ?? true
+      );
+
+      if (!didChange) {
+        showToast("No changes detected.", "info");
+        return;
+      }
+
       setIsModalOpen(false);
       setEditingProduct(null);
       showToast("Product updated successfully", "success");
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to update product:", err);
-      showToast("Failed to update product", "error");
+      showToast(getApiErrorMessage(err, "Failed to update product"), "error");
     }
   };
 
@@ -246,7 +273,16 @@ const ProductsDashboard = () => {
                 isFeatured: row.isFeatured,
                 categoryId: row.categoryId,
                 description: row.description || "",
-                variants: row.variants || [],
+                variants: (row.variants || []).map((variant: any) => ({
+                  ...variant,
+                  sku: variant?.sku ?? "",
+                  price: Number(variant?.price ?? 0),
+                  stock: Number(variant?.stock ?? 0),
+                  lowStockThreshold: Number(variant?.lowStockThreshold ?? 10),
+                  barcode: variant?.barcode ?? "",
+                  attributes: normalizeVariantAttributes(variant.attributes),
+                  images: Array.isArray(variant.images) ? variant.images : [],
+                })),
               });
               setIsModalOpen(true);
             }}
@@ -345,6 +381,9 @@ const ProductsDashboard = () => {
         message="Are you sure you want to delete this product? This action cannot be undone."
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+        type="danger"
+        isConfirming={isDeleting}
+        disableCancelWhileConfirming
       />
     </div>
   );

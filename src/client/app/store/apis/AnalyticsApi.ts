@@ -24,6 +24,16 @@ export const analyticsApi = apiSlice.injectEndpoints({
         body: data,
       }),
     }),
+    createInteractionBatch: builder.mutation<
+      { message: string; data: { count: number } },
+      { events: Array<{ productId?: string; type: string }> }
+    >({
+      query: (data) => ({
+        url: "/analytics/interactions/bulk",
+        method: "POST",
+        body: data,
+      }),
+    }),
 
     getYearRange: builder.query<any, void>({
       query: () => ({
@@ -100,6 +110,7 @@ export const analyticsApi = apiSlice.injectEndpoints({
 
 export const {
   useCreateInteractionMutation,
+  useCreateInteractionBatchMutation,
   useGetOverviewQuery,
   useGetYearRangeQuery,
   useGetProductPerformanceQuery,

@@ -38,6 +38,10 @@ export class UserService {
     return this.normalizeRole(role) === "SUPERADMIN";
   }
 
+  private getRoleBoundary(role: unknown): "INTERNAL" | "EXTERNAL" {
+    return this.isAdminRole(role) ? "INTERNAL" : "EXTERNAL";
+  }
+
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
   }
@@ -465,23 +469,42 @@ export class UserService {
         throw new AppError(400, "Invalid role");
       }
 
-      // USER/DEALER accounts cannot be promoted to privileged roles.
-      if (this.normalizeRole(user.role) === "USER" && requestedRole !== "USER") {
+      const currentBoundary = this.getRoleBoundary(user.role);
+      const requestedBoundary = this.getRoleBoundary(requestedRole);
+
+      if (currentBoundary !== requestedBoundary) {
         throw new AppError(
           400,
-          "USER/DEALER accounts cannot be promoted to ADMIN or SUPERADMIN"
+          "Cross-boundary role transitions are not allowed"
         );
+      }
+
+      if (currentBoundary === "EXTERNAL" && requestedRole !== "USER") {
+        throw new AppError(
+          400,
+          "External accounts cannot be promoted to ADMIN or SUPERADMIN"
+        );
+      }
+
+      if (currentBoundary === "INTERNAL" && !["ADMIN", "SUPERADMIN"].includes(requestedRole)) {
+        throw new AppError(400, "Internal accounts can only be ADMIN or SUPERADMIN");
       }
 
       if (this.isDealerAccount(user) && requestedRole !== "USER") {
-        throw new AppError(
-          400,
-          "Dealer accounts cannot be promoted to ADMIN or SUPERADMIN"
+        throw new AppError(400, "Dealer accounts must stay in external role boundary");
+      }
+
+      if (this.isSuperAdminRole(user.role) && requestedRole === "ADMIN") {
+        const superAdminCount = await this.userRepository.countUsersByRole(
+          "SUPERADMIN"
         );
+        if (superAdminCount <= 1) {
+          throw new AppError(400, "Cannot demote the last SuperAdmin");
+        }
       }
 
       payload.role = requestedRole as ROLE;
-      if (requestedRole === "USER" || requestedRole === "SUPERADMIN") {
+      if (requestedRole !== "ADMIN") {
         payload.isBillingSupervisor = false;
       }
     }
@@ -834,6 +857,13 @@ export class UserService {
       throw new AppError(404, "Dealer user not found");
     }
 
+    if (this.isAdminRole(dealerUser.role)) {
+      throw new AppError(
+        400,
+        "Internal team accounts cannot be managed through dealer status workflow"
+      );
+    }
+
     const dealerProfile = await this.userRepository.updateDealerStatus(
       safeDealerId,
       status,
@@ -973,6 +1003,12 @@ export class UserService {
     }
 
     const dealerUser = await this.userRepository.findUserById(safeDealerId);
+    if (dealerUser && this.isAdminRole(dealerUser.role)) {
+      throw new AppError(
+        400,
+        "Internal team accounts cannot receive dealer pricing maps"
+      );
+    }
     const previousMappings = await this.userRepository.getDealerPrices(safeDealerId);
     const updatedMappings = await this.userRepository.setDealerPrices(
       safeDealerId,
@@ -1023,6 +1059,14 @@ export class UserService {
     );
     if (!dealerProfile) {
       throw new AppError(404, "Dealer profile not found");
+    }
+
+    const dealerUser = await this.userRepository.findUserById(safeDealerId);
+    if (dealerUser && this.isAdminRole(dealerUser.role)) {
+      throw new AppError(
+        400,
+        "Internal team accounts cannot use dealer pricing workflow"
+      );
     }
 
     return this.userRepository.getDealerPrices(safeDealerId);

@@ -1,9 +1,11 @@
 "use client";
 import { Controller, useFieldArray, UseFormReturn } from "react-hook-form";
 import { Trash2, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import ImageUploader from "@/app/components/molecules/ImageUploader";
 import { ProductFormData } from "./product.types";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 
 interface VariantFormProps {
   form: UseFormReturn<ProductFormData>;
@@ -19,15 +21,115 @@ const VariantForm: React.FC<VariantFormProps> = ({
   form,
   categoryAttributes,
 }) => {
+  const baseVariantDeleteMessage =
+    "Base variant cannot be deleted. Add another variant first or delete the product instead.";
   const {
     control,
     formState: { errors },
     setValue,
+    getValues,
+    setError,
+    clearErrors,
   } = form;
   const { fields, append, remove } = useFieldArray({
     control,
     name: "variants",
   });
+  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!categoryAttributes.length || !fields.length) {
+      return;
+    }
+
+    const variants = getValues("variants") || [];
+
+    variants.forEach((variant, variantIndex) => {
+      const existingAttributes = Array.isArray(variant?.attributes)
+        ? variant.attributes
+        : [];
+      const valueByAttributeId = new Map<string, string>();
+
+      existingAttributes.forEach((attribute) => {
+        const attributeId = String(attribute?.attributeId || "").trim();
+        if (!attributeId || valueByAttributeId.has(attributeId)) {
+          return;
+        }
+
+        valueByAttributeId.set(
+          attributeId,
+          String(attribute?.valueId || "").trim()
+        );
+      });
+
+      const normalizedAttributes = categoryAttributes.map((attribute) => ({
+        attributeId: attribute.id,
+        valueId: valueByAttributeId.get(attribute.id) || "",
+      }));
+
+      const hasSameShape =
+        existingAttributes.length === normalizedAttributes.length &&
+        normalizedAttributes.every((attribute, attrIndex) => {
+          const current = existingAttributes[attrIndex];
+          return (
+            String(current?.attributeId || "") === attribute.attributeId &&
+            String(current?.valueId || "") === attribute.valueId
+          );
+        });
+
+      if (!hasSameShape) {
+        setValue(`variants.${variantIndex}.attributes`, normalizedAttributes, {
+          shouldDirty: false,
+          shouldTouch: false,
+          shouldValidate: false,
+        });
+      }
+    });
+  }, [categoryAttributes, fields.length, getValues, setValue]);
+
+  const removeVariantAt = (index: number) => {
+    const scrollContainer = document.querySelector<HTMLElement>(
+      "[data-product-form-scroll='true']"
+    );
+    const scrollTop = scrollContainer?.scrollTop ?? null;
+    const windowScrollY = typeof window !== "undefined" ? window.scrollY : 0;
+
+    remove(index);
+    clearErrors("root.variantGuard");
+
+    requestAnimationFrame(() => {
+      if (scrollContainer && scrollTop !== null) {
+        scrollContainer.scrollTop = Math.min(scrollTop, scrollContainer.scrollHeight);
+        return;
+      }
+
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: windowScrollY });
+      }
+    });
+  };
+
+  const requestRemoveVariant = (index: number) => {
+    if (fields.length <= 1) {
+      setError("root.variantGuard", {
+        type: "manual",
+        message: baseVariantDeleteMessage,
+      });
+      return;
+    }
+
+    const variant = getValues(`variants.${index}`);
+    const hasPersistedId = Boolean(String(variant?.id || "").trim());
+
+    // Unsaved variants are local form state only, so remove them directly.
+    if (!hasPersistedId) {
+      removeVariantAt(index);
+      return;
+    }
+
+    clearErrors("root.variantGuard");
+    setPendingRemoveIndex(index);
+  };
 
   const inputStyles =
     "w-full p-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-2 focus:ring-blue-500 transition-colors";
@@ -40,7 +142,8 @@ const VariantForm: React.FC<VariantFormProps> = ({
         </h2>
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            clearErrors("root.variantGuard");
             append({
               id: "",
               sku: "",
@@ -49,11 +152,12 @@ const VariantForm: React.FC<VariantFormProps> = ({
               lowStockThreshold: 10,
               barcode: "",
               images: [],
-              attributes: categoryAttributes
-                .filter((attr) => attr.isRequired)
-                .map((attr) => ({ attributeId: attr.id, valueId: "" })),
-            })
-          }
+              attributes: categoryAttributes.map((attr) => ({
+                attributeId: attr.id,
+                valueId: "",
+              })),
+            });
+          }}
           className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
         >
           <Plus size={20} /> Add Variant
@@ -71,7 +175,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
             </h3>
             <button
               type="button"
-              onClick={() => remove(index)}
+              onClick={() => requestRemoveVariant(index)}
               className="text-red-500 hover:text-red-600"
             >
               <Trash2 size={20} />
@@ -96,6 +200,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                 render={({ field }) => (
                   <input
                     {...field}
+                    value={field.value ?? ""}
                     type="text"
                     className={inputStyles}
                     placeholder="TSH-RED-S"
@@ -123,6 +228,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                 render={({ field }) => (
                   <input
                     {...field}
+                    value={field.value ?? ""}
                     type="number"
                     step="0.01"
                     className={inputStyles}
@@ -151,6 +257,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                 render={({ field }) => (
                   <input
                     {...field}
+                    value={field.value ?? ""}
                     type="number"
                     className={inputStyles}
                     placeholder="50"
@@ -175,6 +282,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                 render={({ field }) => (
                   <input
                     {...field}
+                    value={field.value ?? ""}
                     type="number"
                     className={inputStyles}
                     placeholder="10"
@@ -198,6 +306,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                 render={({ field }) => (
                   <input
                     {...field}
+                    value={field.value ?? ""}
                     type="text"
                     className={inputStyles}
                     placeholder="123456789012"
@@ -245,7 +354,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
                         label: v.value,
                         value: v.id,
                       }))}
-                      value={field.value}
+                      value={field.value ?? ""}
                       onChange={(value) => {
                         field.onChange(value);
                         form.setValue(
@@ -276,6 +385,22 @@ const VariantForm: React.FC<VariantFormProps> = ({
           At least one variant is required
         </p>
       )}
+
+      <ConfirmModal
+        isOpen={pendingRemoveIndex !== null}
+        title="Remove Variant?"
+        message="You are about to remove this variant from the product form. Saving the product after this will permanently remove it from the database. This action cannot be undone."
+        type="danger"
+        confirmLabel="Remove Variant"
+        cancelLabel="Keep Variant"
+        onConfirm={() => {
+          if (pendingRemoveIndex !== null) {
+            removeVariantAt(pendingRemoveIndex);
+          }
+          setPendingRemoveIndex(null);
+        }}
+        onCancel={() => setPendingRemoveIndex(null)}
+      />
     </div>
   );
 };

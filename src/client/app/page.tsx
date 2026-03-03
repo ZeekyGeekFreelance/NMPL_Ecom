@@ -1,9 +1,8 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useQuery } from "@apollo/client";
-import { GET_PRODUCTS_SUMMARY } from "./gql/Product";
 import { useEffect, useMemo, useState } from "react";
-import groupProductsByFlag from "./utils/groupProductsByFlag";
+import { useQuery } from "@apollo/client";
+import { GET_PRODUCTS } from "./gql/Product";
 import SkeletonLoader from "./components/feedback/SkeletonLoader";
 import { useDealerCatalogPollInterval } from "./hooks/network/useDealerCatalogPollInterval";
 
@@ -25,53 +24,126 @@ const MainLayout = dynamic(() => import("./components/templates/MainLayout"), {
   ssr: false,
 });
 
+const SECTION_PAGE_SIZE = 12;
+const BOOT_RETRY_LIMIT = 3;
+const BOOT_RETRY_DELAY_MS = 1200;
+
 const Home = () => {
   const dealerCatalogPollInterval = useDealerCatalogPollInterval();
-  const [retryCount, setRetryCount] = useState(0);
+  const [bootRetryCount, setBootRetryCount] = useState(0);
 
-  const { data, loading, error, refetch } = useQuery(GET_PRODUCTS_SUMMARY, {
-    variables: { first: 100 },
-    fetchPolicy: "cache-and-network",
-    nextFetchPolicy: "cache-first",
-    errorPolicy: "all",
-    pollInterval: dealerCatalogPollInterval,
-    notifyOnNetworkStatusChange: true,
+  const sharedQueryOptions = useMemo(
+    () => ({
+      fetchPolicy: "cache-and-network" as const,
+      nextFetchPolicy: "cache-first" as const,
+      errorPolicy: "all" as const,
+      pollInterval: dealerCatalogPollInterval,
+      notifyOnNetworkStatusChange: true,
+    }),
+    [dealerCatalogPollInterval]
+  );
+
+  const featuredQuery = useQuery(GET_PRODUCTS, {
+    variables: {
+      first: SECTION_PAGE_SIZE,
+      skip: 0,
+      filters: { isFeatured: true },
+    },
+    ...sharedQueryOptions,
+  });
+  const trendingQuery = useQuery(GET_PRODUCTS, {
+    variables: {
+      first: SECTION_PAGE_SIZE,
+      skip: 0,
+      filters: { isTrending: true },
+    },
+    ...sharedQueryOptions,
+  });
+  const newArrivalsQuery = useQuery(GET_PRODUCTS, {
+    variables: {
+      first: SECTION_PAGE_SIZE,
+      skip: 0,
+      filters: { isNew: true },
+    },
+    ...sharedQueryOptions,
+  });
+  const bestSellersQuery = useQuery(GET_PRODUCTS, {
+    variables: {
+      first: SECTION_PAGE_SIZE,
+      skip: 0,
+      filters: { isBestSeller: true },
+    },
+    ...sharedQueryOptions,
   });
 
+  const featured = featuredQuery.data?.products?.products || [];
+  const trending = trendingQuery.data?.products?.products || [];
+  const newArrivals = newArrivalsQuery.data?.products?.products || [];
+  const bestSellers = bestSellersQuery.data?.products?.products || [];
+
+  const sectionStates = useMemo(
+    () => [
+      { query: featuredQuery, products: featured, key: "featured" },
+      { query: trendingQuery, products: trending, key: "trending" },
+      { query: newArrivalsQuery, products: newArrivals, key: "new" },
+      { query: bestSellersQuery, products: bestSellers, key: "best" },
+    ],
+    [
+      featuredQuery,
+      trendingQuery,
+      newArrivalsQuery,
+      bestSellersQuery,
+      featured,
+      trending,
+      newArrivals,
+      bestSellers,
+    ]
+  );
+
+  const hasProducts = [featured, trending, newArrivals, bestSellers].some(
+    (sectionProducts) => sectionProducts.length > 0
+  );
+
+  const failedSections = sectionStates.filter(
+    (section) => section.query.error && section.products.length === 0
+  );
+  const hasBootFailure = failedSections.length > 0;
+
   useEffect(() => {
-    if (!error) {
-      if (retryCount !== 0) {
-        setRetryCount(0);
+    if (!hasBootFailure) {
+      if (bootRetryCount !== 0) {
+        setBootRetryCount(0);
       }
       return;
     }
 
-    if (data?.products?.products?.length) {
-      return;
-    }
-
-    if (retryCount >= 2) {
+    if (hasProducts || bootRetryCount >= BOOT_RETRY_LIMIT) {
       return;
     }
 
     const timeoutId = setTimeout(() => {
-      setRetryCount((previous) => previous + 1);
-      refetch({ first: 100 }).catch(() => null);
-    }, 1200);
+      setBootRetryCount((previous) => previous + 1);
+      failedSections.forEach((section) => {
+        void section.query.refetch();
+      });
+    }, BOOT_RETRY_DELAY_MS);
 
     return () => clearTimeout(timeoutId);
-  }, [data?.products?.products?.length, error, refetch, retryCount]);
+  }, [
+    bootRetryCount,
+    failedSections,
+    hasBootFailure,
+    hasProducts,
+  ]);
 
-  const { featured, trending, newArrivals, bestSellers } = useMemo(() => {
-    if (!data?.products?.products)
-      return { featured: [], trending: [], newArrivals: [], bestSellers: [] };
-    return groupProductsByFlag(data.products.products);
-  }, [data]);
+  const isLoading =
+    (featuredQuery.loading ||
+      trendingQuery.loading ||
+      newArrivalsQuery.loading ||
+      bestSellersQuery.loading) &&
+    !hasProducts;
 
-  const hasProducts = (data?.products?.products?.length || 0) > 0;
-  const sectionError = hasProducts ? undefined : error;
-
-  if (loading && !hasProducts) {
+  if (isLoading) {
     return (
       <MainLayout>
         <HeroSection />
@@ -89,28 +161,28 @@ const Home = () => {
         title="Featured"
         products={featured}
         loading={false}
-        error={sectionError}
+        error={featured.length ? undefined : featuredQuery.error}
         showTitle={true}
       />
       <ProductSection
         title="Trending"
         products={trending}
         loading={false}
-        error={sectionError}
+        error={trending.length ? undefined : trendingQuery.error}
         showTitle={true}
       />
       <ProductSection
         title="New Arrivals"
         products={newArrivals}
         loading={false}
-        error={sectionError}
+        error={newArrivals.length ? undefined : newArrivalsQuery.error}
         showTitle={true}
       />
       <ProductSection
         title="Best Sellers"
         products={bestSellers}
         loading={false}
-        error={sectionError}
+        error={bestSellers.length ? undefined : bestSellersQuery.error}
         showTitle={true}
       />
     </MainLayout>
@@ -118,4 +190,3 @@ const Home = () => {
 };
 
 export default Home;
-

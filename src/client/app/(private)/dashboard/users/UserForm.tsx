@@ -3,6 +3,10 @@
 import { Controller, UseFormReturn } from "react-hook-form";
 import { Users, Shield, Crown } from "lucide-react";
 import { useAuth } from "@/app/hooks/useAuth";
+import {
+  resolveDisplayRole,
+  isExternalDisplayRole,
+} from "@/app/lib/userRole";
 
 export interface UserFormData {
   id: string | number;
@@ -17,6 +21,14 @@ interface UserFormProps {
   onSubmit: (data: UserFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
+  targetUser?: {
+    role?: string | null;
+    effectiveRole?: string | null;
+    dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null | string;
+    dealerProfile?: {
+      status?: "PENDING" | "APPROVED" | "REJECTED" | null | string;
+    } | null;
+  } | null;
 }
 
 const UserForm: React.FC<UserFormProps> = ({
@@ -24,6 +36,7 @@ const UserForm: React.FC<UserFormProps> = ({
   onSubmit,
   isLoading,
   submitLabel = "Save",
+  targetUser = null,
 }) => {
   const { user: currentUser } = useAuth();
   const {
@@ -34,6 +47,13 @@ const UserForm: React.FC<UserFormProps> = ({
   } = form;
 
   const selectedRole = watch("role");
+  const targetDisplayRole = resolveDisplayRole({
+    role: targetUser?.role ?? selectedRole,
+    effectiveRole: targetUser?.effectiveRole,
+    dealerStatus: targetUser?.dealerStatus,
+    dealerProfile: targetUser?.dealerProfile,
+  });
+  const isExternalTarget = isExternalDisplayRole(targetDisplayRole);
 
   // Get role color for display
   const getRoleColor = (role: string) => {
@@ -49,10 +69,19 @@ const UserForm: React.FC<UserFormProps> = ({
   const getAvailableRoles = () => {
     if (!currentUser) return [];
 
+    if (isExternalTarget) {
+      return [
+        {
+          value: "USER",
+          label: targetDisplayRole === "DEALER" ? "Dealer Account" : "Customer Account",
+          icon: <Users className="w-4 h-4" />,
+        },
+      ];
+    }
+
     switch (currentUser.role) {
       case "SUPERADMIN":
         return [
-          { value: "USER", label: "User", icon: <Users className="w-4 h-4" /> },
           {
             value: "ADMIN",
             label: "Admin",
@@ -66,7 +95,6 @@ const UserForm: React.FC<UserFormProps> = ({
         ];
       case "ADMIN":
         return [
-          { value: "USER", label: "User", icon: <Users className="w-4 h-4" /> },
           {
             value: "ADMIN",
             label: "Admin",
@@ -74,9 +102,7 @@ const UserForm: React.FC<UserFormProps> = ({
           },
         ];
       default:
-        return [
-          { value: "USER", label: "User", icon: <Users className="w-4 h-4" /> },
-        ];
+        return [{ value: "USER", label: "User", icon: <Users className="w-4 h-4" /> }];
     }
   };
 
@@ -208,6 +234,13 @@ const UserForm: React.FC<UserFormProps> = ({
       </div>
 
       {/* Submit */}
+      {isExternalTarget ? (
+        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          This is an external account. Internal role promotions are blocked by policy.
+          Use dealer approval/rejection workflow for customer/dealer transitions.
+        </p>
+      ) : null}
+
       <div className="flex justify-end">
         <button
           type="submit"

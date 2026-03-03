@@ -4,8 +4,9 @@ import { useRouter, usePathname } from "next/navigation";
 import CustomLoader from "../feedback/CustomLoader";
 import { useAuth } from "@/app/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
+import { resolveDisplayRole } from "@/app/lib/userRole";
 
-type AppRole = "USER" | "ADMIN" | "SUPERADMIN";
+type AppRole = "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
 
 type WithAuthOptions = {
   allowedRoles?: AppRole[];
@@ -41,6 +42,7 @@ export function withAuth<P extends object>(
       () => options?.allowedRoles || getDefaultAllowedRoles(pathname),
       [options?.allowedRoles, pathname]
     );
+    const resolvedRole = resolveDisplayRole(user);
 
     useEffect(() => {
       if (isLoading) {
@@ -59,11 +61,11 @@ export function withAuth<P extends object>(
         return;
       }
 
-      if (allowedRoles?.length && user?.role && !allowedRoles.includes(user.role as AppRole)) {
+      if (allowedRoles?.length && !allowedRoles.includes(resolvedRole as AppRole)) {
         setIsRedirecting(true);
         const fallbackPath =
           options?.unauthorizedRedirectTo ||
-          (user.role === "ADMIN" || user.role === "SUPERADMIN"
+          (resolvedRole === "ADMIN" || resolvedRole === "SUPERADMIN"
             ? "/dashboard"
             : "/");
         router.replace(fallbackPath);
@@ -78,7 +80,7 @@ export function withAuth<P extends object>(
       options?.redirectTo,
       options?.unauthorizedRedirectTo,
       router,
-      user?.role,
+      resolvedRole,
     ]);
 
     if (isLoading || isRedirecting) {
@@ -89,7 +91,7 @@ export function withAuth<P extends object>(
       return null;
     }
 
-    if (allowedRoles?.length && user?.role && !allowedRoles.includes(user.role as AppRole)) {
+    if (allowedRoles?.length && !allowedRoles.includes(resolvedRole as AppRole)) {
       return null;
     }
 

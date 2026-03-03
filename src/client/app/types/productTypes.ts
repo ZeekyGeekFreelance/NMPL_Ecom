@@ -3,12 +3,14 @@ export interface Product {
   id: string;
   slug: string;
   name: string;
+  thumbnail?: string | null;
+  minPrice?: number;
+  maxPrice?: number;
+  price?: number;
   isNew: boolean;
   isFeatured: boolean;
   isTrending: boolean;
   isBestSeller: boolean;
-  averageRating: number;
-  reviewCount: number;
   description: string | null;
   variants: {
     id: string;
@@ -37,14 +39,6 @@ export interface Product {
     name: string;
     slug: string;
   } | null;
-  reviews: {
-    id: string;
-    rating: number;
-    comment: string | null;
-    createdAt: string;
-    userId: string;
-    user?: { name: string };
-  }[];
 }
 export interface Order {
   order_no: string;

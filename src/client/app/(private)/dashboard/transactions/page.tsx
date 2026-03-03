@@ -67,10 +67,10 @@ const TransactionsDashboard = () => {
       refetchOnReconnect: true,
     }
   );
-  const [updateTransactionStatus, { error: updateError }] =
+  const [updateTransactionStatus, { isLoading: isUpdatingStatus, error: updateError }] =
     useUpdateTransactionStatusMutation();
   debugLog("Error updating transaction status:", updateError);
-  const [deleteTransaction, { error: deleteError }] =
+  const [deleteTransaction, { isLoading: isDeletingTransaction, error: deleteError }] =
     useDeleteTransactionMutation();
   debugLog("Error deleting transaction:", deleteError);
 
@@ -190,6 +190,10 @@ const TransactionsDashboard = () => {
           },
         ]
       : [];
+  const isIrreversiblePendingStatus =
+    pendingStatusUpdate?.nextStatus === "QUOTATION_REJECTED" ||
+    pendingStatusUpdate?.nextStatus === "QUOTATION_EXPIRED" ||
+    pendingStatusUpdate?.nextStatus === "DELIVERED";
 
   const columns = [
     {
@@ -275,6 +279,7 @@ const TransactionsDashboard = () => {
             type="button"
             onClick={() => handleDeleteTransaction(row.id)}
             className="text-red-600 hover:text-red-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-red-50"
+            disabled={isDeletingTransaction}
           >
             <Trash2 size={16} />
             Delete
@@ -345,12 +350,15 @@ const TransactionsDashboard = () => {
         message="Are you sure you want to delete this transaction? This action cannot be undone."
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+        type="danger"
+        isConfirming={isDeletingTransaction}
+        disableCancelWhileConfirming
       />
 
       <ConfirmModal
         isOpen={isStatusConfirmModalOpen}
         title="Confirm Status Update"
-        type="warning"
+        type={isIrreversiblePendingStatus ? "danger" : "warning"}
         message={
           pendingStatusUpdate
             ? `Are you sure you want to update ${toTransactionReference(
@@ -358,10 +366,16 @@ const TransactionsDashboard = () => {
               )} from ${getOrderStatusLabel(
                 pendingStatusUpdate.currentStatus
               )} to ${getOrderStatusLabel(pendingStatusUpdate.nextStatus)}?`
+                + (isIrreversiblePendingStatus
+                  ? " This action cannot be undone."
+                  : "")
             : "Are you sure you want to update this order status?"
         }
         onConfirm={confirmStatusUpdateAfterSafetyPrompt}
         onCancel={cancelStatusUpdateConfirmation}
+        confirmLabel="Update Status"
+        isConfirming={isUpdatingStatus}
+        disableCancelWhileConfirming
       />
 
       {/* Update Status Modal */}

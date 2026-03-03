@@ -64,11 +64,10 @@ export const assertPortAvailable = async (): Promise<void> => {
     return;
   }
 
-  const message = `[preflight] Port collision detected on ${config.server.port}. ${
-    config.isProduction
+  const message = `[preflight] Port collision detected on ${config.server.port}. ${config.isProduction
       ? "Production boot blocked."
       : "Development boot blocked. Stop existing process or change PORT."
-  }`;
+    }`;
   throw new Error(message);
 };
 
@@ -140,15 +139,24 @@ export const assertClusterParity = async (): Promise<void> => {
   }
 
   const key = `${config.redis.namespace}:${config.redis.parityKey}:${config.nodeEnv}`;
-  const current = await redisClient.get(key);
-  if (current && current !== configHash) {
+  try {
+    const current = await redisClient.get(key);
+    if (current && current !== configHash) {
+      throw new Error(
+        "[preflight] Configuration parity hash mismatch across instances. Boot aborted."
+      );
+    }
+    if (!current) {
+      await redisClient.set(key, configHash, "EX", 3600);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("parity hash mismatch")) {
+      throw err;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      "[preflight] Configuration parity hash mismatch across instances. Boot aborted."
+      `[preflight] Cluster parity check failed — Redis unreachable or command failed: ${msg}`
     );
-  }
-
-  if (!current) {
-    await redisClient.set(key, configHash, "EX", 3600);
   }
 };
 

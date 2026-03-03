@@ -62,4 +62,4 @@ const PaymentFailed = () => {
   );
 };
 
-export default withAuth(PaymentFailed, { allowedRoles: ["USER"] });
+export default withAuth(PaymentFailed, { allowedRoles: ["USER", "DEALER"] });

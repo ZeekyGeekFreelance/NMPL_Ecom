@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { config } from "@/config";
+import { recordQueryMetric } from "@/shared/observability/requestMetrics";
 
 const prisma = new PrismaClient({
   datasources: {
@@ -8,6 +9,22 @@ const prisma = new PrismaClient({
     },
   },
 });
+
+if (config.isDevelopment) {
+  prisma.$use(async (params, next) => {
+    const startedAt = performance.now();
+    const result = await next(params);
+    const durationMs = performance.now() - startedAt;
+
+    recordQueryMetric({
+      model: params.model || "raw",
+      action: params.action,
+      durationMs,
+    });
+
+    return result;
+  });
+}
 
 export const connectDB = async () => {
   try {
@@ -20,7 +37,13 @@ export const connectDB = async () => {
 };
 
 export const disconnectDB = async (): Promise<void> => {
-  await prisma.$disconnect();
+  try {
+    await prisma.$disconnect();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[db] disconnectDB failed: ${msg}`);
+    throw err;
+  }
 };
 
 export const pingDB = async (): Promise<boolean> => {

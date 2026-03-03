@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import prisma from "@/infra/database/database.config";
 import { User } from "../types/userTypes";
 import { config } from "@/config";
+import { resolveEffectiveRoleFromUser } from "@/shared/utils/userRole";
 
 const optionalAuth = async (
   req: Request,
@@ -16,14 +17,28 @@ const optionalAuth = async (
   }
 
   try {
-    const decoded = jwt.verify(
-      accessToken,
-      config.auth.accessTokenSecret
-    ) as User & { tv?: number };
+    const cachedDecoded = req._decodedAccessToken as
+      | (User & { tv?: number })
+      | undefined;
+    const decoded =
+      cachedDecoded ||
+      (jwt.verify(accessToken, config.auth.accessTokenSecret) as User & {
+        tv?: number;
+      });
+    req._decodedAccessToken = decoded;
 
     const user = await prisma.user.findUnique({
       where: { id: String(decoded.id) },
-      select: { id: true, role: true, tokenVersion: true },
+      select: {
+        id: true,
+        role: true,
+        tokenVersion: true,
+        dealerProfile: {
+          select: {
+            status: true,
+          },
+        },
+      },
     });
 
     if (user) {
@@ -35,6 +50,7 @@ const optionalAuth = async (
       req.user = {
         id: user.id,
         role: user.role,
+        effectiveRole: resolveEffectiveRoleFromUser(user),
       };
     }
   } catch {

@@ -43,6 +43,7 @@ const TransactionDetailsPage = () => {
   const [isStatusConfirmModalOpen, setIsStatusConfirmModalOpen] =
     useState(false);
   const [isQuotationModalOpen, setIsQuotationModalOpen] = useState(false);
+  const [isQuotationConfirmOpen, setIsQuotationConfirmOpen] = useState(false);
   const [quotationRows, setQuotationRows] = useState<
     Array<{
       orderItemId: string;
@@ -129,6 +130,10 @@ const TransactionDetailsPage = () => {
   const canUpdateStatus =
     availableNextStatuses.length > 0 &&
     availableNextStatuses.includes(selectedStatus);
+  const isIrreversibleStatusTransition =
+    selectedStatus === "QUOTATION_REJECTED" ||
+    selectedStatus === "QUOTATION_EXPIRED" ||
+    selectedStatus === "DELIVERED";
   const canEditQuotation =
     currentStatus === "PENDING_VERIFICATION" || currentStatus === "WAITLISTED";
 
@@ -320,6 +325,18 @@ const TransactionDetailsPage = () => {
         "error"
       );
     }
+  };
+
+  const requestIssueQuotation = () => {
+    if (!canSubmitQuotation || isIssuingQuotation) {
+      return;
+    }
+    setIsQuotationConfirmOpen(true);
+  };
+
+  const handleConfirmIssueQuotation = async () => {
+    setIsQuotationConfirmOpen(false);
+    await handleIssueQuotation();
   };
 
   const handleDownloadInvoice = useCallback(async () => {
@@ -551,7 +568,7 @@ const TransactionDetailsPage = () => {
             </button>
             <button
               type="button"
-              onClick={handleIssueQuotation}
+              onClick={requestIssueQuotation}
               disabled={!canSubmitQuotation || isIssuingQuotation}
               className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
@@ -564,14 +581,37 @@ const TransactionDetailsPage = () => {
       <ConfirmModal
         isOpen={isStatusConfirmModalOpen}
         title="Confirm Status Update"
-        type="warning"
+        type={isIrreversibleStatusTransition ? "danger" : "warning"}
         message={`Are you sure you want to update ${transactionReferenceForDisplay} from ${getOrderStatusLabel(
           currentStatus
         )} to ${getOrderStatusLabel(
           selectedStatus
-        )}?`}
+        )}?${
+          isIrreversibleStatusTransition
+            ? " This action cannot be undone."
+            : ""
+        }`}
         onConfirm={handleConfirmStatusUpdate}
         onCancel={handleCancelStatusUpdate}
+        isConfirming={isUpdating}
+        disableCancelWhileConfirming
+      />
+
+      <ConfirmModal
+        isOpen={isQuotationConfirmOpen}
+        title="Send Quotation to Customer?"
+        type="warning"
+        message={`You are about to send a quotation for ${quotationRows.length} item(s). This will reserve stock and update the customer-facing quotation amount.`}
+        confirmLabel="Send Quotation"
+        onConfirm={handleConfirmIssueQuotation}
+        onCancel={() => {
+          if (isIssuingQuotation) {
+            return;
+          }
+          setIsQuotationConfirmOpen(false);
+        }}
+        isConfirming={isIssuingQuotation}
+        disableCancelWhileConfirming
       />
     </div>
   );

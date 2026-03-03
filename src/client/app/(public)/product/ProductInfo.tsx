@@ -1,5 +1,4 @@
 "use client";
-import Rating from "@/app/components/feedback/Rating";
 import { useAddToCartMutation } from "@/app/store/apis/CartApi";
 import { useAuth } from "@/app/hooks/useAuth";
 import useToast from "@/app/hooks/ui/useToast";
@@ -15,8 +14,6 @@ import { setPendingAuthIntent } from "@/app/lib/authIntent";
 interface ProductInfoProps {
   id: string;
   name: string;
-  averageRating: number;
-  reviewCount: number;
   description: string;
   variants: Product["variants"];
   selectedVariant: Product["variants"][0] | null;
@@ -29,8 +26,6 @@ interface ProductInfoProps {
 const ProductInfo: React.FC<ProductInfoProps> = ({
   id,
   name,
-  averageRating,
-  reviewCount,
   description,
   variants,
   selectedVariant,
@@ -161,7 +156,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
       return;
     }
 
-    showToast("Item added to cart. Review and place your order.", "success");
+    showToast("Item added to cart. Verify and place your order.", "success");
     router.push("/cart");
   };
 
@@ -239,10 +234,8 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
         {name}
       </h1>
 
-      {/* Rating and Stock */}
+      {/* Stock */}
       <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-        <Rating rating={averageRating} />
-        <span>({reviewCount || 0} reviews)</span>
         <span
           className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
             stock > 0

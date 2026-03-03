@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import formatDate from "@/app/utils/formatDate";
 import { Calendar, Download, Package, ShoppingBag } from "lucide-react";
 import ToggleableText from "@/app/components/atoms/ToggleableText";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import useToast from "@/app/hooks/ui/useToast";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
 import { toOrderReference } from "@/app/lib/utils/accountReference";
@@ -75,6 +76,10 @@ const OrderSummary = ({
   const canTakeQuotationDecision = normalizedOrderStatus === "AWAITING_PAYMENT";
   const canDownloadInvoice = canDownloadInvoiceForStatus(orderStatus);
   const actionTriggeredRef = useRef(false);
+  const [pendingQuotationAction, setPendingQuotationAction] = useState<
+    "pay" | "reject" | null
+  >(null);
+  const [isQuotationConfirmOpen, setIsQuotationConfirmOpen] = useState(false);
   const quotationLogs = Array.isArray(order?.quotationLogs)
     ? order.quotationLogs
     : [];
@@ -159,13 +164,6 @@ const OrderSummary = ({
   }, [acceptQuotation, order.id, showToast]);
 
   const handleRejectQuotation = useCallback(async () => {
-    const confirmed = window.confirm(
-      "Cancel this quotation? Reserved stock will be released."
-    );
-    if (!confirmed) {
-      return;
-    }
-
     try {
       await rejectQuotation(order.id).unwrap();
       showToast("Quotation cancelled successfully.", "success");
@@ -176,6 +174,39 @@ const OrderSummary = ({
       );
     }
   }, [order.id, rejectQuotation, showToast]);
+
+  const requestProceedToPayment = useCallback(() => {
+    if (!canTakeQuotationDecision || isAcceptingQuotation || isRejectingQuotation) {
+      return;
+    }
+    setPendingQuotationAction("pay");
+    setIsQuotationConfirmOpen(true);
+  }, [canTakeQuotationDecision, isAcceptingQuotation, isRejectingQuotation]);
+
+  const requestRejectQuotation = useCallback(() => {
+    if (!canTakeQuotationDecision || isAcceptingQuotation || isRejectingQuotation) {
+      return;
+    }
+    setPendingQuotationAction("reject");
+    setIsQuotationConfirmOpen(true);
+  }, [canTakeQuotationDecision, isAcceptingQuotation, isRejectingQuotation]);
+
+  const handleConfirmQuotationAction = useCallback(async () => {
+    if (!pendingQuotationAction) {
+      setIsQuotationConfirmOpen(false);
+      return;
+    }
+
+    setIsQuotationConfirmOpen(false);
+
+    if (pendingQuotationAction === "pay") {
+      await handleProceedToPayment();
+    } else {
+      await handleRejectQuotation();
+    }
+
+    setPendingQuotationAction(null);
+  }, [handleProceedToPayment, handleRejectQuotation, pendingQuotationAction]);
 
   useEffect(() => {
     if (actionTriggeredRef.current) {
@@ -188,18 +219,18 @@ const OrderSummary = ({
 
     if (initialQuotationAction === "pay") {
       actionTriggeredRef.current = true;
-      handleProceedToPayment();
+      setPendingQuotationAction("pay");
+      setIsQuotationConfirmOpen(true);
       return;
     }
 
     if (initialQuotationAction === "reject") {
       actionTriggeredRef.current = true;
-      handleRejectQuotation();
+      setPendingQuotationAction("reject");
+      setIsQuotationConfirmOpen(true);
     }
   }, [
     canTakeQuotationDecision,
-    handleProceedToPayment,
-    handleRejectQuotation,
     initialQuotationAction,
   ]);
 
@@ -255,7 +286,7 @@ const OrderSummary = ({
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={handleProceedToPayment}
+              onClick={requestProceedToPayment}
               disabled={isAcceptingQuotation || isRejectingQuotation}
               className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
@@ -263,7 +294,7 @@ const OrderSummary = ({
             </button>
             <button
               type="button"
-              onClick={handleRejectQuotation}
+              onClick={requestRejectQuotation}
               disabled={isAcceptingQuotation || isRejectingQuotation}
               className="rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -389,6 +420,31 @@ const OrderSummary = ({
           <span className="font-semibold text-gray-800">{total}</span>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isQuotationConfirmOpen}
+        title={
+          pendingQuotationAction === "pay"
+            ? "Proceed to Payment?"
+            : "Cancel Quotation?"
+        }
+        message={
+          pendingQuotationAction === "pay"
+            ? `You are proceeding with payment for this quotation at ${total}. You will be redirected to the payment gateway.`
+            : "You are about to cancel this quotation. This action cannot be undone."
+        }
+        type={pendingQuotationAction === "pay" ? "warning" : "danger"}
+        confirmLabel={
+          pendingQuotationAction === "pay" ? "Proceed to Payment" : "Cancel Quotation"
+        }
+        onConfirm={handleConfirmQuotationAction}
+        onCancel={() => {
+          setIsQuotationConfirmOpen(false);
+          setPendingQuotationAction(null);
+        }}
+        isConfirming={isAcceptingQuotation || isRejectingQuotation}
+        disableCancelWhileConfirming
+      />
     </motion.div>
   );
 };

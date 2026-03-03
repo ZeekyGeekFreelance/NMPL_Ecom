@@ -65,4 +65,4 @@ const OrderTrackingPage = () => {
   );
 };
 
-export default withAuth(OrderTrackingPage, { allowedRoles: ["USER"] });
+export default withAuth(OrderTrackingPage, { allowedRoles: ["USER", "DEALER"] });

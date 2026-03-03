@@ -17,10 +17,15 @@ const protect = async (
       return next(new AppError(401, "Unauthorized, please log in"));
     }
 
-    const decoded = jwt.verify(
-      accessToken,
-      config.auth.accessTokenSecret
-    ) as User & { tv?: number };
+    const cachedDecoded = req._decodedAccessToken as
+      | (User & { tv?: number })
+      | undefined;
+    const decoded =
+      cachedDecoded ||
+      (jwt.verify(accessToken, config.auth.accessTokenSecret) as User & {
+        tv?: number;
+      });
+    req._decodedAccessToken = decoded;
 
     const user = await prisma.user.findUnique({
       where: { id: String(decoded.id) },

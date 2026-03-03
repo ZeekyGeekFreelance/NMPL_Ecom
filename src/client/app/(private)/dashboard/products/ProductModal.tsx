@@ -67,6 +67,16 @@ const ProductModal: React.FC<ProductModalProps> = ({
     }
   );
   const categoryAttributes = categoryAttributesData?.attributes || [];
+  const isEditMode = Boolean(initialData?.id);
+  const isFormDirty = form.formState.isDirty;
+
+  const handleFormSubmit = (data: ProductFormData) => {
+    if (isEditMode && !form.formState.isDirty) {
+      return;
+    }
+
+    onSubmit(data);
+  };
 
   useEffect(() => {
     if (initialData) {
@@ -129,15 +139,19 @@ const ProductModal: React.FC<ProductModalProps> = ({
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto px-8">
+            <div className="flex-1 min-h-0 overflow-y-auto px-8" data-product-form-scroll="true">
               <ProductForm
                 form={form}
-                onSubmit={onSubmit}
+                onSubmit={handleFormSubmit}
                 categories={categories}
                 categoryAttributes={categoryAttributes}
                 isLoading={isLoading}
                 error={error}
                 submitLabel={initialData ? "Update" : "Create"}
+                onCancel={onClose}
+                isEditMode={isEditMode}
+                disableSubmit={isEditMode && !isFormDirty}
+                noChangesMessage={isEditMode ? "No changes detected." : undefined}
               />
             </div>
           </motion.div>

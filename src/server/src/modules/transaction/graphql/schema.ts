@@ -15,12 +15,6 @@ const typeDefs = gql`
     userId: Int!
   }
 
-  type Review {
-    id: String!
-    rating: Float!
-    comment: String
-  }
-
   type Query {
     transactions: [Product!]
     transaction(slug: String!): Product

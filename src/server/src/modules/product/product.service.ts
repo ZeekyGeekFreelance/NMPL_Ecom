@@ -8,13 +8,263 @@ import prisma from "@/infra/database/database.config";
 import { AttributeRepository } from "../attribute/attribute.repository";
 import { VariantRepository } from "../variant/variant.repository";
 import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
+import { clearCatalogListingCache } from "./graphql/resolver";
 
 export class ProductService {
+  private static readonly BASE_VARIANT_DELETE_MESSAGE =
+    "Base variant cannot be deleted. Add another variant first or delete the product instead.";
+
   constructor(
     private productRepository: ProductRepository,
     private attributeRepository: AttributeRepository,
     private variantRepository: VariantRepository
   ) {}
+
+  private buildVariantValidationError(message: string): AppError {
+    return new AppError(400, message, true, [
+      {
+        property: "variants",
+        constraints: {
+          integrity: message,
+        },
+      },
+    ]);
+  }
+
+  private toVariantLabel(index: number): string {
+    return `Variant #${index + 1}`;
+  }
+
+  private buildCombinationKey(
+    attributes: Array<{ attributeId: string; valueId: string }>
+  ): string {
+    return attributes
+      .map((attr) => `${attr.attributeId}:${attr.valueId}`)
+      .sort()
+      .join("|");
+  }
+
+  private describeAttributeCombination(
+    attributes: Array<{ attributeId: string; valueId: string }>,
+    attributeNameById: Map<string, string>,
+    valueLabelById: Map<string, string>
+  ): string {
+    const normalized = attributes
+      .map((attr) => {
+        const attributeName = attributeNameById.get(attr.attributeId) || "Attribute";
+        const valueLabel = valueLabelById.get(attr.valueId) || "Value";
+        return `${attributeName} = ${valueLabel}`;
+      })
+      .sort((a, b) => a.localeCompare(b));
+
+    return normalized.join(", ");
+  }
+
+  private findDuplicateCombinationMessage(
+    variants: Array<{
+      attributes: Array<{ attributeId: string; valueId: string }>;
+    }>,
+    attributeNameById: Map<string, string>,
+    valueLabelById: Map<string, string>
+  ): string | null {
+    const seenCombinationByKey = new Map<string, number>();
+
+    for (let index = 0; index < variants.length; index += 1) {
+      const comboKey = this.buildCombinationKey(variants[index].attributes);
+      const existingIndex = seenCombinationByKey.get(comboKey);
+      if (existingIndex !== undefined) {
+        const readableCombination = this.describeAttributeCombination(
+          variants[index].attributes,
+          attributeNameById,
+          valueLabelById
+        );
+        if (readableCombination) {
+          return `Duplicate attribute combination: ${readableCombination} already exists.`;
+        }
+
+        return `${this.toVariantLabel(index)} has the same attribute combination as ${this.toVariantLabel(
+          existingIndex
+        )}.`;
+      }
+
+      seenCombinationByKey.set(comboKey, index);
+    }
+
+    return null;
+  }
+
+  private areStringArraysEqual(left: string[], right: string[]): boolean {
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private areAttributePairsEqual(
+    left: Array<{ attributeId: string; valueId: string }>,
+    right: Array<{ attributeId: string; valueId: string }>
+  ): boolean {
+    const leftKey = this.buildCombinationKey(left);
+    const rightKey = this.buildCombinationKey(right);
+    return leftKey === rightKey;
+  }
+
+  private hasProductFieldChanges(
+    existingProduct: {
+      name: string;
+      description: string | null;
+      isNew: boolean;
+      isTrending: boolean;
+      isBestSeller: boolean;
+      isFeatured: boolean;
+      categoryId: string | null;
+    },
+    productData: Partial<{
+      name: string;
+      description?: string;
+      isNew?: boolean;
+      isTrending?: boolean;
+      isBestSeller?: boolean;
+      isFeatured?: boolean;
+      categoryId?: string;
+    }>
+  ): boolean {
+    if (productData.name !== undefined && productData.name !== existingProduct.name) {
+      return true;
+    }
+    if (
+      productData.description !== undefined &&
+      (productData.description ?? null) !== existingProduct.description
+    ) {
+      return true;
+    }
+    if (productData.isNew !== undefined && productData.isNew !== existingProduct.isNew) {
+      return true;
+    }
+    if (
+      productData.isTrending !== undefined &&
+      productData.isTrending !== existingProduct.isTrending
+    ) {
+      return true;
+    }
+    if (
+      productData.isBestSeller !== undefined &&
+      productData.isBestSeller !== existingProduct.isBestSeller
+    ) {
+      return true;
+    }
+    if (
+      productData.isFeatured !== undefined &&
+      productData.isFeatured !== existingProduct.isFeatured
+    ) {
+      return true;
+    }
+    if (
+      productData.categoryId !== undefined &&
+      (productData.categoryId ?? null) !== existingProduct.categoryId
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private hasVariantCollectionChanges(
+    existingVariants: Array<{
+      id: string;
+      sku: string;
+      price: number;
+      stock: number;
+      lowStockThreshold: number;
+      barcode?: string | null;
+      images?: string[];
+      attributes: Array<{ attributeId: string; valueId: string }>;
+    }>,
+    incomingVariants: Array<{
+      id?: string;
+      sku: string;
+      price: number;
+      stock: number;
+      lowStockThreshold?: number;
+      barcode?: string;
+      images: string[];
+      attributes: { attributeId: string; valueId: string }[];
+    }>
+  ): boolean {
+    const existingById = new Map(existingVariants.map((variant) => [variant.id, variant]));
+    const existingBySku = new Map(existingVariants.map((variant) => [variant.sku, variant]));
+    const retainedVariantIds = new Set<string>();
+
+    for (const incomingVariant of incomingVariants) {
+      const hasExplicitId =
+        typeof incomingVariant.id === "string" && incomingVariant.id.trim().length > 0;
+
+      const matchedExisting = hasExplicitId
+        ? existingById.get(incomingVariant.id as string)
+        : existingBySku.get(incomingVariant.sku);
+
+      if (!matchedExisting) {
+        return true;
+      }
+
+      retainedVariantIds.add(matchedExisting.id);
+
+      if (matchedExisting.sku !== incomingVariant.sku) {
+        return true;
+      }
+      if (Number(matchedExisting.price) !== Number(incomingVariant.price)) {
+        return true;
+      }
+      if (Number(matchedExisting.stock) !== Number(incomingVariant.stock)) {
+        return true;
+      }
+      if (
+        Number(matchedExisting.lowStockThreshold ?? 10) !==
+        Number(incomingVariant.lowStockThreshold ?? 10)
+      ) {
+        return true;
+      }
+
+      const existingBarcode = matchedExisting.barcode || null;
+      const incomingBarcode = incomingVariant.barcode || null;
+      if (existingBarcode !== incomingBarcode) {
+        return true;
+      }
+
+      const existingImages = Array.isArray(matchedExisting.images)
+        ? matchedExisting.images
+        : [];
+      const incomingImages = Array.isArray(incomingVariant.images)
+        ? incomingVariant.images.filter((image) => typeof image === "string" && image.length > 0)
+        : [];
+
+      if (!this.areStringArraysEqual(existingImages, incomingImages)) {
+        return true;
+      }
+
+      const existingAttributes = matchedExisting.attributes.map((attribute) => ({
+        attributeId: attribute.attributeId,
+        valueId: attribute.valueId,
+      }));
+
+      if (!this.areAttributePairsEqual(existingAttributes, incomingVariant.attributes)) {
+        return true;
+      }
+    }
+
+    const removedVariantCount = existingVariants.filter(
+      (variant) => !retainedVariantIds.has(variant.id)
+    ).length;
+
+    return removedVariantCount > 0;
+  }
 
   private async applyDealerPricingToProduct(
     product: any,
@@ -157,33 +407,30 @@ export class ProductService {
     // Validate SKU format (alphanumeric with dashes, 3-50 characters)
     const skuRegex = /^[a-zA-Z0-9-]+$/;
     variants.forEach((variant, index) => {
+      const variantLabel = this.toVariantLabel(index);
       if (
         !variant.sku ||
         !skuRegex.test(variant.sku) ||
         variant.sku.length < 3 ||
         variant.sku.length > 50
       ) {
-        throw new AppError(
-          400,
-          `Variant at index ${index} has invalid SKU. Use alphanumeric characters and dashes, 3-50 characters.`
+        throw this.buildVariantValidationError(
+          `${variantLabel} has an invalid SKU. Use alphanumeric characters and dashes, 3-50 characters.`
         );
       }
       if (variant.price <= 0) {
-        throw new AppError(
-          400,
-          `Variant at index ${index} must have a positive price`
+        throw this.buildVariantValidationError(
+          `${variantLabel} must have a positive price.`
         );
       }
       if (variant.stock < 0) {
-        throw new AppError(
-          400,
-          `Variant at index ${index} must have non-negative stock`
+        throw this.buildVariantValidationError(
+          `${variantLabel} must have non-negative stock.`
         );
       }
       if (variant.lowStockThreshold && variant.lowStockThreshold < 0) {
-        throw new AppError(
-          400,
-          `Variant at index ${index} must have non-negative lowStockThreshold`
+        throw this.buildVariantValidationError(
+          `${variantLabel} must have non-negative low stock threshold.`
         );
       }
     });
@@ -220,11 +467,11 @@ export class ProductService {
     const [existingAttributes, existingValues] = await Promise.all([
       prisma.attribute.findMany({
         where: { id: { in: allAttributeIds } },
-        select: { id: true },
+        select: { id: true, name: true },
       }),
       prisma.attributeValue.findMany({
         where: { id: { in: allValueIds } },
-        select: { id: true, attributeId: true },
+        select: { id: true, attributeId: true, value: true },
       }),
     ]);
 
@@ -237,12 +484,21 @@ export class ProductService {
 
     // Validate attribute-value pairs
     variants.forEach((variant, index) => {
+      const variantLabel = this.toVariantLabel(index);
+      const attributeIds = variant.attributes.map((attr) => attr.attributeId);
+      if (new Set(attributeIds).size !== attributeIds.length) {
+        throw this.buildVariantValidationError(
+          `${variantLabel} contains duplicate attributes. Each attribute can be selected only once.`
+        );
+      }
+
       variant.attributes.forEach((attr, attrIndex) => {
         const value = existingValues.find((v) => v.id === attr.valueId);
         if (!value || value.attributeId !== attr.attributeId) {
-          throw new AppError(
-            400,
-            `Attribute value at variant index ${index}, attribute index ${attrIndex} does not belong to the specified attribute`
+          throw this.buildVariantValidationError(
+            `${variantLabel} has an invalid attribute mapping at attribute #${
+              attrIndex + 1
+            }.`
           );
         }
       });
@@ -261,18 +517,24 @@ export class ProductService {
     }
 
     // Validate unique attribute combinations
-    const comboKeys = variants.map((variant) =>
-      variant.attributes
-        .map((attr) => `${attr.attributeId}:${attr.valueId}`)
-        .sort()
-        .join("|")
+    const attributeNameById = new Map(
+      existingAttributes.map((attribute) => [attribute.id, attribute.name])
     );
-    if (new Set(comboKeys).size !== variants.length) {
-      throw new AppError(400, "Duplicate attribute combinations detected");
+    const valueLabelById = new Map(
+      existingValues.map((value) => [value.id, value.value])
+    );
+    const duplicateCombinationMessage = this.findDuplicateCombinationMessage(
+      variants,
+      attributeNameById,
+      valueLabelById
+    );
+    if (duplicateCombinationMessage) {
+      throw this.buildVariantValidationError(duplicateCombinationMessage);
     }
 
     // Validate required attributes
     variants.forEach((variant, index) => {
+      const variantLabel = this.toVariantLabel(index);
       const variantAttributeIds = variant.attributes.map(
         (attr) => attr.attributeId
       );
@@ -280,17 +542,16 @@ export class ProductService {
         (id) => !variantAttributeIds.includes(id)
       );
       if (missingAttributes.length > 0) {
-        throw new AppError(
-          400,
-          `Variant at index ${index} is missing required attributes: ${missingAttributes.join(
+        throw this.buildVariantValidationError(
+          `${variantLabel} is missing required attributes: ${missingAttributes.join(
             ", "
-          )}`
+          )}.`
         );
       }
     });
 
     // Create product and variants in a transaction
-    return prisma.$transaction(async (tx) => {
+    const createdProduct = await prisma.$transaction(async (tx) => {
       const product = await this.productRepository.createProduct({
         ...productData,
         slug: slugify(productData.name),
@@ -326,6 +587,9 @@ export class ProductService {
         },
       });
     });
+
+    clearCatalogListingCache();
+    return createdProduct;
   }
 
   async updateProduct(
@@ -349,7 +613,7 @@ export class ProductService {
         attributes: { attributeId: string; valueId: string }[];
       }[];
     }>
-  ) {
+  ): Promise<{ product: any; didChange: boolean }> {
     const existingProduct = await this.productRepository.findProductById(
       productId
     );
@@ -362,38 +626,40 @@ export class ProductService {
     // Validate variants if provided
     if (variants) {
       if (variants.length === 0) {
+        if (existingProduct.variants.length === 1) {
+          throw this.buildVariantValidationError(
+            ProductService.BASE_VARIANT_DELETE_MESSAGE
+          );
+        }
         throw new AppError(400, "At least one variant is required");
       }
 
       const skuRegex = /^[a-zA-Z0-9-]+$/;
       variants.forEach((variant, index) => {
+        const variantLabel = this.toVariantLabel(index);
         if (
           !variant.sku ||
           !skuRegex.test(variant.sku) ||
           variant.sku.length < 3 ||
           variant.sku.length > 50
         ) {
-          throw new AppError(
-            400,
-            `Variant at index ${index} has an invalid SKU. Use alphanumeric characters and dashes, 3-50 characters.`
+          throw this.buildVariantValidationError(
+            `${variantLabel} has an invalid SKU. Use alphanumeric characters and dashes, 3-50 characters.`
           );
         }
         if (variant.price <= 0) {
-          throw new AppError(
-            400,
-            `Variant at index ${index} must have a positive price`
+          throw this.buildVariantValidationError(
+            `${variantLabel} must have a positive price.`
           );
         }
         if (variant.stock < 0) {
-          throw new AppError(
-            400,
-            `Variant at index ${index} must have a non-negative stock`
+          throw this.buildVariantValidationError(
+            `${variantLabel} must have non-negative stock.`
           );
         }
         if (variant.lowStockThreshold && variant.lowStockThreshold < 0) {
-          throw new AppError(
-            400,
-            `Variant at index ${index} must have a non-negative lowStockThreshold`
+          throw this.buildVariantValidationError(
+            `${variantLabel} must have a non-negative low stock threshold.`
           );
         }
       });
@@ -405,9 +671,10 @@ export class ProductService {
       ];
       const existingAttributes = await prisma.attribute.findMany({
         where: { id: { in: allAttributeIds } },
+        select: { id: true, name: true },
       });
       if (existingAttributes.length !== allAttributeIds.length) {
-        throw new AppError(400, "One or more attributes are invalid");
+        throw this.buildVariantValidationError("One or more attributes are invalid.");
       }
 
       const allValueIds = [
@@ -415,9 +682,48 @@ export class ProductService {
       ];
       const existingValues = await prisma.attributeValue.findMany({
         where: { id: { in: allValueIds } },
+        select: { id: true, attributeId: true, value: true },
       });
       if (existingValues.length !== allValueIds.length) {
-        throw new AppError(400, "One or more attribute values are invalid");
+        throw this.buildVariantValidationError(
+          "One or more attribute values are invalid."
+        );
+      }
+
+      variants.forEach((variant, index) => {
+        const variantLabel = this.toVariantLabel(index);
+        const attributeIds = variant.attributes.map((attr) => attr.attributeId);
+        if (new Set(attributeIds).size !== attributeIds.length) {
+          throw this.buildVariantValidationError(
+            `${variantLabel} contains duplicate attributes. Each attribute can be selected only once.`
+          );
+        }
+
+        variant.attributes.forEach((attr, attrIndex) => {
+          const value = existingValues.find((row) => row.id === attr.valueId);
+          if (!value || value.attributeId !== attr.attributeId) {
+            throw this.buildVariantValidationError(
+              `${variantLabel} has an invalid attribute mapping at attribute #${
+                attrIndex + 1
+              }.`
+            );
+          }
+        });
+      });
+
+      const attributeNameById = new Map(
+        existingAttributes.map((attribute) => [attribute.id, attribute.name])
+      );
+      const valueLabelById = new Map(
+        existingValues.map((value) => [value.id, value.value])
+      );
+      const duplicateCombinationMessage = this.findDuplicateCombinationMessage(
+        variants,
+        attributeNameById,
+        valueLabelById
+      );
+      if (duplicateCombinationMessage) {
+        throw this.buildVariantValidationError(duplicateCombinationMessage);
       }
 
       const skuSet = new Set(variants.map((v) => v.sku));
@@ -444,16 +750,6 @@ export class ProductService {
         );
       }
 
-      const comboKeys = variants.map((variant) =>
-        variant.attributes
-          .map((attr) => `${attr.attributeId}:${attr.valueId}`)
-          .sort()
-          .join("|")
-      );
-      if (new Set(comboKeys).size !== variants.length) {
-        throw new AppError(400, "Duplicate attribute combinations detected");
-      }
-
       const categoryId = productData.categoryId || existingProduct.categoryId;
       let requiredAttributeIds: string[] = [];
       if (categoryId) {
@@ -467,6 +763,7 @@ export class ProductService {
       }
 
       variants.forEach((variant, index) => {
+        const variantLabel = this.toVariantLabel(index);
         const variantAttributeIds = variant.attributes.map(
           (attr) => attr.attributeId
         );
@@ -474,17 +771,28 @@ export class ProductService {
           (id) => !variantAttributeIds.includes(id)
         );
         if (missingAttributes.length > 0) {
-          throw new AppError(
-            400,
-            `Variant at index ${index} is missing required attributes: ${missingAttributes.join(
+          throw this.buildVariantValidationError(
+            `${variantLabel} is missing required attributes: ${missingAttributes.join(
               ", "
-            )}`
+            )}.`
           );
         }
       });
     }
 
-    return prisma.$transaction(async (tx) => {
+    const hasProductChanges = this.hasProductFieldChanges(existingProduct, productData);
+    const hasVariantChanges =
+      Array.isArray(variants) &&
+      this.hasVariantCollectionChanges(existingProduct.variants as any, variants);
+
+    if (!hasProductChanges && !hasVariantChanges) {
+      return {
+        product: existingProduct,
+        didChange: false,
+      };
+    }
+
+    const updatedProduct = await prisma.$transaction(async (tx) => {
       await this.productRepository.updateProduct(
         productId,
         {
@@ -569,6 +877,12 @@ export class ProductService {
           .filter((variantId) => !retainedVariantIds.has(variantId));
 
         if (removedVariantIds.length > 0) {
+          if (existingVariants.length === 1) {
+            throw this.buildVariantValidationError(
+              ProductService.BASE_VARIANT_DELETE_MESSAGE
+            );
+          }
+
           const referencedOrderItems = await tx.orderItem.groupBy({
             by: ["variantId"],
             where: { variantId: { in: removedVariantIds } },
@@ -615,6 +929,13 @@ export class ProductService {
         },
       });
     });
+
+    clearCatalogListingCache();
+
+    return {
+      product: updatedProduct,
+      didChange: true,
+    };
   }
 
   async bulkCreateProducts(file: Express.Multer.File) {
@@ -791,6 +1112,10 @@ export class ProductService {
       return { createdVariants, skippedVariants };
     });
 
+    if (result.createdVariants > 0) {
+      clearCatalogListingCache();
+    }
+
     return { count: result.createdVariants, skipped: result.skippedVariants };
   }
 
@@ -801,5 +1126,6 @@ export class ProductService {
     }
 
     await this.productRepository.deleteProduct(productId);
+    clearCatalogListingCache();
   }
 }

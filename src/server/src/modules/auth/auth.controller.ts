@@ -162,17 +162,8 @@ export class AuthController {
       }
     }
 
-    if (userId) {
-      try {
-        await this.cartService?.clearCartOnSignOut(userId);
-      } catch (error) {
-        await this.logsService.warn("Failed to clear cart on sign out", {
-          userId,
-          sessionId: req.session.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    // Preserve cart on sign-out for all external accounts (customer + dealer)
+    // to ensure parity and continuity across sessions.
 
     if (refreshToken) {
       const decoded: any = jwt.decode(refreshToken);

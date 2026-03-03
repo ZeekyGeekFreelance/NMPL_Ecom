@@ -241,40 +241,30 @@ const DealersDashboard = () => {
 
   const handleCreateDealer = async (event: React.FormEvent) => {
     event.preventDefault();
-    const payload = { ...createDealerForm };
+    try {
+      await createDealer({
+        name: createDealerForm.name,
+        email: createDealerForm.email,
+        password: createDealerForm.password,
+        businessName: createDealerForm.businessName,
+        contactPhone: createDealerForm.contactPhone,
+      }).unwrap();
 
-    openConfirmation({
-      title: "Create dealer account?",
-      message:
-        "Are you sure you want to create this dealer account? This will be committed to the database.",
-      type: "warning",
-      onConfirm: async () => {
-        try {
-          await createDealer({
-            name: payload.name,
-            email: payload.email,
-            password: payload.password,
-            businessName: payload.businessName,
-            contactPhone: payload.contactPhone,
-          }).unwrap();
-
-          setIsCreateModalOpen(false);
-          setCreateDealerForm({
-            name: "",
-            email: "",
-            password: "",
-            businessName: "",
-            contactPhone: "",
-          });
-          showToast("Dealer account created successfully", "success");
-        } catch (error) {
-          showToast(
-            getApiErrorMessage(error as any, "Failed to create dealer"),
-            "error"
-          );
-        }
-      },
-    });
+      setIsCreateModalOpen(false);
+      setCreateDealerForm({
+        name: "",
+        email: "",
+        password: "",
+        businessName: "",
+        contactPhone: "",
+      });
+      showToast("Dealer account created successfully", "success");
+    } catch (error) {
+      showToast(
+        getApiErrorMessage(error as any, "Failed to create dealer"),
+        "error"
+      );
+    }
   };
 
   const requestUpdateDealerStatus = (
@@ -287,7 +277,7 @@ const DealersDashboard = () => {
     const label = status === "APPROVED" ? "approve" : status.toLowerCase();
     openConfirmation({
       title: `Confirm ${label}?`,
-      message: `Are you sure you want to change this dealer status? Dealer Ref: ${dealerRef}. This update will be committed to the database.`,
+      message: `Are you sure you want to change dealer ${dealerRef} to ${status}? This immediately affects dealer ordering access.`,
       type: "warning",
       onConfirm: async () => {
         try {
@@ -396,15 +386,7 @@ const DealersDashboard = () => {
   };
 
   const clearAllCustomPrices = () => {
-    openConfirmation({
-      title: "Clear all custom prices?",
-      message:
-        "Are you sure you want to clear all unsaved custom prices in this editor?",
-      type: "danger",
-      onConfirm: () => {
-        setPriceMap({});
-      },
-    });
+    setPriceMap({});
   };
 
   const statusBadgeClass = (status: string) => {
@@ -967,6 +949,8 @@ const DealersDashboard = () => {
           type={confirmation.type}
           onConfirm={handleConfirmAction}
           onCancel={closeConfirmation}
+          isConfirming={actionInFlight}
+          disableCancelWhileConfirming
         />
       </div>
       )}

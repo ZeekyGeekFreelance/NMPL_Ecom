@@ -20,7 +20,6 @@ async function cleanup() {
   await prisma.address.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
-  await prisma.review.deleteMany();
   await prisma.restock.deleteMany();
   await prisma.stockMovement.deleteMany();
   await prisma.productVariantAttribute.deleteMany();

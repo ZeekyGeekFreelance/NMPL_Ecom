@@ -2,6 +2,8 @@
 import { useForm, Controller } from "react-hook-form";
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 
 interface RestockFormData {
   quantity: number;
@@ -11,7 +13,7 @@ interface RestockFormData {
 interface RestockModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (variantId: string, data: RestockFormData) => void;
+  onSubmit: (variantId: string, data: RestockFormData) => void | Promise<void>;
   variant: { id: string; sku: string } | null;
   isLoading?: boolean;
 }
@@ -23,6 +25,9 @@ const RestockModal: React.FC<RestockModalProps> = ({
   variant,
   isLoading,
 }) => {
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [pendingRestockData, setPendingRestockData] =
+    useState<RestockFormData | null>(null);
   const form = useForm<RestockFormData>({
     defaultValues: {
       quantity: 0,
@@ -31,6 +36,32 @@ const RestockModal: React.FC<RestockModalProps> = ({
   });
 
   const { control, handleSubmit, reset, formState: { errors } } = form;
+
+  const closeAll = () => {
+    if (isLoading) {
+      return;
+    }
+    setIsConfirmOpen(false);
+    setPendingRestockData(null);
+    onClose();
+    reset();
+  };
+
+  const handleRequestRestock = (data: RestockFormData) => {
+    setPendingRestockData(data);
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmRestock = async () => {
+    if (!variant || !pendingRestockData) {
+      setIsConfirmOpen(false);
+      return;
+    }
+
+    await onSubmit(variant.id, pendingRestockData);
+    setIsConfirmOpen(false);
+    setPendingRestockData(null);
+  };
 
   if (!isOpen) return null;
 
@@ -56,17 +87,17 @@ const RestockModal: React.FC<RestockModalProps> = ({
                 Restock Variant: {variant?.sku}
               </h2>
               <button
-                onClick={() => {
-                  onClose();
-                  reset();
-                }}
+                onClick={closeAll}
                 className="text-gray-400 hover:text-gray-700 transition-colors duration-200 rounded-full p-1 hover:bg-gray-100"
               >
                 <X size={24} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit((data) => onSubmit(variant!.id, data))} className="space-y-6">
+            <form
+              onSubmit={handleSubmit(handleRequestRestock)}
+              className="space-y-6"
+            >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Quantity
@@ -122,6 +153,28 @@ const RestockModal: React.FC<RestockModalProps> = ({
               </div>
             </form>
           </motion.div>
+
+          <ConfirmModal
+            isOpen={isConfirmOpen}
+            title="Confirm Inventory Restock"
+            message={
+              pendingRestockData
+                ? `You are adding ${pendingRestockData.quantity} unit(s) to ${variant?.sku}. This is a manual inventory correction and will be logged.`
+                : "Confirm inventory restock?"
+            }
+            type="warning"
+            confirmLabel="Confirm Restock"
+            onConfirm={handleConfirmRestock}
+            onCancel={() => {
+              if (isLoading) {
+                return;
+              }
+              setIsConfirmOpen(false);
+              setPendingRestockData(null);
+            }}
+            isConfirming={Boolean(isLoading)}
+            disableCancelWhileConfirming
+          />
         </motion.div>
       )}
     </AnimatePresence>

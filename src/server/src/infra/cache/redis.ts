@@ -47,13 +47,33 @@ class InMemoryRedisShim {
     return this.getRecord(key)?.value ?? null;
   }
 
-  async set(key: string, value: string, ...args: Array<string | number>): Promise<"OK"> {
+  async set(
+    key: string,
+    value: string,
+    ...args: Array<string | number>
+  ): Promise<"OK" | null> {
     let ttlSeconds: number | null = null;
-    if (args.length >= 2 && String(args[0]).toUpperCase() === "EX") {
-      const parsed = Number(args[1]);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        ttlSeconds = parsed;
+    let requireNotExists = false;
+
+    for (let index = 0; index < args.length; index += 1) {
+      const token = String(args[index]).toUpperCase();
+
+      if (token === "EX" && index + 1 < args.length) {
+        const parsed = Number(args[index + 1]);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          ttlSeconds = parsed;
+        }
+        index += 1;
+        continue;
       }
+
+      if (token === "NX") {
+        requireNotExists = true;
+      }
+    }
+
+    if (requireNotExists && this.getRecord(key)) {
+      return null;
     }
 
     this.records.set(key, {
@@ -148,11 +168,11 @@ if (config.isProduction && !useRedis) {
 
 const redis = useRedis
   ? new Redis(config.redis.url as string, {
-      lazyConnect: true,
-      connectTimeout: config.redis.connectTimeoutMs,
-      maxRetriesPerRequest: config.isProduction ? 0 : 1,
-      retryStrategy: () => null,
-    })
+    lazyConnect: true,
+    connectTimeout: config.redis.connectTimeoutMs,
+    maxRetriesPerRequest: config.isProduction ? 0 : 1,
+    retryStrategy: () => null,
+  })
   : new InMemoryRedisShim();
 
 redis.on("connect", () => {
@@ -184,7 +204,12 @@ export const disconnectRedis = async (): Promise<void> => {
   if (redis.status === "end") {
     return;
   }
-  await redis.quit();
+  try {
+    await redis.quit();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[redis] disconnectRedis: quit failed (${msg}) — continuing shutdown.`);
+  }
 };
 
 export const pingRedis = async (): Promise<boolean> => {

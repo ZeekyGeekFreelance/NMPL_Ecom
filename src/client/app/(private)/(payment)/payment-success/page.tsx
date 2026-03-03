@@ -52,5 +52,5 @@ const PaymentSucceeded = () => {
   );
 };
 
-export default withAuth(PaymentSucceeded, { allowedRoles: ["USER"] });
+export default withAuth(PaymentSucceeded, { allowedRoles: ["USER", "DEALER"] });
 

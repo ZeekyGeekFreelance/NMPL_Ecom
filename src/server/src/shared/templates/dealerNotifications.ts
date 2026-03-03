@@ -69,9 +69,9 @@ const statusMeta: Record<
   { title: string; copy: string; subject: string }
 > = {
   PENDING: {
-    subject: withPlatformSubject("Dealer Application In Review"),
-    title: "Application In Review",
-    copy: "Your dealer application is currently in review by our admin team.",
+    subject: withPlatformSubject("Dealer Application Under Evaluation"),
+    title: "Application Under Evaluation",
+    copy: "Your dealer application is currently being evaluated by our admin team.",
   },
   APPROVED: {
     subject: withPlatformSubject("Dealer Application Approved"),
@@ -121,7 +121,7 @@ export const buildDealerApplicationSubmittedEmail = ({
       summary,
       businessName ? `Business: ${businessName}` : null,
       accountReference ? `Account Reference: ${accountReference}` : null,
-      "Status: PENDING REVIEW",
+      "Status: PENDING EVALUATION",
       `Portal: ${portalUrl}`,
       `Support: ${supportEmail}`,
     ]
@@ -137,7 +137,7 @@ export const buildDealerApplicationSubmittedEmail = ({
         <p style="margin:0 0 14px;">
           ${businessLine}
           ${accountReference ? `Account Reference: <strong>${accountReference}</strong><br />` : ""}
-          Status: <strong>PENDING REVIEW</strong>
+          Status: <strong>PENDING EVALUATION</strong>
         </p>
         <p style="margin:0 0 10px;">You can sign in after an admin approves your request.</p>
         <p style="margin:0;">

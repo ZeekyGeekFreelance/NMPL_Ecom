@@ -96,4 +96,4 @@ const SupportPage = () => {
   );
 };
 
-export default withAuth(SupportPage, { allowedRoles: ["USER"] });
+export default withAuth(SupportPage, { allowedRoles: ["USER", "DEALER"] });

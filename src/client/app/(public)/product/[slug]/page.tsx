@@ -5,7 +5,6 @@ import BreadCrumb from "@/app/components/feedback/BreadCrumb";
 import { useParams } from "next/navigation";
 import ProductImageGallery from "../ProductImageGallery";
 import ProductInfo from "../ProductInfo";
-import ProductReviews from "../ProductReviews";
 import { useQuery } from "@apollo/client";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 import { GET_SINGLE_PRODUCT } from "@/app/gql/Product";
@@ -15,6 +14,8 @@ import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatal
 
 const getDefaultVariant = (variants: Product["variants"]) =>
   variants.find((variant) => variant.stock > 0) || variants[0] || null;
+
+const isBrandAttribute = (name: string) => name.trim().toLowerCase() === "brand";
 
 const ProductDetailsPage = () => {
   const { slug } = useParams();
@@ -43,23 +44,14 @@ const ProductDetailsPage = () => {
       ? getDefaultVariant(data.product.variants)
       : null;
     if (!firstVariant) {
+      setSelectedVariant(null);
+      setSelectedAttributes({});
       return;
     }
 
-    setSelectedVariant((current) => current || firstVariant);
-    setSelectedAttributes((current) => {
-      if (Object.keys(current).length > 0) {
-        return current;
-      }
-
-      return firstVariant.attributes.reduce(
-        (acc, attribute) => {
-          acc[attribute.attribute.name] = attribute.value.value;
-          return acc;
-        },
-        {} as Record<string, string>
-      );
-    });
+    // Always reset to a clean state when product changes.
+    setSelectedVariant(firstVariant);
+    setSelectedAttributes({});
   }, [data?.product?.id]);
 
   if (!resolvedSlug || loading) return <ProductDetailSkeletonLoader />;
@@ -95,7 +87,8 @@ const ProductDetailsPage = () => {
     const matchesSelections = hasSelections
       ? Object.entries(selectedAttributes).every(
           ([attrName, attrValue]) =>
-            attrName === "" ||
+            !attrName ||
+            !attrValue ||
             variant.attributes.some(
               (attr) =>
                 attr.attribute.name === attrName &&
@@ -105,6 +98,10 @@ const ProductDetailsPage = () => {
       : true;
     if (matchesSelections) {
       variant.attributes.forEach(({ attribute, value }) => {
+        if (isBrandAttribute(attribute.name)) {
+          return;
+        }
+
         if (!acc[attribute.name]) {
           acc[attribute.name] = { values: new Set<string>() };
         }
@@ -122,15 +119,7 @@ const ProductDetailsPage = () => {
       return;
     }
 
-    const defaultAttributes = firstVariant.attributes.reduce(
-      (acc, attribute) => {
-        acc[attribute.attribute.name] = attribute.value.value;
-        return acc;
-      },
-      {} as Record<string, string>
-    );
-
-    setSelectedAttributes(defaultAttributes);
+    setSelectedAttributes({});
     setSelectedVariant(firstVariant);
   };
 
@@ -140,7 +129,8 @@ const ProductDetailsPage = () => {
     const variant = product.variants.find((v) =>
       Object.entries(newSelections).every(
         ([attrName, attrValue]) =>
-          attrName === "" ||
+          !attrName ||
+          !attrValue ||
           v.attributes.some(
             (attr) =>
             attr.attribute.name === attrName && attr.value.value === attrValue
@@ -149,6 +139,11 @@ const ProductDetailsPage = () => {
     );
     setSelectedVariant(variant || getDefaultVariant(product.variants));
   };
+
+  const selectedVariantImages =
+    selectedVariant?.images?.filter((image) => Boolean(image)) ||
+    product.variants[0]?.images?.filter((image) => Boolean(image)) ||
+    [];
 
   return (
     <MainLayout>
@@ -166,7 +161,7 @@ const ProductDetailsPage = () => {
             {/* Product Images */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <ProductImageGallery
-                images={product.variants.flatMap((v) => v.images)}
+                images={selectedVariantImages}
                 defaultImage={
                   selectedVariant?.images[0] ||
                   product.variants[0]?.images[0] ||
@@ -181,8 +176,6 @@ const ProductDetailsPage = () => {
               <ProductInfo
                 id={product.id}
                 name={product.name}
-                averageRating={product.averageRating}
-                reviewCount={product.reviewCount}
                 description={product.description || "No description available"}
                 variants={product.variants}
                 selectedVariant={selectedVariant}
@@ -192,13 +185,6 @@ const ProductDetailsPage = () => {
                 resetSelections={resetSelections}
               />
             </div>
-          </div>
-        </div>
-
-        {/* Product Reviews */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
-            <ProductReviews reviews={product.reviews} productId={product.id} />
           </div>
         </div>
       </div>

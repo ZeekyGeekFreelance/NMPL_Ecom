@@ -40,7 +40,9 @@ const AUTH_LINKS = [
 
 const Footer = () => {
   const { user, isAuthenticated } = useAuth();
-  const { data: categoriesData } = useQuery(GET_CATEGORIES);
+  const { data: categoriesData } = useQuery(GET_CATEGORIES, {
+    variables: { first: 50 },
+  });
   const categories = (categoriesData?.categories || []).slice(0, 6);
   const year = new Date().getFullYear();
   const isAdminOrSuperAdmin =

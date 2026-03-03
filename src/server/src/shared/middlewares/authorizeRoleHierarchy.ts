@@ -35,6 +35,15 @@ const authorizeRoleHierarchy = (minRequiredRole: string) => {
         return next(new AppError(404, "Target user not found"));
       }
 
+      if (req.user.id === targetUserId) {
+        return next(
+          new AppError(
+            403,
+            "Cannot modify your own account from this interface"
+          )
+        );
+      }
+
       // Check if user has minimum required role
       if (getRoleHierarchy(userRole) < getRoleHierarchy(minRequiredRole)) {
         return next(
@@ -42,8 +51,15 @@ const authorizeRoleHierarchy = (minRequiredRole: string) => {
         );
       }
 
-      // Prevent modifying users with equal or higher roles
-      if (getRoleHierarchy(targetUser.role) >= getRoleHierarchy(userRole)) {
+      const actorHierarchy = getRoleHierarchy(userRole);
+      const targetHierarchy = getRoleHierarchy(targetUser.role);
+
+      // SuperAdmin can manage other SuperAdmins (except self), and the
+      // service layer enforces last-superadmin protections for delete/demote.
+      if (
+        userRole !== "SUPERADMIN" &&
+        targetHierarchy >= actorHierarchy
+      ) {
         return next(
           new AppError(
             403,

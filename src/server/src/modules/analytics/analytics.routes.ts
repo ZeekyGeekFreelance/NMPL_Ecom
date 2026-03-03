@@ -37,6 +37,7 @@ const allowDashboardRoles = authorizeRole("ADMIN", "SUPERADMIN");
  *         description: Unauthorized. Token is invalid or missing.
  */
 router.post("/interactions", protect, controller.createInteraction);
+router.post("/interactions/bulk", protect, controller.createBulkInteractions);
 
 /**
  * @swagger

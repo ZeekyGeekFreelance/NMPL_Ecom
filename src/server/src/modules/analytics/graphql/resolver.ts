@@ -45,7 +45,7 @@ const queryResolvers = {
   ...productPerformance.Query,
   ...searchDashboardResolver.Query,
   ...abandonedCartAnalytics.Query,
-} as Record<string, QueryResolver>;
+} as unknown as Record<string, QueryResolver>;
 
 export const analyticsResolvers = {
   Query: Object.fromEntries(

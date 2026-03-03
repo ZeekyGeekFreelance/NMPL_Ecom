@@ -190,6 +190,8 @@ const CategoriesDashboard = () => {
         onCancel={() => setIsConfirmModalOpen(false)}
         title="Delete Category"
         type="danger"
+        isConfirming={isDeleting}
+        disableCancelWhileConfirming
       />
     </div>
   );

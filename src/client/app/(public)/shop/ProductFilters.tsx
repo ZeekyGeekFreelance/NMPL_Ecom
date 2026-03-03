@@ -10,7 +10,6 @@ export type SortByOption =
   | "RELEVANCE"
   | "PRICE_ASC"
   | "PRICE_DESC"
-  | "RATING_DESC"
   | "NAME_ASC";
 
 export interface FilterValues {
@@ -147,7 +146,6 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
     { label: "Relevance", value: "RELEVANCE" },
     { label: "Price: Low to High", value: "PRICE_ASC" },
     { label: "Price: High to Low", value: "PRICE_DESC" },
-    { label: "Top Rated", value: "RATING_DESC" },
     { label: "Name: A to Z", value: "NAME_ASC" },
   ];
 

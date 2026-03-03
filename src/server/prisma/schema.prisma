@@ -102,7 +102,6 @@ model User {
   addresses                   Address[]
   interactions                Interaction[]
   reports                     Report[]
-  reviews                     Review[]
   carts                       Cart[]
   cartEvents                  CartEvent[]
   chats                       Chat[]        @relation("UserChats")
@@ -128,17 +127,20 @@ model Product {
   isFeatured    Boolean          @default(false)
   isTrending    Boolean          @default(false)
   isBestSeller  Boolean          @default(false)
-  averageRating Float            @default(0)
-  reviewCount   Int              @default(0)
   category      Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   categoryId    String?
   variants      ProductVariant[]
   interactions  Interaction[]
-  reviews       Review[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
   @@index([name, slug])
+  @@index([categoryId])
+  @@index([createdAt])
+  @@index([isNew, createdAt])
+  @@index([isFeatured, createdAt])
+  @@index([isTrending, createdAt])
+  @@index([isBestSeller, createdAt])
 }
 
 model ProductVariant {
@@ -162,6 +164,8 @@ model ProductVariant {
   updatedAt         DateTime                  @updatedAt
 
   @@index([productId, sku])
+  @@index([productId, price])
+  @@index([price])
 }
 
 model DealerProfile {
@@ -232,6 +236,7 @@ model ProductVariantAttribute {
 
   @@unique([variantId, attributeId, valueId])
   @@index([variantId, attributeId])
+  @@index([attributeId, valueId])
 }
 
 model Category {
@@ -285,20 +290,6 @@ model Restock {
   createdAt DateTime       @default(now())
 
   @@index([variantId])
-}
-
-model Review {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  rating    Int
-  comment   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([productId, userId])
 }
 
 model Order {

@@ -28,7 +28,6 @@ const SORT_OPTIONS: Array<{ label: string; value: SortByOption }> = [
   { label: "Relevance", value: "RELEVANCE" },
   { label: "Price: Low to High", value: "PRICE_ASC" },
   { label: "Price: High to Low", value: "PRICE_DESC" },
-  { label: "Top Rated", value: "RATING_DESC" },
   { label: "Name: A to Z", value: "NAME_ASC" },
 ];
 
@@ -39,6 +38,16 @@ const normalizeText = (value: string) =>
     .replace(/\s+/g, " ");
 
 const getVariantMinPrice = (product: Product) => {
+  const listingMinPrice = Number(product.minPrice);
+  if (Number.isFinite(listingMinPrice) && listingMinPrice > 0) {
+    return listingMinPrice;
+  }
+
+  const listingPrice = Number(product.price);
+  if (Number.isFinite(listingPrice) && listingPrice > 0) {
+    return listingPrice;
+  }
+
   const prices = product.variants?.map((variant) => Number(variant.price)) || [];
   if (!prices.length) {
     return Number.POSITIVE_INFINITY;
@@ -80,9 +89,6 @@ const getSearchScore = (product: Product, rawQuery: string) => {
     if (name.includes(token)) score += 45;
     if (haystack.includes(token)) score += 25;
   }
-
-  score += Math.min(product.averageRating || 0, 5) * 3;
-  score += Math.min(product.reviewCount || 0, 100) * 0.02;
 
   return score;
 };
@@ -162,7 +168,9 @@ const ShopPage: React.FC = () => {
     [serverFilters]
   );
 
-  const { data: categoriesData } = useQuery(GET_CATEGORIES);
+  const { data: categoriesData } = useQuery(GET_CATEGORIES, {
+    variables: { first: 50 },
+  });
   const categories = categoriesData?.categories || [];
 
   const {
@@ -332,13 +340,11 @@ const ShopPage: React.FC = () => {
           return getVariantMinPrice(leftProduct) - getVariantMinPrice(rightProduct);
         case "PRICE_DESC":
           return getVariantMinPrice(rightProduct) - getVariantMinPrice(leftProduct);
-        case "RATING_DESC":
-          return (rightProduct.averageRating || 0) - (leftProduct.averageRating || 0);
         case "NAME_ASC":
           return (leftProduct.name || "").localeCompare(rightProduct.name || "");
         case "RELEVANCE":
         default:
-          return (rightProduct.reviewCount || 0) - (leftProduct.reviewCount || 0);
+          return 0;
       }
     };
 

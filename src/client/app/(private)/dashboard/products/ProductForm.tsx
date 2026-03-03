@@ -5,6 +5,7 @@ import Dropdown from "@/app/components/molecules/Dropdown";
 import { ProductFormData } from "./product.types";
 import CheckBox from "@/app/components/atoms/CheckBox";
 import VariantForm from "./VariantForm";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 interface ProductFormProps {
   form: UseFormReturn<ProductFormData>;
@@ -19,6 +20,10 @@ interface ProductFormProps {
   isLoading?: boolean;
   error?: any;
   submitLabel?: string;
+  onCancel?: () => void;
+  isEditMode?: boolean;
+  disableSubmit?: boolean;
+  noChangesMessage?: string;
 }
 
 const ProductForm: React.FC<ProductFormProps> = ({
@@ -29,13 +34,27 @@ const ProductForm: React.FC<ProductFormProps> = ({
   isLoading,
   error,
   submitLabel = "Save",
+  onCancel,
+  isEditMode = false,
+  disableSubmit = false,
+  noChangesMessage,
 }) => {
   const {
     control,
     handleSubmit,
     setValue,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = form;
+  const rootVariantGuardMessage = String(
+    (errors as any)?.root?.variantGuard?.message || ""
+  ).trim();
+  const serverErrorMessage =
+    error && !rootVariantGuardMessage
+      ? getApiErrorMessage(error, "Unable to save product changes.")
+      : "";
+  const actionErrorMessage = rootVariantGuardMessage || serverErrorMessage;
+  const showNoChangesHint = isEditMode && !isDirty;
+  const submitDisabled = Boolean(isLoading || disableSubmit || showNoChangesHint);
 
   return (
     <form
@@ -56,6 +75,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
               render={({ field }) => (
                 <input
                   {...field}
+                  value={field.value ?? ""}
                   type="text"
                   className="pl-10 pr-4 py-3 w-full border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-all duration-200"
                   placeholder="Amazing Product"
@@ -86,7 +106,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                   setValue("variants", []); // Reset variants when category changes
                 }}
                 options={categories}
-                value={field.value}
+                value={field.value ?? ""}
                 label="e.g. Clothing"
                 className="py-[14px]"
               />
@@ -142,6 +162,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
           render={({ field }) => (
             <textarea
               {...field}
+              value={field.value ?? ""}
               className="px-4 py-3 w-full border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-all duration-200"
               placeholder="Describe your amazing product here..."
               rows={3}
@@ -152,21 +173,32 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
       <VariantForm form={form} categoryAttributes={categoryAttributes} />
 
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
-          <p className="text-red-600 text-sm font-medium">
-            {error.data?.message || "An error occurred"}
-          </p>
-        </div>
-      )}
-
       <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white/95 backdrop-blur pt-4 pb-2">
-        <div className="flex justify-end">
+        {actionErrorMessage ? (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+            <p className="text-sm font-medium text-red-700">{actionErrorMessage}</p>
+          </div>
+        ) : null}
+        {showNoChangesHint ? (
+          <p className="mb-2 text-xs text-gray-500">
+            {noChangesMessage || "No changes detected."}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-6 py-3 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-all duration-200"
+            >
+              Cancel
+            </button>
+          ) : null}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={submitDisabled}
             className={`px-6 py-3 text-white rounded-lg shadow-md font-medium flex items-center justify-center min-w-24 ${
-              isLoading
+              submitDisabled
                 ? "bg-blue-400 cursor-not-allowed"
                 : "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
             } transition-all duration-200`}

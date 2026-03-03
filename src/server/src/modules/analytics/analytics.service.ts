@@ -44,6 +44,17 @@ export class AnalyticsService {
     });
   }
 
+  async createInteractionsBulk(
+    rows: Array<{
+      userId?: string;
+      sessionId?: string;
+      productId?: string;
+      type: string;
+    }>
+  ) {
+    return this.analyticsRepository.createInteractionsBulk(rows);
+  }
+
   private round(value: number): number {
     return Number(value.toFixed(2));
   }

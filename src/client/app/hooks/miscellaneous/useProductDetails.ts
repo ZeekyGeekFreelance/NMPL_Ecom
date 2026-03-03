@@ -11,8 +11,21 @@ import {
 import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
 import useToast from "@/app/hooks/ui/useToast";
 import { ProductFormData } from "@/app/(private)/dashboard/products/product.types";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
+
+const normalizeVariantAttributes = (
+  attributes: any[] | undefined
+): { attributeId: string; valueId: string }[] =>
+  (Array.isArray(attributes) ? attributes : [])
+    .map((attribute) => ({
+      attributeId: String(
+        attribute?.attributeId || attribute?.attribute?.id || ""
+      ).trim(),
+      valueId: String(attribute?.valueId || attribute?.value?.id || "").trim(),
+    }))
+    .filter((attribute) => attribute.attributeId && attribute.valueId);
 
 export const useProductDetail = () => {
   const { id } = useParams();
@@ -39,6 +52,7 @@ export const useProductDetail = () => {
 
   const [updateProduct, { isLoading: isUpdating }] = useUpdateProductMutation();
   const [deleteProduct, { isLoading: isDeleting }] = useDeleteProductMutation();
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Variant selection state
   const [selectedVariant, setSelectedVariant] = useState(null);
@@ -62,6 +76,7 @@ export const useProductDetail = () => {
   // Reset form and selected variant when product data is fetched
   useEffect(() => {
     if (product) {
+      setSubmitError(null);
       form.reset({
         id: product.id || "",
         name: product.name || "",
@@ -79,7 +94,7 @@ export const useProductDetail = () => {
             stock: v.stock || 0,
             lowStockThreshold: v.lowStockThreshold || 10,
             barcode: v.barcode || "",
-            attributes: v.attributes || [],
+            attributes: normalizeVariantAttributes(v.attributes),
             images: v.images || [],
           })) || [],
       });
@@ -116,6 +131,16 @@ export const useProductDetail = () => {
 
   // Handle update
   const onSubmit = async (data: ProductFormData) => {
+    if (isUpdating) {
+      return;
+    }
+
+    if (!form.formState.isDirty) {
+      setSubmitError(null);
+      showToast("No changes detected.", "info");
+      return;
+    }
+
     const payload = new FormData();
     payload.append("name", data.name || "");
     payload.append("description", data.description || "");
@@ -137,9 +162,10 @@ export const useProductDetail = () => {
         variant.lowStockThreshold?.toString() || "10"
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
+      const normalizedAttributes = normalizeVariantAttributes(variant.attributes);
       payload.append(
         `variants[${index}][attributes]`,
-        JSON.stringify(variant.attributes || [])
+        JSON.stringify(normalizedAttributes)
       );
 
       const orderedImages: string[] = [];
@@ -170,18 +196,33 @@ export const useProductDetail = () => {
 
     try {
       if (!productId) {
+        setSubmitError("Product id is missing. Please reload and try again.");
         showToast("Product id is missing. Please reload and try again.", "error");
         return;
       }
 
-      await updateProduct({
+      const response = await updateProduct({
         id: productId,
         data: payload,
       }).unwrap();
+      const didChange = Boolean(
+        (response as any)?.didChange ?? (response as any)?.data?.didChange ?? true
+      );
+
+      if (!didChange) {
+        setSubmitError(null);
+        showToast("No changes detected.", "info");
+        return;
+      }
+
+      form.reset(data);
+      setSubmitError(null);
       showToast("Product updated successfully", "success");
     } catch (err) {
+      const message = getApiErrorMessage(err, "Failed to update product");
+      setSubmitError(message);
       console.error("Failed to update product:", err);
-      showToast("Failed to update product", "error");
+      showToast(message, "error");
     }
   };
 
@@ -238,6 +279,7 @@ export const useProductDetail = () => {
     categoriesLoading,
     productsError,
     form,
+    submitError,
     isUpdating,
     isDeleting,
     isConfirmModalOpen,

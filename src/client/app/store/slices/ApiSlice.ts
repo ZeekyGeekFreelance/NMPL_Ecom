@@ -3,54 +3,76 @@ import { logout } from "./AuthSlice";
 import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
 import { clearPendingAuthIntent } from "@/app/lib/authIntent";
-import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const ENABLE_NATIVE_CONFIRMATION = runtimeEnv.enableNativeConfirm === true;
 
-const CONFIRMATION_REQUIRED_PATHS = [
-  /^\/users(\/|$)/,
-  /^\/products(\/|$)/,
-  /^\/categories(\/|$)/,
-  /^\/variants(\/|$)/,
-  /^\/attributes(\/|$)/,
-  /^\/sections(\/|$)/,
-  /^\/transactions(\/|$)/,
-  /^\/reports(\/|$)/,
-  /^\/shipments(\/|$)/,
-  /^\/orders(\/|$)/,
-];
-
-const hasConfirmationHandledHeader = (headers: unknown) => {
+const getHeaderEntries = (headers: unknown): Array<[string, string]> => {
   if (!headers) {
-    return false;
+    return [];
   }
 
-  if (
-    typeof Headers !== "undefined" &&
-    headers instanceof Headers &&
-    headers.get("x-confirmation-handled") === "true"
-  ) {
-    return true;
+  if (typeof Headers !== "undefined" && headers instanceof Headers) {
+    return Array.from(headers.entries()).map(([key, value]) => [key, String(value)]);
   }
 
   if (Array.isArray(headers)) {
-    return headers.some(
-      ([key, value]) =>
-        String(key).toLowerCase() === "x-confirmation-handled" &&
-        String(value).toLowerCase() === "true"
-    );
+    return headers.map(([key, value]) => [String(key), String(value)]);
   }
 
   if (typeof headers === "object") {
-    return Object.entries(headers as Record<string, unknown>).some(
-      ([key, value]) =>
-        key.toLowerCase() === "x-confirmation-handled" &&
-        String(value).toLowerCase() === "true"
-    );
+    return Object.entries(headers as Record<string, unknown>).map(([key, value]) => [
+      key,
+      String(value),
+    ]);
   }
 
-  return false;
+  return [];
+};
+
+const hasHeaderValue = (
+  headers: unknown,
+  headerName: string,
+  expectedValue?: string
+) => {
+  const normalizedName = headerName.toLowerCase();
+  const normalizedExpectedValue = expectedValue?.toLowerCase();
+
+  return getHeaderEntries(headers).some(([key, value]) => {
+    if (key.toLowerCase() !== normalizedName) {
+      return false;
+    }
+
+    if (!normalizedExpectedValue) {
+      return true;
+    }
+
+    return value.toLowerCase() === normalizedExpectedValue;
+  });
+};
+
+const mergeHeaders = (
+  headers: unknown,
+  updates: Record<string, string>
+): Record<string, string> => {
+  const merged = new Map<string, string>();
+
+  getHeaderEntries(headers).forEach(([key, value]) => {
+    merged.set(key.toLowerCase(), value);
+  });
+
+  Object.entries(updates).forEach(([key, value]) => {
+    merged.set(key.toLowerCase(), value);
+  });
+
+  return Object.fromEntries(merged.entries());
+};
+
+const createIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `mut-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
 const getRequestMeta = (args: any) => {
@@ -90,6 +112,29 @@ const isBootstrapAuthProfileEndpoint = (normalizedUrl: string) =>
 const getAuthUserFromState = (api: any) => {
   const state = api.getState() as { auth?: { user?: unknown | null } };
   return state?.auth?.user;
+};
+
+const withMutationSafetyHeaders = (args: any) => {
+  if (typeof args === "string") {
+    return args;
+  }
+
+  const { method, headers } = getRequestMeta(args);
+
+  if (!MUTATION_METHODS.has(method)) {
+    return args;
+  }
+
+  if (!hasHeaderValue(headers, "x-idempotency-key")) {
+    return {
+      ...args,
+      headers: mergeHeaders(headers, {
+        "x-idempotency-key": createIdempotencyKey(),
+      }),
+    };
+  }
+
+  return args;
 };
 
 const shouldAttemptTokenRefresh = (
@@ -150,48 +195,6 @@ const handleUnauthorizedState = (api: any) => {
   }
 };
 
-const shouldConfirmMutation = (args: any) => {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  // Dedicated modal confirmations are used throughout the dashboard.
-  // Keep native confirm opt-in to avoid duplicate prompts and false success flows.
-  if (!ENABLE_NATIVE_CONFIRMATION) {
-    return false;
-  }
-
-  const { url, method, headers } = getRequestMeta(args);
-
-  if (!MUTATION_METHODS.has(method)) {
-    return false;
-  }
-
-  const normalizedUrl = typeof url === "string" ? url : "";
-
-  if (normalizedUrl === "/auth/refresh-token") {
-    return false;
-  }
-
-  if (hasConfirmationHandledHeader(headers)) {
-    return false;
-  }
-
-  return CONFIRMATION_REQUIRED_PATHS.some((pattern) =>
-    pattern.test(normalizedUrl)
-  );
-};
-
-const getConfirmationMessage = (args: any) => {
-  const { method } = getRequestMeta(args);
-
-  if (method === "DELETE") {
-    return "Are you sure you want to permanently delete this entry?";
-  }
-
-  return "Are you sure you want to continue? This action will be saved to the database.";
-};
-
 const baseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
   credentials: "include",
@@ -216,23 +219,12 @@ const refreshAuthToken = (api: any, extraOptions: any) => {
 };
 
 const baseQueryWithReauth = async (args, api, extraOptions) => {
-  if (shouldConfirmMutation(args)) {
-    const isConfirmed = window.confirm(getConfirmationMessage(args));
+  const requestArgs = withMutationSafetyHeaders(args);
 
-    if (!isConfirmed) {
-      return {
-        error: {
-          status: 499,
-          data: { message: "Action cancelled by user." },
-        },
-      };
-    }
-  }
-
-  let result = await baseQuery(args, api, extraOptions);
+  let result = await baseQuery(requestArgs, api, extraOptions);
 
   if (result.error?.status === 401) {
-    const normalizedUrl = normalizeUrlPath(getRequestMeta(args).url);
+    const normalizedUrl = normalizeUrlPath(getRequestMeta(requestArgs).url);
     const authUser = getAuthUserFromState(api);
 
     if (!shouldAttemptTokenRefresh(normalizedUrl, authUser)) {
@@ -250,7 +242,7 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
 
     if (refreshResult.data) {
       // If there's data, retry the original req with the new token
-      result = await baseQuery(args, api, extraOptions);
+      result = await baseQuery(requestArgs, api, extraOptions);
       if (
         result.error?.status === 401 &&
         shouldSyncUnauthorizedState(normalizedUrl, authUser)
@@ -278,7 +270,6 @@ export const apiSlice = createApi({
     "Address",
     "Cart",
     "Order",
-    "Review",
     "Section",
     "Transactions",
     "Logs",

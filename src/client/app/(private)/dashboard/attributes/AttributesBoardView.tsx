@@ -41,8 +41,10 @@ const AttributesBoardView = ({ attributes = [] }: AttributesBoardViewProps) => {
   const { showToast } = useToast();
   const [createAttributeValue, { isLoading: isCreatingValue }] =
     useCreateAttributeValueMutation();
-  const [deleteAttribute] = useDeleteAttributeMutation();
-  const [deleteAttributeValue] = useDeleteAttributeValueMutation();
+  const [deleteAttribute, { isLoading: isDeletingAttribute }] =
+    useDeleteAttributeMutation();
+  const [deleteAttributeValue, { isLoading: isDeletingAttributeValue }] =
+    useDeleteAttributeValueMutation();
   const [newValue, setNewValue] = useState<Record<string, string>>({});
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
@@ -184,6 +186,12 @@ const AttributesBoardView = ({ attributes = [] }: AttributesBoardViewProps) => {
             deleteModal.type.charAt(0).toUpperCase() + deleteModal.type.slice(1)
           }`}
           type={deleteModal.type === "attribute" ? "danger" : "warning"}
+          isConfirming={
+            deleteModal.type === "attribute"
+              ? isDeletingAttribute
+              : isDeletingAttributeValue
+          }
+          disableCancelWhileConfirming
         />
       </div>
     </div>

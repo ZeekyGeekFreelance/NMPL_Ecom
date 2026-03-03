@@ -198,7 +198,7 @@ const DEALER_STATUS_COPY: Record<
   { title: string; description: string; className: string }
 > = {
   PENDING: {
-    title: "Dealer request is under review",
+    title: "Dealer request is under evaluation",
     description:
       "Universal/base pricing stays active until an admin approves your dealer access.",
     className: "border-amber-200 bg-amber-50 text-amber-900",

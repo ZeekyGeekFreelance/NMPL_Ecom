@@ -62,4 +62,4 @@ const PaymentCancelled = () => {
   );
 };
 
-export default withAuth(PaymentCancelled, { allowedRoles: ["USER"] });
+export default withAuth(PaymentCancelled, { allowedRoles: ["USER", "DEALER"] });

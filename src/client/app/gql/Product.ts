@@ -7,17 +7,13 @@ export const GET_PRODUCTS_SUMMARY = gql`
         id
         slug
         name
-        isNew
-        isFeatured
-        isTrending
-        isBestSeller
-        averageRating
-        reviewCount
-        variants {
+        thumbnail
+        minPrice
+        maxPrice
+        category {
           id
-          price
-          images
-          stock
+          slug
+          name
         }
       }
     }
@@ -29,33 +25,15 @@ export const GET_PRODUCTS = gql`
     products(first: $first, skip: $skip, filters: $filters) {
       products {
         id
-        name
-        description
         slug
-        isNew
-        isFeatured
-        isTrending
-        isBestSeller
-        averageRating
-        reviewCount
-        variants {
-          id
-          sku
-          price
-          images
-          stock
-          lowStockThreshold
-          barcode
-        }
+        name
+        thumbnail
+        minPrice
+        maxPrice
         category {
           id
-          name
           slug
-        }
-        reviews {
-          id
-          rating
-          comment
+          name
         }
       }
       hasMore
@@ -74,8 +52,6 @@ export const GET_SINGLE_PRODUCT = gql`
       isFeatured
       isTrending
       isBestSeller
-      averageRating
-      reviewCount
       description
       variants {
         id
@@ -104,24 +80,13 @@ export const GET_SINGLE_PRODUCT = gql`
         name
         slug
       }
-      reviews {
-        id
-        rating
-        comment
-        user {
-          id
-          name
-          email
-        }
-        createdAt
-      }
     }
   }
 `;
 
 export const GET_CATEGORIES = gql`
-  query GetCategories {
-    categories {
+  query GetCategories($first: Int) {
+    categories(first: $first) {
       id
       slug
       name

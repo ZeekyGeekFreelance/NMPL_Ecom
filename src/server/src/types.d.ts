@@ -5,6 +5,10 @@ declare namespace Express {
       role: string;
       effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
     };
+    _decodedAccessToken?: {
+      id: string;
+      tv?: number;
+    };
     traceId?: string;
     session: {
       id: string;

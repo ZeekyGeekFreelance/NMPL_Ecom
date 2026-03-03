@@ -158,4 +158,21 @@ export class AnalyticsRepository {
       },
     });
   }
+
+  async createInteractionsBulk(
+    data: Array<{
+      userId?: string;
+      sessionId?: string;
+      productId?: string;
+      type: string;
+    }>
+  ) {
+    if (!data.length) {
+      return { count: 0 };
+    }
+
+    return prisma.interaction.createMany({
+      data,
+    });
+  }
 }

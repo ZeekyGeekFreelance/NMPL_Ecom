@@ -1,10 +1,9 @@
 "use client";
-import React, { useEffect } from "react";
+import React from "react";
 import { Eye } from "lucide-react";
 import { Product } from "@/app/types/productTypes";
 import Image from "next/image";
 import Link from "next/link";
-import Rating from "@/app/components/feedback/Rating";
 import useTrackInteraction from "@/app/hooks/miscellaneous/useTrackInteraction";
 import { useRouter } from "next/navigation";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
@@ -19,23 +18,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const router = useRouter();
   const formatPrice = useFormatPrice();
 
-  useEffect(() => {
-    trackInteraction(product.id, "view");
-  }, [product.id, trackInteraction]);
-
   const handleClick = () => {
     trackInteraction(product.id, "click");
     router.push(`/product/${product.slug}`);
   };
 
-  // Compute lowest price among in-stock variants
-  const inStockVariants = product.variants.filter(
-    (variant) => variant.stock > 0
-  );
-  const lowestPrice =
-    inStockVariants.length > 0
-      ? Math.min(...inStockVariants.map((variant) => variant.price))
-      : 0;
+  const displayImage =
+    product.thumbnail ||
+    generateProductPlaceholder(product.name);
+  const lowestPrice = Number(product.minPrice ?? product.price ?? 0);
+  const isOutOfStock = lowestPrice <= 0;
 
   return (
     <div
@@ -48,8 +40,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <Link href={`/product/${product.slug}`} className="block w-full h-full">
           <Image
             src={
-              product.variants[0]?.images[0] ||
-              generateProductPlaceholder(product.name)
+              displayImage
             }
             alt={product.name}
             width={240}
@@ -89,7 +80,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Stock Status */}
-        {inStockVariants.length === 0 && (
+        {isOutOfStock && (
           <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
             <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-medium">
               Out of Stock
@@ -106,7 +97,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
           <div className="flex items-center justify-between mb-2 sm:mb-3">
             <div className="flex items-center space-x-2">
-              {inStockVariants.length > 0 ? (
+              {!isOutOfStock ? (
                 <span className="text-indigo-700 font-bold text-sm sm:text-lg lg:text-xl">
                   {formatPrice(lowestPrice)}
                 </span>
@@ -116,22 +107,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 </span>
               )}
             </div>
-            <div className="flex items-center">
-              <Rating rating={product.averageRating} />
-              {product.reviewCount > 0 && (
-                <span className="text-gray-500 text-xs lg:text-sm ml-1">
-                  ({product.reviewCount})
-                </span>
-              )}
-            </div>
           </div>
-
-          {/* Category */}
-          {product.category && (
-            <div className="text-xs lg:text-sm text-gray-500 mb-2">
-              {product.category.name}
-            </div>
-          )}
         </Link>
 
         {/* Quick Actions */}

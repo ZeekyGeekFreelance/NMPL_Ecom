@@ -7,15 +7,14 @@ type NodeEnv = "development" | "test" | "production";
 
 type Frozen<T> = {
   readonly [K in keyof T]: T[K] extends Record<string, unknown>
-    ? Frozen<T[K]>
-    : T[K];
+  ? Frozen<T[K]>
+  : T[K];
 };
 
 const LOCALHOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const NODE_ENVS: ReadonlyArray<NodeEnv> = ["development", "test", "production"];
 const PROJECT_ROOT = process.cwd();
 const ENV_FILE_PATH = path.resolve(PROJECT_ROOT, ".env");
-const ENV_EXAMPLE_PATH = path.resolve(PROJECT_ROOT, ".env.example");
 
 const parseEnvLineMap = (filePath: string): Map<string, number> => {
   const lineMap = new Map<string, number>();
@@ -34,16 +33,11 @@ const parseEnvLineMap = (filePath: string): Map<string, number> => {
 };
 
 const envLineMap = parseEnvLineMap(ENV_FILE_PATH);
-const exampleLineMap = parseEnvLineMap(ENV_EXAMPLE_PATH);
 
 const lineHint = (key: string): string => {
   const line = envLineMap.get(key);
   if (line) {
     return `${ENV_FILE_PATH}:${line}`;
-  }
-  const exampleLine = exampleLineMap.get(key);
-  if (exampleLine) {
-    return `${ENV_EXAMPLE_PATH}:${exampleLine}`;
   }
   return `${ENV_FILE_PATH}:n/a`;
 };
@@ -325,22 +319,22 @@ const redisUrl = redisUrlRaw || undefined;
 const redisTarget =
   redisEnabled && redisUrl
     ? (() => {
-        const parsed = parseUrlOrThrow("REDIS_URL", redisUrl);
+      const parsed = parseUrlOrThrow("REDIS_URL", redisUrl);
 
-        const parsedPort = Number(parsed.port);
-        const portValue =
-          Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
-            ? parsedPort
-            : undefined;
-        if (!portValue) {
-          throwConfigError("REDIS_URL", "Explicit Redis port is required in REDIS_URL");
-        }
+      const parsedPort = Number(parsed.port);
+      const portValue =
+        Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
+          ? parsedPort
+          : undefined;
+      if (!portValue) {
+        throwConfigError("REDIS_URL", "Explicit Redis port is required in REDIS_URL");
+      }
 
-        return {
-          host: parsed.hostname.toLowerCase(),
-          port: portValue,
-        };
-      })()
+      return {
+        host: parsed.hostname.toLowerCase(),
+        port: portValue,
+      };
+    })()
     : { host: "disabled", port: 0 };
 
 const smtpUserFallback = parseString("EMAIL_USER", {
@@ -634,6 +628,37 @@ if (appConfig.sms.provider === "TWILIO") {
       "SMS_PROVIDER",
       "TWILIO provider requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER"
     );
+  }
+}
+
+if (isProduction) {
+  const DEV_SECRET_DEFAULTS = new Set([
+    "dev_access_token_secret_change_me",
+    "dev-access-token-secret",
+    "dev_refresh_token_secret_change_me",
+    "dev-refresh-token-secret",
+    "dev_session_secret_change_me",
+    "dev-session-secret",
+    "dev_cookie_secret_change_me",
+    "dev-cookie-secret",
+    "replace_me",
+    "change_me",
+  ]);
+
+  const secretChecks: Array<[string, string | undefined]> = [
+    ["ACCESS_TOKEN_SECRET", appConfig.auth.accessTokenSecret],
+    ["REFRESH_TOKEN_SECRET", appConfig.auth.refreshTokenSecret],
+    ["SESSION_SECRET", appConfig.security.sessionSecret],
+    ["COOKIE_SECRET", appConfig.security.cookieSecret],
+  ];
+
+  for (const [key, value] of secretChecks) {
+    if (value && DEV_SECRET_DEFAULTS.has(value.trim().toLowerCase())) {
+      throwConfigError(
+        key,
+        "Production boot blocked: this key still uses a known dev/placeholder secret. Set a strong unique value."
+      );
+    }
   }
 }
 

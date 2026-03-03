@@ -3,7 +3,6 @@ import { Server as SocketIOServer } from "socket.io";
 import usersRoutes from "@/modules/user/user.routes";
 import authRoutes from "@/modules/auth/auth.routes";
 import productRoutes from "@/modules/product/product.routes";
-import reviewRoutes from "@/modules/review/review.routes";
 import categoryRoutes from "@/modules/category/category.routes";
 import orderRoutes from "@/modules/order/order.routes";
 import checkoutRoutes from "@/modules/checkout/checkout.routes";
@@ -20,15 +19,18 @@ import { configureChatRoutes } from "@/modules/chat/chat.routes";
 import attributesRoutes from "@/modules/attribute/attribute.routes";
 import variantsRoutes from '@/modules/variant/variant.routes'
 import invoiceRoutes from "@/modules/invoice/invoice.routes";
+import idempotencyGuard from "@/shared/middlewares/idempotencyGuard";
+import mutationAuditLogger from "@/shared/middlewares/mutationAuditLogger";
 
 export const configureV1Routes = (io: SocketIOServer) => {
   const router = Router();
+  router.use(idempotencyGuard);
+  router.use(mutationAuditLogger);
 
   router.use("/users", usersRoutes);
   router.use("/auth", authRoutes);
   router.use("/products", productRoutes);
   router.use("/transactions", transactionRoutes);
-  router.use("/reviews", reviewRoutes);
   router.use("/categories", categoryRoutes);
   router.use("/cart", cartRoutes);
   router.use("/checkout", checkoutRoutes);

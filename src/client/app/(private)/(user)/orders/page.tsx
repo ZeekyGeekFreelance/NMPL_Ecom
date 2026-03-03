@@ -392,5 +392,5 @@ const UserOrders = () => {
   );
 };
 
-export default withAuth(UserOrders, { allowedRoles: ["USER"] });
+export default withAuth(UserOrders, { allowedRoles: ["USER", "DEALER"] });
 

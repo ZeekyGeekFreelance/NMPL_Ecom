@@ -59,13 +59,20 @@ const getSearchScore = (product: Product, rawQuery: string) => {
     if (haystack.includes(token)) score += 25;
   }
 
-  score += Math.min(product.averageRating || 0, 5) * 3;
-  score += Math.min(product.reviewCount || 0, 100) * 0.02;
-
   return score;
 };
 
 const getVariantMinPrice = (product: Product) => {
+  const listingMinPrice = Number(product.minPrice);
+  if (Number.isFinite(listingMinPrice) && listingMinPrice > 0) {
+    return listingMinPrice;
+  }
+
+  const listingPrice = Number(product.price);
+  if (Number.isFinite(listingPrice) && listingPrice > 0) {
+    return listingPrice;
+  }
+
   const prices = product.variants?.map((variant) => Number(variant.price)) || [];
   if (!prices.length) {
     return Number.POSITIVE_INFINITY;

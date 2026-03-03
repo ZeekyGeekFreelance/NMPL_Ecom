@@ -16,6 +16,7 @@ const ManageProduct = () => {
     categoriesLoading,
     productsError,
     form,
+    submitError,
     isUpdating,
     isDeleting,
     isConfirmModalOpen,
@@ -29,6 +30,7 @@ const ManageProduct = () => {
     attributeGroups,
     selectedAttributes,
   } = useProductDetail();
+  const hasPendingChanges = form.formState.isDirty;
 
   if (productsLoading || categoriesLoading) {
     return <CustomLoader />;
@@ -113,6 +115,8 @@ const ManageProduct = () => {
               resetSelections={resetSelections}
               isUpdating={isUpdating}
               onSave={() => form.handleSubmit(onSubmit)()}
+              canSave={hasPendingChanges}
+              submitError={submitError}
             />
           </div>
 
@@ -122,6 +126,8 @@ const ManageProduct = () => {
               onSubmit={onSubmit}
               categories={categories}
               isUpdating={isUpdating}
+              error={submitError ? { data: { message: submitError } } : undefined}
+              onCancel={() => form.reset()}
             />
           </div>
         </div>
@@ -131,6 +137,9 @@ const ManageProduct = () => {
           message="Are you sure you want to delete this product? This action cannot be undone."
           onConfirm={handleDelete}
           onCancel={() => setIsConfirmModalOpen(false)}
+          type="danger"
+          isConfirming={isDeleting}
+          disableCancelWhileConfirming
         />
       </div>
     </div>

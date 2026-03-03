@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Package } from "lucide-react";
 import { ApolloError } from "@apollo/client";
@@ -15,12 +15,95 @@ interface ProductSectionProps {
   showTitle?: boolean;
 }
 
+const AUTOPLAY_INTERVAL_MS = 4500;
+
+const getItemsPerSlide = (width: number) => {
+  if (width >= 1536) return 3;
+  if (width >= 1280) return 4;
+  if (width >= 1024) return 3;
+  if (width >= 640) return 2;
+  return 1;
+};
+
+const buildPaginationGuide = (totalSlides: number, currentSlide: number) => {
+  if (totalSlides <= 7) {
+    return Array.from({ length: totalSlides }, (_, index) => index);
+  }
+
+  const importantIndices = new Set<number>([
+    0,
+    totalSlides - 1,
+    currentSlide - 1,
+    currentSlide,
+    currentSlide + 1,
+  ]);
+
+  const sortedIndices = Array.from(importantIndices)
+    .filter((index) => index >= 0 && index < totalSlides)
+    .sort((left, right) => left - right);
+
+  const guide: Array<number | "ellipsis"> = [];
+  sortedIndices.forEach((index, itemIndex) => {
+    if (itemIndex > 0 && index - sortedIndices[itemIndex - 1] > 1) {
+      guide.push("ellipsis");
+    }
+    guide.push(index);
+  });
+
+  return guide;
+};
+
 const ProductSection: React.FC<ProductSectionProps> = ({
   title,
   products,
   error,
   showTitle = false,
 }) => {
+  const [itemsPerSlide, setItemsPerSlide] = useState(1);
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  useEffect(() => {
+    const syncItemsPerSlide = () => {
+      setItemsPerSlide(getItemsPerSlide(window.innerWidth));
+    };
+
+    syncItemsPerSlide();
+    window.addEventListener("resize", syncItemsPerSlide);
+
+    return () => window.removeEventListener("resize", syncItemsPerSlide);
+  }, []);
+
+  const slides = useMemo(() => {
+    const nextSlides: Product[][] = [];
+    for (let index = 0; index < products.length; index += itemsPerSlide) {
+      nextSlides.push(products.slice(index, index + itemsPerSlide));
+    }
+    return nextSlides;
+  }, [products, itemsPerSlide]);
+
+  const totalSlides = slides.length;
+
+  useEffect(() => {
+    setCurrentSlide(0);
+  }, [title, totalSlides]);
+
+  useEffect(() => {
+    if (totalSlides <= 1) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setCurrentSlide((previous) => (previous + 1) % totalSlides);
+    }, AUTOPLAY_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [totalSlides]);
+
+  const paginationGuide = useMemo(
+    () => buildPaginationGuide(totalSlides, currentSlide),
+    [totalSlides, currentSlide]
+  );
+
   if (error) {
     const friendlyErrorMessage =
       "We couldn't load products right now. Please refresh and try again.";
@@ -109,13 +192,57 @@ const ProductSection: React.FC<ProductSectionProps> = ({
           </motion.div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 gap-4 sm:gap-4">
-          {products.map((product) => (
-            <div key={product.id}>
-              <ProductCard product={product} />
-            </div>
-          ))}
+        <div className="overflow-hidden">
+          <motion.div
+            className="flex"
+            animate={{ x: `-${currentSlide * 100}%` }}
+            transition={{ duration: 0.55, ease: "easeInOut" }}
+          >
+            {slides.map((slideProducts, slideIndex) => (
+              <div key={`${title}-slide-${slideIndex}`} className="w-full shrink-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 gap-4 sm:gap-4">
+                  {slideProducts.map((product) => (
+                    <div key={product.id}>
+                      <ProductCard product={product} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </motion.div>
         </div>
+
+        {totalSlides > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            {paginationGuide.map((guideItem, index) => {
+              if (guideItem === "ellipsis") {
+                return (
+                  <span
+                    key={`${title}-ellipsis-${index}`}
+                    className="px-1 text-xs font-semibold tracking-[0.2em] text-gray-400"
+                  >
+                    ...
+                  </span>
+                );
+              }
+
+              const isActive = guideItem === currentSlide;
+              return (
+                <button
+                  key={`${title}-dot-${guideItem}`}
+                  type="button"
+                  aria-label={`Go to slide ${guideItem + 1}`}
+                  onClick={() => setCurrentSlide(guideItem)}
+                  className={`h-2.5 rounded-full transition-all duration-200 ${
+                    isActive
+                      ? "w-7 bg-indigo-600"
+                      : "w-2.5 bg-gray-300 hover:bg-gray-400"
+                  }`}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );

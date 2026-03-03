@@ -25,9 +25,9 @@ import { Server as HTTPServer } from "http";
 import { SocketManager } from "@/infra/socket/socket";
 import { connectDB } from "./infra/database/database.config";
 import { setupSwagger } from "./docs/swagger";
-import { startQuotationExpiryWorker } from "./modules/transaction/quotationExpiry.worker";
 import { config, isAllowedOrigin } from "@/config";
 import { randomUUID } from "crypto";
+import { createRequestMetricsMiddleware } from "@/shared/observability/requestMetrics";
 
 const parseCspDirectives = (value: string): Record<string, string[]> => {
   const directives = value
@@ -59,8 +59,6 @@ export const createApp = async () => {
     await connectRedis();
   }
 
-  startQuotationExpiryWorker();
-
   const httpServer = new HTTPServer(app);
   const socketManager = new SocketManager(httpServer);
   const io = socketManager.getIO();
@@ -75,6 +73,7 @@ export const createApp = async () => {
     res.setHeader("x-trace-id", traceId);
     next();
   });
+  app.use(createRequestMetricsMiddleware());
 
   app.use("/", healthRoutes);
   app.use(
@@ -144,6 +143,7 @@ export const createApp = async () => {
         "Authorization",
         "X-Requested-With",
         "x-confirmation-handled",
+        "x-idempotency-key",
         "Apollo-Require-Preflight",
       ],
     })
@@ -192,8 +192,8 @@ export const createApp = async () => {
   app.use("/api", configureRoutes(io));
   await configureGraphQL(app);
 
-  app.use(globalError);
   app.use(logRequest);
+  app.use(globalError);
 
   return { app, httpServer };
 };

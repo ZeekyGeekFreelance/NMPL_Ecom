@@ -1,4 +1,5 @@
 export type DisplayRole = "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
+export type AccountBoundary = "INTERNAL" | "EXTERNAL";
 
 type RoleInput = {
   role?: string | null;
@@ -63,3 +64,12 @@ export const isAdminDisplayRole = (role: DisplayRole): boolean =>
 
 export const isCustomerDisplayRole = (role: DisplayRole): boolean =>
   role === "USER" || role === "DEALER";
+
+export const isInternalDisplayRole = (role: DisplayRole): boolean =>
+  role === "ADMIN" || role === "SUPERADMIN";
+
+export const isExternalDisplayRole = (role: DisplayRole): boolean =>
+  role === "USER" || role === "DEALER";
+
+export const resolveAccountBoundary = (input?: RoleInput | null): AccountBoundary =>
+  isInternalDisplayRole(resolveDisplayRole(input)) ? "INTERNAL" : "EXTERNAL";

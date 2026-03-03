@@ -45,6 +45,17 @@ type UserDirectoryFilter =
   | "DEALERS"
   | "BILLING_TEAM";
 
+type PendingBillingChange = {
+  id: string;
+  isBillingSupervisor: boolean;
+  accountRef: string;
+};
+
+type PendingRoleChange = {
+  data: UserFormData;
+  previousRole: string;
+};
+
 const UsersDashboard = () => {
   const { showToast } = useToast();
   const pathname = usePathname();
@@ -69,6 +80,7 @@ const UsersDashboard = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<any | null>(null);
   const [directoryFilter, setDirectoryFilter] = useState<UserDirectoryFilter>("ALL");
   const [userToDelete, setUserToDelete] = useState<string | number | null>(
     null
@@ -79,6 +91,15 @@ const UsersDashboard = () => {
   const [billingActionUserId, setBillingActionUserId] = useState<
     string | number | null
   >(null);
+  const [editingOriginalRole, setEditingOriginalRole] = useState<string | null>(
+    null
+  );
+  const [isBillingConfirmOpen, setIsBillingConfirmOpen] = useState(false);
+  const [pendingBillingChange, setPendingBillingChange] =
+    useState<PendingBillingChange | null>(null);
+  const [isRoleConfirmOpen, setIsRoleConfirmOpen] = useState(false);
+  const [pendingRoleChange, setPendingRoleChange] =
+    useState<PendingRoleChange | null>(null);
 
   const form = useForm<UserFormData>({
     defaultValues: {
@@ -331,31 +352,19 @@ const UsersDashboard = () => {
                 <select
                   value=""
                   aria-label="Billing assignment"
-                  onChange={async (event) => {
+                  onChange={(event) => {
                     const action = event.target.value;
                     if (!action) {
                       return;
                     }
 
-                    try {
-                      setBillingActionUserId(row.id);
-                      await updateBillingSupervisor({
-                        id: String(row.id),
-                        isBillingSupervisor: action === "assign",
-                      }).unwrap();
-                      showToast(
-                        action === "remove"
-                          ? "Billing responsibility removed"
-                          : "Billing assigned successfully",
-                        "success"
-                      );
-                    } catch (err: any) {
-                      const errorMessage =
-                        err?.data?.message || "Failed to update billing assignment";
-                      showToast(errorMessage, "error");
-                    } finally {
-                      setBillingActionUserId(null);
-                    }
+                    setPendingBillingChange({
+                      id: String(row.id),
+                      isBillingSupervisor: action === "assign",
+                      accountRef:
+                        row?.accountReference || toAccountReference(row.id || ""),
+                    });
+                    setIsBillingConfirmOpen(true);
                   }}
                 disabled={
                   isUpdatingBillingSupervisor && billingActionUserId === row.id
@@ -392,7 +401,7 @@ const UsersDashboard = () => {
           )}
 
           <RoleHierarchyGuard
-            targetUserRole={row.role}
+            targetUserRole={resolveDisplayRole(row)}
             targetUserId={row.id}
             showFallback={false}
           >
@@ -401,6 +410,8 @@ const UsersDashboard = () => {
                 type="button"
                 onClick={() => {
                   form.reset(row);
+                  setEditingOriginalRole(String(row.role || "").toUpperCase());
+                  setEditingUser(row);
                   setIsModalOpen(true);
                 }}
                 className="inline-flex h-8 items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
@@ -413,7 +424,7 @@ const UsersDashboard = () => {
           </RoleHierarchyGuard>
 
           <RoleHierarchyGuard
-            targetUserRole={row.role}
+            targetUserRole={resolveDisplayRole(row)}
             targetUserId={row.id}
             showFallback={false}
           >
@@ -447,16 +458,79 @@ const UsersDashboard = () => {
     },
   ];
 
-  const handleEditSubmit = async (data: UserFormData) => {
+  const executeUserUpdate = async (data: UserFormData) => {
     try {
       const { id, ...payload } = data;
       await updateUser({ id: String(id), data: payload }).unwrap();
       setIsModalOpen(false);
+      setEditingOriginalRole(null);
+      setEditingUser(null);
       showToast("User updated successfully", "success");
     } catch (err: any) {
       console.error("Failed to update user:", err);
       const errorMessage = err?.data?.message || "Failed to update user";
       showToast(errorMessage, "error");
+    }
+  };
+
+  const handleEditSubmit = async (data: UserFormData) => {
+    const previousRole = String(editingOriginalRole || "").toUpperCase();
+    const nextRole = String(data.role || "").toUpperCase();
+    const isRoleChanged =
+      previousRole !== "" && nextRole !== "" && previousRole !== nextRole;
+
+    if (isRoleChanged) {
+      setPendingRoleChange({
+        data,
+        previousRole,
+      });
+      setIsRoleConfirmOpen(true);
+      return;
+    }
+
+    await executeUserUpdate(data);
+  };
+
+  const handleConfirmRoleChange = async () => {
+    if (!pendingRoleChange) {
+      setIsRoleConfirmOpen(false);
+      return;
+    }
+
+    try {
+      await executeUserUpdate(pendingRoleChange.data);
+    } finally {
+      setPendingRoleChange(null);
+      setIsRoleConfirmOpen(false);
+    }
+  };
+
+  const handleConfirmBillingChange = async () => {
+    if (!pendingBillingChange) {
+      setIsBillingConfirmOpen(false);
+      return;
+    }
+
+    try {
+      setBillingActionUserId(pendingBillingChange.id);
+      await updateBillingSupervisor({
+        id: pendingBillingChange.id,
+        isBillingSupervisor: pendingBillingChange.isBillingSupervisor,
+      }).unwrap();
+      showToast(
+        pendingBillingChange.isBillingSupervisor
+          ? "Billing assigned successfully"
+          : "Billing responsibility removed",
+        "success"
+      );
+    } catch (err: any) {
+      const errorMessage =
+        err?.data?.message || "Failed to update billing assignment";
+      showToast(errorMessage, "error");
+    } finally {
+      setBillingActionUserId(null);
+      setPendingBillingChange(null);
+      setIsBillingConfirmOpen(false);
     }
   };
 
@@ -600,7 +674,11 @@ const UsersDashboard = () => {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingOriginalRole(null);
+                setEditingUser(null);
+              }}
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -613,7 +691,11 @@ const UsersDashboard = () => {
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-bold text-gray-800">Edit User</h2>
                   <button
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingOriginalRole(null);
+                      setEditingUser(null);
+                    }}
                     className="text-gray-500 hover:text-gray-700"
                   >
                     <X size={20} />
@@ -624,6 +706,7 @@ const UsersDashboard = () => {
                   onSubmit={handleEditSubmit}
                   isLoading={isUpdating}
                   submitLabel="Save Changes"
+                  targetUser={editingUser}
                 />
               </motion.div>
             </motion.div>
@@ -721,6 +804,54 @@ const UsersDashboard = () => {
           )}
         </AnimatePresence>
 
+        <ConfirmModal
+          isOpen={isBillingConfirmOpen}
+          title="Confirm Billing Permission Change"
+          message={
+            pendingBillingChange
+              ? pendingBillingChange.isBillingSupervisor
+                ? `Assign billing supervisor privileges to ${pendingBillingChange.accountRef}? This grants access to billing actions.`
+                : `Remove billing supervisor privileges from ${pendingBillingChange.accountRef}? This will immediately revoke billing access.`
+              : "Confirm billing permission change?"
+          }
+          type="warning"
+          confirmLabel={
+            pendingBillingChange?.isBillingSupervisor ? "Assign" : "Remove"
+          }
+          onConfirm={handleConfirmBillingChange}
+          onCancel={() => {
+            if (isUpdatingBillingSupervisor) {
+              return;
+            }
+            setIsBillingConfirmOpen(false);
+            setPendingBillingChange(null);
+          }}
+          isConfirming={isUpdatingBillingSupervisor}
+          disableCancelWhileConfirming
+        />
+
+        <ConfirmModal
+          isOpen={isRoleConfirmOpen}
+          title="Confirm Role Change"
+          message={
+            pendingRoleChange
+              ? `You are changing role from ${pendingRoleChange.previousRole} to ${pendingRoleChange.data.role}. This affects account permissions immediately.`
+              : "Are you sure you want to change this role?"
+          }
+          type="danger"
+          confirmLabel="Change Role"
+          onConfirm={handleConfirmRoleChange}
+          onCancel={() => {
+            if (isUpdating) {
+              return;
+            }
+            setIsRoleConfirmOpen(false);
+            setPendingRoleChange(null);
+          }}
+          isConfirming={isUpdating}
+          disableCancelWhileConfirming
+        />
+
         {/* Delete Confirmation */}
         <ConfirmModal
           isOpen={isConfirmModalOpen}
@@ -729,6 +860,8 @@ const UsersDashboard = () => {
           onCancel={() => setIsConfirmModalOpen(false)}
           title="Delete User"
           type="danger"
+          isConfirming={isDeleting}
+          disableCancelWhileConfirming
         />
       </div>
     </PermissionGuard>

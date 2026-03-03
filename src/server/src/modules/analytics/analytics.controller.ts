@@ -75,6 +75,58 @@ export class AnalyticsController {
     });
   });
 
+  createBulkInteractions = asyncHandler(async (req: Request, res: Response) => {
+    const user = req.user;
+    const sessionId = req.session.id;
+    const rawEvents = Array.isArray(req.body?.events) ? req.body.events : [];
+
+    if (!rawEvents.length) {
+      throw new AppError(400, "At least one interaction event is required.");
+    }
+
+    if (rawEvents.length > 100) {
+      throw new AppError(400, "Interaction batch size cannot exceed 100 events.");
+    }
+
+    const validTypes = new Set(["view", "click", "other"]);
+    const normalizedRows = rawEvents.map((event: any, index: number) => {
+      const type = String(event?.type || "").trim().toLowerCase();
+      const productIdValue =
+        typeof event?.productId === "string" && event.productId.trim().length > 0
+          ? event.productId.trim()
+          : undefined;
+
+      if (!validTypes.has(type)) {
+        throw new AppError(
+          400,
+          `Invalid interaction type at event #${index + 1}. Use: view, click, or other.`
+        );
+      }
+
+      return {
+        userId: user?.id,
+        sessionId,
+        productId: productIdValue,
+        type,
+      };
+    });
+
+    const result = await this.analyticsService.createInteractionsBulk(
+      normalizedRows
+    );
+
+    this.logsService.info("Interaction batch recorded", {
+      userId: user?.id,
+      sessionId,
+      count: result.count,
+    });
+
+    sendResponse(res, 200, {
+      data: { count: result.count },
+      message: "Interaction batch recorded successfully",
+    });
+  });
+
   getYearRange = asyncHandler(async (req: Request, res: Response) => {
     const yearRange = await this.analyticsService.getYearRange();
     sendResponse(res, 200, {

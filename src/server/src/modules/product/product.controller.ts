@@ -101,7 +101,7 @@ export class ProductController {
           imageIndexes = JSON.parse(variant.imageIndexes || "[]");
         } catch (error) {
           console.error(`Error parsing JSON for variant ${index}:`, error);
-          throw new AppError(400, `Invalid JSON format in variant ${index}`);
+          throw new AppError(400, `Invalid JSON format in Variant #${index + 1}.`);
         }
 
         // Map image URLs based on imageIndexes
@@ -195,6 +195,7 @@ export class ProductController {
       const processedVariants = parsedVariants.length
         ? await Promise.all(
             parsedVariants.map(async (variant: any, index: number) => {
+              const variantLabel = `Variant #${index + 1}`;
               const parsedPrice = Number(variant.price);
               const parsedStock = Number.parseInt(String(variant.stock), 10);
               const parsedLowStockThreshold =
@@ -207,14 +208,14 @@ export class ProductController {
               if (Number.isNaN(parsedPrice) || parsedPrice <= 0) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have a valid positive price`
+                  `${variantLabel} must have a valid positive price.`
                 );
               }
 
               if (Number.isNaN(parsedStock) || parsedStock < 0) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have a valid non-negative stock number`
+                  `${variantLabel} must have a valid non-negative stock number.`
                 );
               }
 
@@ -224,7 +225,7 @@ export class ProductController {
               ) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have a valid non-negative low stock threshold`
+                  `${variantLabel} must have a valid non-negative low stock threshold.`
                 );
               }
 
@@ -236,7 +237,7 @@ export class ProductController {
                 } catch {
                   throw new AppError(
                     400,
-                    `Invalid images format at variant index ${index}`
+                    `Invalid images format for ${variantLabel}.`
                   );
                 }
               }
@@ -246,7 +247,7 @@ export class ProductController {
               ) {
                 throw new AppError(
                   400,
-                  `Images at variant index ${index} must be an array of strings or empty`
+                  `Images for ${variantLabel} must be an array of strings or empty.`
                 );
               }
 
@@ -304,7 +305,24 @@ export class ProductController {
                   .filter(Boolean) as Express.Multer.File[];
 
                 if (variantFiles.length > 0) {
-                  const uploadedImages = await uploadToCloudinary(variantFiles);
+                  let uploadedImages: { url: string; public_id: string }[] = [];
+                  try {
+                    uploadedImages = await uploadToCloudinary(variantFiles);
+                  } catch (error) {
+                    console.error("Cloudinary upload error:", error);
+                    throw new AppError(
+                      400,
+                      `Failed to upload images to Cloudinary for ${variantLabel}.`
+                    );
+                  }
+
+                  if (uploadedImages.length !== variantFiles.length) {
+                    throw new AppError(
+                      400,
+                      `Only ${uploadedImages.length} of ${variantFiles.length} images uploaded for ${variantLabel}.`
+                    );
+                  }
+
                   uploadedImageUrls = uploadedImages
                     .map((img) => img.url)
                     .filter(Boolean);
@@ -323,8 +341,24 @@ export class ProductController {
                 );
 
                 if (legacyVariantFiles.length > 0) {
-                  const uploadedImages =
-                    await uploadToCloudinary(legacyVariantFiles);
+                  let uploadedImages: { url: string; public_id: string }[] = [];
+                  try {
+                    uploadedImages = await uploadToCloudinary(legacyVariantFiles);
+                  } catch (error) {
+                    console.error("Cloudinary upload error:", error);
+                    throw new AppError(
+                      400,
+                      `Failed to upload images to Cloudinary for ${variantLabel}.`
+                    );
+                  }
+
+                  if (uploadedImages.length !== legacyVariantFiles.length) {
+                    throw new AppError(
+                      400,
+                      `Only ${uploadedImages.length} of ${legacyVariantFiles.length} images uploaded for ${variantLabel}.`
+                    );
+                  }
+
                   uploadedImageUrls = uploadedImages
                     .map((img) => img.url)
                     .filter(Boolean);
@@ -380,7 +414,7 @@ export class ProductController {
               ) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have sku, price, and stock`
+                  `${variantLabel} must have SKU, price, and stock.`
                 );
               }
 
@@ -394,21 +428,23 @@ export class ProductController {
                 if (!Array.isArray(parsedAttributes)) {
                   throw new AppError(
                     400,
-                    `Variant at index ${index} must have an attributes array`
+                    `${variantLabel} must have an attributes array.`
                   );
                 }
                 parsedAttributes.forEach((attr: any, attrIndex: number) => {
                   if (!attr.attributeId || !attr.valueId) {
                     throw new AppError(
                       400,
-                      `Invalid attribute structure in variant at index ${index}, attribute index ${attrIndex}`
+                      `${variantLabel} has an invalid attribute structure at attribute #${
+                        attrIndex + 1
+                      }.`
                     );
                   }
                 });
               } catch (error) {
                 throw new AppError(
                   400,
-                  `Invalid attributes format at index ${index}`
+                  `Invalid attributes format for ${variantLabel}.`
                 );
               }
 
@@ -419,7 +455,7 @@ export class ProductController {
               if (new Set(attributeIds).size !== attributeIds.length) {
                 throw new AppError(
                   400,
-                  `Duplicate attributes in variant at index ${index}`
+                  `${variantLabel} has duplicate attributes.`
                 );
               }
 
@@ -435,25 +471,6 @@ export class ProductController {
           )
         : undefined;
 
-      if (processedVariants) {
-        // Check for duplicate SKUs
-        const skuKeys = processedVariants.map((variant: any) => variant.sku);
-        if (new Set(skuKeys).size !== skuKeys.length) {
-          throw new AppError(400, "Duplicate SKUs detected");
-        }
-
-        // Check for duplicate attribute combinations
-        const comboKeys = processedVariants.map((variant: any) =>
-          variant.attributes
-            .map((attr: any) => `${attr.attributeId}:${attr.valueId}`)
-            .sort()
-            .join("|")
-        );
-        if (new Set(comboKeys).size !== comboKeys.length) {
-          throw new AppError(400, "Duplicate attribute combinations detected");
-        }
-      }
-
       const updatedData: any = {
         ...(name && { name, slug: slugify(name) }),
         ...(description && { description }),
@@ -467,18 +484,19 @@ export class ProductController {
         ...(processedVariants && { variants: processedVariants }),
       };
 
-      const product = await this.productService.updateProduct(
+      const { product, didChange } = await this.productService.updateProduct(
         productId,
         updatedData
       );
 
       sendResponse(res, 200, {
-        data: { product },
-        message: "Product updated successfully",
+        data: { product, didChange },
+        message: didChange ? "Product updated successfully" : "No changes detected.",
       });
-      this.logsService.info("Product updated", {
+      this.logsService.info(didChange ? "Product updated" : "Product update skipped (no changes)", {
         userId: req.user?.id,
         sessionId: req.session.id,
+        didChange,
       });
     }
   );
