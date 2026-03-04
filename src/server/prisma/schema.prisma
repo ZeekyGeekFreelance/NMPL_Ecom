@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum ROLE {
@@ -53,7 +54,9 @@ enum CHAT_STATUS {
 enum DEALER_STATUS {
   PENDING
   APPROVED
+  LEGACY
   REJECTED
+  SUSPENDED
 }
 
 enum ORDER_CUSTOMER_ROLE {
@@ -136,6 +139,7 @@ model Product {
 
   @@index([name, slug])
   @@index([categoryId])
+  @@index([categoryId, createdAt]) // category-filtered product listings order by createdAt
   @@index([createdAt])
   @@index([isNew, createdAt])
   @@index([isFeatured, createdAt])
@@ -150,6 +154,7 @@ model ProductVariant {
   sku               String                    @unique
   images            String[]                  @default([])
   price             Float
+  defaultDealerPrice Float?                   // platform-level dealer price; overridden per-dealer by DealerPriceMapping
   stock             Int
   reservedStock     Int                       @default(0)
   lowStockThreshold Int                       @default(10)
@@ -165,6 +170,7 @@ model ProductVariant {
 
   @@index([productId, sku])
   @@index([productId, price])
+  @@index([productId, createdAt]) // fetchListingAggregateByProductId orders by [productId, createdAt]
   @@index([price])
 }
 
@@ -184,18 +190,19 @@ model DealerProfile {
 }
 
 model DealerPriceMapping {
-  id          String         @id
-  dealerId    String
-  dealer      User           @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  variantId   String
-  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  customPrice Float
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id            String         @id @default(uuid())
+  dealerId      String
+  dealer        User           @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  variantId     String
+  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  customPrice   Float
+  previousPrice Float?         // previous customPrice before last update; null on first assignment
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  @@unique([dealerId, variantId])
-  @@index([dealerId])
-  @@index([variantId])
+  @@unique([dealerId, variantId])  // composite unique enables O(1) ON CONFLICT upsert
+  @@index([dealerId])              // fast dealer-scoped price lookups
+  @@index([variantId])             // fast variant-scoped lookups
 }
 
 model Attribute {

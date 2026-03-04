@@ -11,6 +11,17 @@ export const isDealerTableMissing = (error: unknown): boolean => {
   );
 };
 
+/**
+ * Resolves effective dealer prices for a batch of variants in a single query.
+ *
+ * Strategy:
+ *  1. Verify the user has an APPROVED or LEGACY dealer profile — O(1) indexed lookup.
+ *  2. Use a single LEFT JOIN between ProductVariant and DealerPriceMapping.
+ *  3. COALESCE: customPrice (per-dealer override) → defaultDealerPrice (platform default).
+ *  4. Variants with no resolved price are excluded from the returned map.
+ *
+ * No separate mapping query. No N+1. No table scans.
+ */
 export const getDealerPriceMap = async (
   prisma: PrismaClient,
   userId: string | undefined,
@@ -21,9 +32,11 @@ export const getDealerPriceMap = async (
   }
 
   try {
-    const dealerProfileRows = await prisma.$queryRaw<
-      Array<{ status: string }>
-    >(
+    // First check dealer eligibility with a single indexed lookup.
+    // Returns empty map immediately for guests, regular users, and ineligible dealers —
+    // this prevents the price-resolution query from running unnecessarily and
+    // ensures non-dealer product fetches are never affected.
+    const dealerRows = await prisma.$queryRaw<Array<{ status: string }>>(
       Prisma.sql`
         SELECT "status"
         FROM "DealerProfile"
@@ -32,22 +45,31 @@ export const getDealerPriceMap = async (
       `
     );
 
-    if (!dealerProfileRows.length || dealerProfileRows[0].status !== "APPROVED") {
+    if (
+      !dealerRows.length ||
+      (dealerRows[0].status !== "APPROVED" && dealerRows[0].status !== "LEGACY")
+    ) {
       return new Map();
     }
 
-    const priceRows = await prisma.$queryRaw<
-      Array<{ variantId: string; customPrice: number }>
+    // Dealer is eligible — resolve prices via single LEFT JOIN + COALESCE.
+    const rows = await prisma.$queryRaw<
+      Array<{ variantId: string; resolvedPrice: number }>
     >(
       Prisma.sql`
-        SELECT "variantId", "customPrice"
-        FROM "DealerPriceMapping"
-        WHERE "dealerId" = ${userId}
-          AND "variantId" IN (${Prisma.join(variantIds)})
+        SELECT
+          pv."id"                                             AS "variantId",
+          COALESCE(m."customPrice", pv."defaultDealerPrice")  AS "resolvedPrice"
+        FROM "ProductVariant" pv
+        LEFT JOIN "DealerPriceMapping" m
+          ON m."variantId" = pv."id"
+         AND m."dealerId"  = ${userId}
+        WHERE pv."id" IN (${Prisma.join(variantIds)})
+          AND COALESCE(m."customPrice", pv."defaultDealerPrice") IS NOT NULL
       `
     );
 
-    return new Map(priceRows.map((row) => [row.variantId, row.customPrice]));
+    return new Map(rows.map((row) => [row.variantId, Number(row.resolvedPrice)]));
   } catch (error) {
     if (isDealerTableMissing(error)) {
       return new Map();

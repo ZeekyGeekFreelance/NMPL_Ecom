@@ -1,22 +1,24 @@
 import { getPlatformName } from "@/shared/utils/branding";
 import { formatINRCurrency } from "@/shared/utils/currency";
 
-export type DealerStatusEmail = "PENDING" | "APPROVED" | "REJECTED";
+export type DealerStatusEmail = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 
 export interface DealerPricingChangeRow {
   sku: string;
   productName: string;
-  previousPrice: number | null;
-  nextPrice: number | null;
+  previousPrice: number | null; // null when this is a first-time assignment
+  nextPrice: number | null;     // null when the mapping is being removed
+  basePrice: number;            // ProductVariant.price — always a real numeric value
 }
 
 const formatCurrency = (value: number) => formatINRCurrency(value);
 
-const formatOptionalCurrency = (value: number | null) => {
-  if (value === null) {
-    return "Base price";
-  }
-  return formatCurrency(value);
+/**
+ * Formats a nullable price. When null, falls back to the provided basePrice.
+ * The directive prohibits emitting symbolic labels — every price shown must be numeric.
+ */
+const formatOptionalCurrency = (value: number | null, basePrice: number) => {
+  return formatCurrency(value !== null ? value : basePrice);
 };
 
 const platformName = getPlatformName();
@@ -78,10 +80,20 @@ const statusMeta: Record<
     title: "Application Approved",
     copy: "Your dealer account is now approved and ready to use.",
   },
+  LEGACY: {
+    subject: withPlatformSubject("Dealer Account Migrated to Legacy"),
+    title: "Account Migrated to Legacy",
+    copy: "Your dealer account has been migrated to legacy status. Your existing pricing and access remain active.",
+  },
   REJECTED: {
     subject: withPlatformSubject("Dealer Application Update"),
     title: "Application Update",
     copy: "Your dealer application has been reviewed and is currently marked as rejected.",
+  },
+  SUSPENDED: {
+    subject: withPlatformSubject("Dealer Account Suspended"),
+    title: "Account Suspended",
+    copy: "Your dealer account has been temporarily suspended. Please contact support for details.",
   },
 };
 
@@ -240,12 +252,9 @@ export const buildDealerPricingUpdatedEmail = ({
         <tr>
           <td style="padding:8px;border:1px solid #e5e7eb;">${row.productName}</td>
           <td style="padding:8px;border:1px solid #e5e7eb;">${row.sku}</td>
-          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(
-            row.previousPrice
-          )}</td>
-          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(
-            row.nextPrice
-          )}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;">${formatCurrency(row.basePrice)}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(row.previousPrice, row.basePrice)}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(row.nextPrice, row.basePrice)}</td>
         </tr>
       `
     )
@@ -268,9 +277,7 @@ export const buildDealerPricingUpdatedEmail = ({
       "Recent changes:",
       ...visibleRows.map(
         (row) =>
-          `- ${row.productName} (${row.sku}): ${formatOptionalCurrency(
-            row.previousPrice
-          )} -> ${formatOptionalCurrency(row.nextPrice)}`
+          `- ${row.productName} (${row.sku}): base ${formatCurrency(row.basePrice)} | prev ${formatOptionalCurrency(row.previousPrice, row.basePrice)} -> new ${formatOptionalCurrency(row.nextPrice, row.basePrice)}`
       ),
       hasMore ? `...and ${changes.length - visibleRows.length} more changes.` : null,
       "",
@@ -298,11 +305,12 @@ export const buildDealerPricingUpdatedEmail = ({
             ? `
               <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin:8px 0 14px;">
                 <thead>
-                  <tr style="background:#f3f4f6;">
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Product</th>
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">SKU</th>
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Previous</th>
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Updated</th>
+                <tr style="background:#f3f4f6;">
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Product</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">SKU</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Base Price</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Previous</th>
+                  <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Updated</th>
                   </tr>
                 </thead>
                 <tbody>${tableRowsHtml}</tbody>

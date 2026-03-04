@@ -18,7 +18,12 @@ const runPrismaMigrateStatus = (): { output: string; ok: boolean } => {
     ["prisma", "migrate", "status", "--schema", "./prisma/schema.prisma"],
     {
       cwd: serverRoot,
-      env: config.raw as NodeJS.ProcessEnv,
+      // Use live process.env, NOT config.raw.
+      // config.raw is snapshotted at module-eval time and may contain stale
+      // system-level env vars (e.g. DATABASE_URL=localhost:5433) before
+      // load-env.js has had a chance to correct them.
+      // process.env at call time always reflects the corrected values.
+      env: process.env as NodeJS.ProcessEnv,
       encoding: "utf8",
       stdio: "pipe",
       timeout: 25_000,
@@ -73,15 +78,29 @@ export const assertPortAvailable = async (): Promise<void> => {
 
 export const assertMigrationsApplied = (): void => {
   const migrationStatus = runPrismaMigrateStatus();
-  if (!migrationStatus.ok) {
-    throw new Error(
-      `[preflight] Migration integrity check failed. Boot aborted.\n${migrationStatus.output}`
-    );
+  if (migrationStatus.ok) {
+    return;
   }
+
+  const message = `[preflight] Migration check failed.\n${migrationStatus.output}`;
+
+  if (config.isProduction) {
+    // Hard failure in production — a schema mismatch is a deployment error.
+    throw new Error(`${message}\nBoot aborted.`);
+  }
+
+  // Development: warn and continue.
+  // The developer may intentionally be ahead of the DB (pending migration apply)
+  // or the DB URL may temporarily be unavailable. Do not crash-loop on this.
+  console.warn(`${message}\n[preflight] Non-fatal in development. Run: npx prisma migrate deploy`);
 };
 
 export const assertMixedModeMismatch = async (): Promise<void> => {
   if (!config.diagnostics.mixedModeGuardEnabled || config.dockerMode) {
+    return;
+  }
+
+  if (!isLocalAddress(config.database.host)) {
     return;
   }
 

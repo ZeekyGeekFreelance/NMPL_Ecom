@@ -43,12 +43,9 @@ const resolveRequestedOperation = (
   return operations[0];
 };
 
-const isPublicCatalogOperation = (req: express.Request): boolean => {
-  if (!req.body || Array.isArray(req.body)) {
-    return false;
-  }
-
-  const body = req.body as { query?: unknown; operationName?: unknown };
+const isSinglePublicCatalogBody = (
+  body: { query?: unknown; operationName?: unknown }
+): boolean => {
   if (typeof body.query !== "string" || body.query.trim().length === 0) {
     return false;
   }
@@ -80,6 +77,29 @@ const isPublicCatalogOperation = (req: express.Request): boolean => {
   }
 };
 
+const isPublicCatalogOperation = (req: express.Request): boolean => {
+  if (!req.body) {
+    return false;
+  }
+
+  // Batched request: array of operation bodies.
+  // Treat as public only when every operation in the batch is public.
+  if (Array.isArray(req.body)) {
+    return (
+      req.body.length > 0 &&
+      req.body.every((item: unknown) =>
+        item !== null &&
+        typeof item === "object" &&
+        isSinglePublicCatalogBody(item as { query?: unknown; operationName?: unknown })
+      )
+    );
+  }
+
+  return isSinglePublicCatalogBody(
+    req.body as { query?: unknown; operationName?: unknown }
+  );
+};
+
 const optionalAuthForNonCatalogQueries: express.RequestHandler = (
   req,
   res,
@@ -96,6 +116,9 @@ const optionalAuthForNonCatalogQueries: express.RequestHandler = (
 export async function configureGraphQL(app: express.Application) {
   const apolloServer = new ApolloServer({
     schema: combinedSchemas,
+    // Required to accept batched requests from BatchHttpLink on the client.
+    // Without this flag Apollo Server rejects array-body POSTs with 400.
+    allowBatchedHttpRequests: true,
   });
   await apolloServer.start();
 

@@ -243,11 +243,17 @@ export const mutationAuditLogger = async (
   const startedAt = Date.now();
   const occurredAt = new Date().toISOString();
   const context = extractEntityContext(req);
-  context.previousState = await fetchPreviousState(
-    context.entity,
-    context.entityId,
-    context.pathSegments
-  );
+
+  // Fetch previous state best-effort — never block the request on a failure.
+  try {
+    context.previousState = await fetchPreviousState(
+      context.entity,
+      context.entityId,
+      context.pathSegments
+    );
+  } catch {
+    context.previousState = null;
+  }
 
   res.on("finish", () => {
     const payload = {

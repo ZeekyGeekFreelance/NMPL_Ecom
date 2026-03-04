@@ -11,6 +11,7 @@ Create a `.env` file in your production environment with these variables:
 ```bash
 # Server Configuration
 NODE_ENV=production
+DB_ENV=production
 PORT=5000
 
 # Security
@@ -24,7 +25,15 @@ ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com,https://app.yo
 COOKIE_DOMAIN=.yourdomain.com
 
 # Database
-DATABASE_URL=your-production-database-url
+# Neon pooled URL (runtime)
+DATABASE_URL=postgresql://<neon_user>:<neon_password>@<neon_pooler_host>/<db_name>?sslmode=require&pgbouncer=true&connection_limit=20&pool_timeout=20
+
+# Neon direct URL (Prisma migrate/status)
+DIRECT_URL=postgresql://<neon_user>:<neon_password>@<neon_direct_host>/<db_name>?sslmode=require
+DB_SSL_REQUIRED=true
+
+# Required for explicit production catalog import authorization
+ALLOW_PROD_CATALOG_IMPORT=false
 
 # Redis
 REDIS_URL=your-production-redis-url
@@ -231,12 +240,15 @@ grep "session" /var/log/your-app.log
 ```bash
 # .env.production
 NODE_ENV=production
+DB_ENV=production
 PORT=5000
 COOKIE_SECRET=your-64-character-random-secret-key-here
 SESSION_SECRET=your-64-character-random-session-secret-here
 ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com
 COOKIE_DOMAIN=.myapp.com
 DATABASE_URL=postgresql://user:pass@host:port/db
+DIRECT_URL=postgresql://user:pass@host:port/db?sslmode=require
+ALLOW_PROD_CATALOG_IMPORT=false
 REDIS_URL=redis://host:port
 ```
 

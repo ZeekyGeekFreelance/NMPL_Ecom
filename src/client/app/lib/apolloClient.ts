@@ -1,4 +1,5 @@
-import { ApolloClient, InMemoryCache, HttpLink, from } from "@apollo/client";
+import { ApolloClient, InMemoryCache, from } from "@apollo/client";
+import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { onError } from "@apollo/client/link/error";
 import { RetryLink } from "@apollo/client/link/retry";
 import { loadDevMessages, loadErrorMessages } from "@apollo/client/dev";
@@ -81,34 +82,53 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
   }
 });
 export const initializeApollo = (initialState = null) => {
-  const httpLink = new HttpLink({
+  // BatchHttpLink merges concurrent queries (e.g. GET_PRODUCTS + GET_CATEGORIES
+  // on the shop page) into a single HTTP POST, halving round trips.
+  // batchInterval: wait up to 20ms for more queries before flushing.
+  // batchMax: never bundle more than 5 queries in one request.
+  const httpLink = new BatchHttpLink({
     uri: GRAPHQL_URL,
     credentials: "include",
+    batchInterval: 20,
+    batchMax: 5,
+    headers: { "x-public-catalog": "1" },
   });
+
   const retryLink = new RetryLink({
     attempts: {
-      max: 3,
-      retryIf: (error) => {
-        if (!error) {
-          return false;
-        }
+      max: 4,
+      retryIf: (error, _operation) => {
+        if (!error) return false;
 
-        if (isEndpointUnreachableError(error)) {
-          return false;
-        }
+        // Always retry transient network failures ("Failed to fetch",
+        // ECONNREFUSED etc.) — these are cold-start / flaky network errors.
+        if (isEndpointUnreachableError(error)) return true;
 
         const statusCode = getErrorStatusCode(error);
-        if (typeof statusCode !== "number") {
-          return false;
-        }
+        if (typeof statusCode !== "number") return false;
 
+        // Retry server errors and rate-limit responses.
         return statusCode === 429 || statusCode >= 500;
       },
     },
-    delay: {
-      initial: 300,
-      max: 1500,
-      jitter: true,
+    delay: (count, _operation, error) => {
+      const statusCode = getErrorStatusCode(error);
+
+      // For 429 rate-limit responses use pure exponential backoff with full
+      // jitter to avoid thundering herd: random value in [0, base * 2^attempt].
+      // This spreads retries across a wide window so clients don’t all retry
+      // at the same moment after a rate-limit event.
+      if (statusCode === 429) {
+        const base = 1000;
+        const cap = 30_000;
+        const ceiling = Math.min(cap, base * Math.pow(2, count));
+        return Math.random() * ceiling;
+      }
+
+      // For transient network errors use shorter fixed jitter window.
+      const initial = 500;
+      const max = 3000;
+      return initial + Math.random() * (max - initial);
     },
   });
 
@@ -117,13 +137,18 @@ export const initializeApollo = (initialState = null) => {
     link: from([errorLink, retryLink, httpLink]),
     cache: new InMemoryCache({
       typePolicies: {
+        // ProductConnection is not normalised by id — it's a query-level
+        // result.  Merging by replacing prevents the "Cannot merge arrays"
+        // invariant when the same query is written multiple times (e.g.
+        // writeQuery from SSR seed + background poll).
+        ProductConnection: {
+          merge: true,
+        },
         Product: {
           fields: {
             variants: {
-              // Variants is an array field. Returning the latest server payload
-              // avoids Apollo's "Cannot automatically merge arrays" invariant error.
-              merge(existing, incoming) {
-                return incoming ?? existing ?? [];
+              merge(_existing, incoming) {
+                return incoming ?? [];
               },
             },
           },

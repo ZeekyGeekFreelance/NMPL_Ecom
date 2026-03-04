@@ -125,6 +125,7 @@ export class VariantService {
     productId: string;
     sku: string;
     price: number;
+    defaultDealerPrice?: number | null;
     images: string[];
     stock: number;
     lowStockThreshold?: number;
@@ -239,6 +240,7 @@ export class VariantService {
     data: Partial<{
       sku: string;
       price: number;
+      defaultDealerPrice?: number | null;
       images?: string[];
       stock: number;
       lowStockThreshold?: number;

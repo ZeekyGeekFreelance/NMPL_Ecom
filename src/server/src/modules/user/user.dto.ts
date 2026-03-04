@@ -122,10 +122,10 @@ export class CreateDealerDto {
 
 export class UpdateDealerStatusDto {
   @IsNotEmpty({ message: "Status is required" })
-  @IsIn(["PENDING", "APPROVED", "REJECTED"], {
-    message: "Status must be PENDING, APPROVED, or REJECTED",
+  @IsIn(["PENDING", "APPROVED", "LEGACY", "REJECTED", "SUSPENDED"], {
+    message: "Status must be PENDING, APPROVED, LEGACY, REJECTED, or SUSPENDED",
   })
-  status!: "PENDING" | "APPROVED" | "REJECTED";
+  status!: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 }
 
 export class DealerPriceItemDto {

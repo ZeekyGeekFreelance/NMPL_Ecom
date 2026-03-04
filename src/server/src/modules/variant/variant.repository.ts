@@ -122,6 +122,7 @@ export class VariantRepository {
     productId: string;
     sku: string;
     price: number;
+    defaultDealerPrice?: number | null;
     images: string[];
     stock: number;
     lowStockThreshold?: number;
@@ -158,6 +159,7 @@ export class VariantRepository {
     data: Partial<{
       sku: string;
       price: number;
+      defaultDealerPrice?: number | null;
       images?: string[];
       stock: number;
       lowStockThreshold?: number;

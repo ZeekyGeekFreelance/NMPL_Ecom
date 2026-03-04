@@ -10,21 +10,21 @@ const prisma = new PrismaClient({
   },
 });
 
-if (config.isDevelopment) {
-  prisma.$use(async (params, next) => {
-    const startedAt = performance.now();
-    const result = await next(params);
-    const durationMs = performance.now() - startedAt;
+// Register query telemetry in all environments.
+// In production this powers slow-query detection; in development it aids local profiling.
+prisma.$use(async (params, next) => {
+  const startedAt = performance.now();
+  const result = await next(params);
+  const durationMs = performance.now() - startedAt;
 
-    recordQueryMetric({
-      model: params.model || "raw",
-      action: params.action,
-      durationMs,
-    });
-
-    return result;
+  recordQueryMetric({
+    model: params.model || "raw",
+    action: params.action,
+    durationMs,
   });
-}
+
+  return result;
+});
 
 export const connectDB = async () => {
   try {

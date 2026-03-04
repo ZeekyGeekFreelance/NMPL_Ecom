@@ -4,7 +4,7 @@ import crypto from "crypto";
 import AppError from "@/shared/errors/AppError";
 import { passwordUtils } from "@/shared/utils/authUtils";
 
-export type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type DealerStatus = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 
 export interface DealerProfileRecord {
   id: string;
@@ -170,7 +170,7 @@ export class AuthRepository {
             ${data.userId},
             ${data.businessName ?? null},
             ${data.contactPhone ?? null},
-            ${data.status},
+            ${data.status}::"DEALER_STATUS",
             ${approvedAt},
             ${data.approvedBy ?? null},
             ${now},

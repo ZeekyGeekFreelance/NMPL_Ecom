@@ -37,31 +37,33 @@ export class ProductRepository {
         : {}),
     };
 
-    const queryOptions: any = {
+    // Default: lean select for list pages. Callers that need the full
+    // variant+attribute tree should pass an explicit select.
+    const defaultSelect: Prisma.ProductSelect = {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      isNew: true,
+      isFeatured: true,
+      isTrending: true,
+      isBestSeller: true,
+      salesCount: true,
+      categoryId: true,
+      category: {
+        select: { id: true, name: true, slug: true, description: true },
+      },
+      createdAt: true,
+      updatedAt: true,
+    };
+
+    return prisma.product.findMany({
       where: finalWhere,
       orderBy,
       skip,
       take,
-    };
-
-    if (select) {
-      queryOptions.select = select;
-    } else {
-      queryOptions.include = {
-        variants: {
-          include: {
-            attributes: {
-              include: {
-                attribute: true,
-                value: true,
-              },
-            },
-          },
-        },
-      };
-    }
-
-    return prisma.product.findMany(queryOptions);
+      select: select ?? defaultSelect,
+    });
   }
 
   async countProducts(params: { where?: Prisma.ProductWhereInput }) {

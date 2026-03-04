@@ -36,34 +36,40 @@ const resolveCredentials = (): { user: string; pass: string } => {
   return { user, pass };
 };
 
-const createTransporter = (
-  user: string,
-  pass: string
-): nodemailer.Transporter => {
-  const smtpHost = config.email.smtpHost;
-  if (smtpHost) {
-    const port = config.email.smtpPort;
-    const secure = config.email.smtpSecure;
+// Singleton transporter — reuses the same SMTP connection pool across all emails.
+// Re-created only if credentials change between calls (unlikely in practice).
+let _transporter: nodemailer.Transporter | null = null;
+let _transporterCacheKey = "";
 
-    return nodemailer.createTransport({
+const getTransporter = (user: string, pass: string): nodemailer.Transporter => {
+  const cacheKey = `${user}:${pass}:${config.email.smtpHost}:${config.email.smtpPort}`;
+  if (_transporter && _transporterCacheKey === cacheKey) {
+    return _transporter;
+  }
+
+  const smtpHost = config.email.smtpHost;
+  let transporter: nodemailer.Transporter;
+
+  if (smtpHost) {
+    transporter = nodemailer.createTransport({
       host: smtpHost,
-      port,
-      secure,
-      auth: {
-        user,
-        pass,
-      },
+      port: config.email.smtpPort,
+      secure: config.email.smtpSecure,
+      auth: { user, pass },
+      pool: true,          // keep-alive connection pool
+      maxConnections: 5,
+      maxMessages: 100,
+    });
+  } else {
+    transporter = nodemailer.createTransport({
+      service: config.email.emailService,
+      auth: { user, pass },
     });
   }
 
-  const service = config.email.emailService;
-  return nodemailer.createTransport({
-    service,
-    auth: {
-      user,
-      pass,
-    },
-  });
+  _transporter = transporter;
+  _transporterCacheKey = cacheKey;
+  return transporter;
 };
 
 const sendEmail = async ({
@@ -86,7 +92,7 @@ const sendEmail = async ({
       return false;
     }
 
-    const transporter = createTransporter(emailUser, emailPass);
+    const transporter = getTransporter(emailUser, emailPass);
     const fromAddress = config.email.from;
     const fromName = config.email.fromName || `${platformName} Support`;
 

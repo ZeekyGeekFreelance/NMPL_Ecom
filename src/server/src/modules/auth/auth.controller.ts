@@ -133,13 +133,9 @@ export class AuthController {
       message: "User logged in successfully",
     });
 
-    const start = Date.now();
-    const end = Date.now();
-
     this.logsService.info("Sign in", {
       userId,
       sessionId: req.session.id,
-      timePeriod: end - start,
     });
   });
 
@@ -184,13 +180,13 @@ export class AuthController {
       ...clearCookieOptions,
     });
 
+    const signoutDuration = Date.now() - start;
     sendResponse(res, 200, { message: "Logged out successfully" });
-    const end = Date.now();
 
     this.logsService.info("Sign out", {
       userId,
       sessionId: req.session.id,
-      timePeriod: end - start,
+      timePeriod: signoutDuration,
     });
   });
 
@@ -232,13 +228,10 @@ export class AuthController {
       const userId = req.user?.id;
 
       sendResponse(res, 200, { message: response.message });
-      const start = Date.now();
-      const end = Date.now();
 
       this.logsService.info("Reset Password", {
         userId,
         sessionId: req.session.id,
-        timePeriod: end - start,
       });
     }
   );

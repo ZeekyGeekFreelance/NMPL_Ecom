@@ -3,6 +3,7 @@ import slugify from "@/shared/utils/slugify";
 import ApiFeatures from "@/shared/utils/ApiFeatures";
 import { CategoryRepository } from "./category.repository";
 import prisma from "@/infra/database/database.config";
+import { clearCategoryCache } from "@/modules/product/graphql/resolver";
 
 export class CategoryService {
   constructor(private categoryRepository: CategoryRepository) {}
@@ -75,6 +76,7 @@ export class CategoryService {
       images: data.images,
       attributes: data.attributes,
     });
+    clearCategoryCache();
     return { category };
   }
 
@@ -102,6 +104,7 @@ export class CategoryService {
       description: data.description,
       images: data.images,
     });
+    clearCategoryCache();
     return { category: updatedCategory };
   }
 
@@ -111,6 +114,7 @@ export class CategoryService {
       throw new AppError(404, "Category not found");
     }
     await this.categoryRepository.deleteCategory(categoryId);
+    clearCategoryCache();
   }
 
   async addCategoryAttribute(categoryId: string, attributeId: string, isRequired: boolean) {

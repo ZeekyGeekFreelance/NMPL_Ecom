@@ -3,6 +3,7 @@ import AppError from "./AppError";
 import logger from "@/infra/winston/logger";
 import { makeLogsService } from "@/modules/logs/logs.factory";
 import { config } from "@/config";
+import multer from "multer";
 
 interface CustomError extends Error {
   name: string;
@@ -62,6 +63,19 @@ const globalError = async (
   res: Response,
   _next: NextFunction
 ): Promise<void> => {
+  // Handle Multer file upload errors before general processing.
+  if (err instanceof multer.MulterError) {
+    const multerMessages: Record<string, string> = {
+      LIMIT_FILE_SIZE: "File too large. Maximum allowed size is 10 MB.",
+      LIMIT_FILE_COUNT: "Too many files. Maximum 5 files allowed per upload.",
+      LIMIT_UNEXPECTED_FILE: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.",
+      LIMIT_FIELD_VALUE: "Field value too large.",
+    };
+    const message = multerMessages[err.code] || `Upload error: ${err.message}`;
+    res.status(400).json({ status: "fail", message, traceId: req.traceId || "unknown" });
+    return;
+  }
+
   let error: AppError =
     err instanceof AppError ? err : new AppError(500, err.message);
 
@@ -100,8 +114,6 @@ const globalError = async (
   }
 
   const start = Date.now();
-  const end = Date.now();
-
   try {
     await logsService.error(`Error: ${error.message}`, {
       statusCode: error.statusCode,
@@ -110,7 +122,7 @@ const globalError = async (
       url: req.originalUrl,
       traceId,
       userId: (req as { user?: { id?: string } }).user?.id || null,
-      timePeriod: end - start,
+      timePeriod: Date.now() - start,
     });
   } catch (loggingError) {
     const logErrorMessage =

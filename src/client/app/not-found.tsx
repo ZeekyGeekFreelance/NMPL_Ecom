@@ -11,9 +11,11 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const NotFoundPage = () => {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSearch = (e: React.FormEvent) => {
@@ -198,7 +200,7 @@ const NotFoundPage = () => {
         >
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
-              onClick={() => window.history.back()}
+              onClick={() => router.back()}
               className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
             >
               <ArrowLeft className="w-5 h-5" />

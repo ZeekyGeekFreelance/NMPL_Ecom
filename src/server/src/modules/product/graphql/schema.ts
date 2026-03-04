@@ -75,7 +75,7 @@ const typeDefs = gql`
   type ProductConnection {
     products: [ProductCard!]!
     hasMore: Boolean!
-    totalCount: Int!
+    totalCount: Int
   }
 
   input ProductFilters {

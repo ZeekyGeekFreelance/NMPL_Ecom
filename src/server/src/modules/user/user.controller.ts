@@ -89,18 +89,16 @@ export class UserController {
     async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
       const updatedData = req.body;
+      const start = Date.now();
       const user = await this.userService.updateMe(id, updatedData);
       sendResponse(res, 200, {
         data: { user },
         message: "User updated successfully",
       });
-      const start = Date.now();
-      const end = Date.now();
 
       this.logsService.info("User updated", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
       });
     }
   );
@@ -114,15 +112,14 @@ export class UserController {
         throw new AppError(401, "User not authenticated");
       }
 
+      const start = Date.now();
       await this.userService.deleteUser(id, currentUserId);
       sendResponse(res, 204, { message: "User deleted successfully" });
-      const start = Date.now();
-      const end = Date.now();
 
       this.logsService.info("User deleted", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
+        timePeriod: Date.now() - start,
       });
     }
   );
@@ -148,13 +145,9 @@ export class UserController {
           : "Admin created successfully",
       });
 
-      const start = Date.now();
-      const end = Date.now();
-
       this.logsService.info("Admin created", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
       });
     }
   );
@@ -215,9 +208,9 @@ export class UserController {
         typeof req.query.status === "string"
           ? req.query.status.toUpperCase()
           : undefined;
-      const allowedStatuses = new Set(["PENDING", "APPROVED", "REJECTED"]);
+      const allowedStatuses = new Set(["PENDING", "APPROVED", "LEGACY", "REJECTED", "SUSPENDED"]);
       const status = rawStatus && allowedStatuses.has(rawStatus)
-        ? (rawStatus as "PENDING" | "APPROVED" | "REJECTED")
+        ? (rawStatus as "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED")
         : undefined;
 
       const dealers = await this.userService.getDealers(status);

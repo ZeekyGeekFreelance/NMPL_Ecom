@@ -26,10 +26,6 @@ const SLOW_QUERY_THRESHOLD_MS = 200;
 const formatKib = (bytes: number): string => (bytes / 1024).toFixed(2);
 
 export const recordQueryMetric = (query: QueryMetricRecord): void => {
-  if (!config.isDevelopment) {
-    return;
-  }
-
   const current = store.getStore();
   if (!current) {
     return;
@@ -49,10 +45,6 @@ export const recordQueryMetric = (query: QueryMetricRecord): void => {
 
 export const createRequestMetricsMiddleware = () => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!config.isDevelopment) {
-      next();
-      return;
-    }
 
     const metricStore: RequestMetricStore = {
       method: req.method,
@@ -115,21 +107,32 @@ export const createRequestMetricsMiddleware = () => {
         responseSizeKb: Number(formatKib(responseSizeBytes)),
       };
 
-      console.log(`[perf] request-summary ${JSON.stringify(summary)}`);
+      // In development: human-readable console output.
+      // In production: structured JSON picked up by your log aggregator.
+      if (config.isDevelopment) {
+        console.log(`[perf] request-summary ${JSON.stringify(summary)}`);
+      } else {
+        // Emit as a single JSON line so log drains (Datadog, Loki, etc.) parse it.
+        process.stdout.write(JSON.stringify({ level: "info", event: "request-summary", ...summary }) + "\n");
+      }
 
+      // Slow queries are always surfaced — they indicate DB problems in production too.
       if (metricStore.slowQueries.length > 0) {
         metricStore.slowQueries.forEach((query) => {
-          console.warn(
-            `[perf] slow-query ${JSON.stringify({
-              traceId: metricStore.traceId,
-              method: metricStore.method,
-              path: metricStore.path,
-              model: query.model,
-              action: query.action,
-              durationMs: Number(query.durationMs.toFixed(2)),
-              thresholdMs: SLOW_QUERY_THRESHOLD_MS,
-            })}`
-          );
+          const slowEntry = {
+            traceId: metricStore.traceId,
+            method: metricStore.method,
+            path: metricStore.path,
+            model: query.model,
+            action: query.action,
+            durationMs: Number(query.durationMs.toFixed(2)),
+            thresholdMs: SLOW_QUERY_THRESHOLD_MS,
+          };
+          if (config.isDevelopment) {
+            console.warn(`[perf] slow-query ${JSON.stringify(slowEntry)}`);
+          } else {
+            process.stdout.write(JSON.stringify({ level: "warn", event: "slow-query", ...slowEntry }) + "\n");
+          }
         });
       }
     });

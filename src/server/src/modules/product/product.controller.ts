@@ -6,6 +6,7 @@ import slugify from "@/shared/utils/slugify";
 import { makeLogsService } from "../logs/logs.factory";
 import { uploadToCloudinary } from "@/shared/utils/uploadToCloudinary";
 import AppError from "@/shared/errors/AppError";
+import logger from "@/infra/winston/logger";
 
 const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
 
@@ -86,7 +87,9 @@ export class ProductController {
             throw new AppError(400, "Failed to upload images to Cloudinary");
           }
         } catch (error) {
-          console.error("Cloudinary upload error:", error);
+          const uploadMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`[product.controller] createProduct Cloudinary upload failed: ${uploadMessage}`);
+          if (error instanceof AppError) throw error;
           throw new AppError(400, "Failed to upload images to Cloudinary");
         }
       }
@@ -309,7 +312,8 @@ export class ProductController {
                   try {
                     uploadedImages = await uploadToCloudinary(variantFiles);
                   } catch (error) {
-                    console.error("Cloudinary upload error:", error);
+                    const uploadMessage = error instanceof Error ? error.message : String(error);
+                    logger.error(`[product.controller] updateProduct Cloudinary upload failed (${variantLabel}): ${uploadMessage}`);
                     throw new AppError(
                       400,
                       `Failed to upload images to Cloudinary for ${variantLabel}.`
@@ -345,7 +349,8 @@ export class ProductController {
                   try {
                     uploadedImages = await uploadToCloudinary(legacyVariantFiles);
                   } catch (error) {
-                    console.error("Cloudinary upload error:", error);
+                    const legacyUploadMsg = error instanceof Error ? error.message : String(error);
+                    logger.error(`[product.controller] updateProduct legacy Cloudinary upload failed (${variantLabel}): ${legacyUploadMsg}`);
                     throw new AppError(
                       400,
                       `Failed to upload images to Cloudinary for ${variantLabel}.`
@@ -503,35 +508,34 @@ export class ProductController {
 
   bulkCreateProducts = asyncHandler(async (req: Request, res: Response) => {
     const file = req.file;
-    const result = await this.productService.bulkCreateProducts(file!);
-
-    sendResponse(res, 201, {
-      data: { count: result.count },
-      message: `${result.count} products created successfully`,
-    });
     const start = Date.now();
-    const end = Date.now();
+    const result = await this.productService.bulkCreateProducts(file!);
 
     this.logsService.info("Bulk Products created", {
       userId: req.user?.id,
       sessionId: req.session.id,
-      timePeriod: end - start,
+      timePeriod: Date.now() - start,
+    });
+
+    sendResponse(res, 201, {
+      data: { count: result.count },
+      message: `${result.count} products created successfully`,
     });
   });
 
   deleteProduct = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { id: productId } = req.params;
-      await this.productService.deleteProduct(productId);
-      sendResponse(res, 200, { message: "Product deleted successfully" });
       const start = Date.now();
-      const end = Date.now();
+      await this.productService.deleteProduct(productId);
 
       this.logsService.info("Product deleted", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
+        timePeriod: Date.now() - start,
       });
+
+      sendResponse(res, 200, { message: "Product deleted successfully" });
     }
   );
 }

@@ -391,6 +391,7 @@ export class ProductService {
     variants?: {
       sku: string;
       price: number;
+      defaultDealerPrice?: number | null;
       images: string[];
       stock: number;
       lowStockThreshold?: number;
@@ -562,6 +563,7 @@ export class ProductService {
           productId: product.id,
           sku: variant.sku,
           price: variant.price,
+          defaultDealerPrice: variant.defaultDealerPrice ?? null,
           stock: variant.stock,
           lowStockThreshold: variant.lowStockThreshold || 10,
           barcode: variant.barcode,
@@ -606,6 +608,7 @@ export class ProductService {
         id?: string;
         sku: string;
         price: number;
+        defaultDealerPrice?: number | null;
         images: string[];
         stock: number;
         lowStockThreshold?: number;
@@ -831,6 +834,11 @@ export class ProductService {
               data: {
                 sku: variant.sku,
                 price: variant.price,
+                // Only update defaultDealerPrice if explicitly provided in payload.
+                // undefined = caller did not touch it, so leave DB value intact.
+                ...("defaultDealerPrice" in variant && {
+                  defaultDealerPrice: variant.defaultDealerPrice ?? null,
+                }),
                 stock: variant.stock,
                 lowStockThreshold: variant.lowStockThreshold || 10,
                 barcode: variant.barcode || null,
@@ -860,6 +868,7 @@ export class ProductService {
               productId,
               sku: variant.sku,
               price: variant.price,
+              defaultDealerPrice: variant.defaultDealerPrice ?? null,
               stock: variant.stock,
               lowStockThreshold: variant.lowStockThreshold || 10,
               barcode: variant.barcode,
@@ -962,6 +971,7 @@ export class ProductService {
         throw new AppError(400, "Unsupported file format. Use CSV or XLSX");
       }
     } catch (error) {
+      if (error instanceof AppError) throw error;
       throw new AppError(400, "Failed to parse file");
     }
 

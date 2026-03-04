@@ -9,6 +9,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
@@ -19,6 +20,7 @@ interface GlobalErrorProps {
 
 const GlobalError: React.FC<GlobalErrorProps> = ({ error, reset }) => {
   const [isRetrying, setIsRetrying] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (error) {
@@ -28,23 +30,21 @@ const GlobalError: React.FC<GlobalErrorProps> = ({ error, reset }) => {
 
   const handleRetry = async () => {
     setIsRetrying(true);
-    // Simulate retry delay for better UX
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 800));
     setIsRetrying(false);
     reset();
   };
 
   const handleGoHome = () => {
-    window.location.href = "/";
+    router.push("/");
   };
 
   const handleReport = () => {
-    // In a real app, this would open a support form or email
-    alert("Report functionality would open here");
+    router.push("/support");
   };
 
   const handleGoBack = () => {
-    window.history.back();
+    router.back();
   };
 
   return (

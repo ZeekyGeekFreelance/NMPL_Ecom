@@ -4,11 +4,25 @@ Full-stack ecommerce platform for NMPL with role-based workflows (`SUPERADMIN`, 
 
 ## Most Important Setup Steps
 
-Choose one mode only:
-- `Docker mode` (recommended)
-- `Node mode` (no Docker)
+This project is now configured for **Neon Postgres only** (no local Postgres service).
 
-Do not run both at the same time on the same ports.
+Choose one mode only:
+- `Docker mode` (recommended): runs app containers, uses external Neon DB
+- `Node mode` (no Docker): runs app directly on host, uses external Neon DB
+
+## Neon Connection Requirements
+
+Use both URLs from your Neon project:
+
+```env
+# Pooled endpoint for app runtime
+DATABASE_URL=postgresql://<neon_user>:<neon_password>@<neon_pooler_host>/<db_name>?sslmode=require&pgbouncer=true&connection_limit=20&pool_timeout=20
+
+# Direct endpoint for Prisma migrate/status
+DIRECT_URL=postgresql://<neon_user>:<neon_password>@<neon_direct_host>/<db_name>?sslmode=require
+
+DB_SSL_REQUIRED=true
+```
 
 ## 1) Docker Mode (Fastest)
 
@@ -20,22 +34,17 @@ cd NMPL_Ecom
 ```
 
 ```powershell
-Copy-Item src/.env.example src/.env
 Copy-Item src/server/.env.example src/server/.env
 Copy-Item src/client/.env.example src/client/.env
-```
-
-Set `src/.env`:
-
-```env
-POSTGRES_USER=jhaecom
-POSTGRES_PASSWORD=jhaecom27
-POSTGRES_DB=b2c_ecommerce
 ```
 
 Set required values in `src/server/.env`:
 
 ```env
+DATABASE_URL=<your_neon_pooled_url>
+DIRECT_URL=<your_neon_direct_url>
+DB_SSL_REQUIRED=true
+DB_ENV=development
 SESSION_SECRET=change_me
 COOKIE_SECRET=change_me
 ACCESS_TOKEN_SECRET=change_me
@@ -65,8 +74,8 @@ curl.exe -X POST http://localhost:5000/api/v1/graphql -H "Content-Type: applicat
 
 Prerequisites:
 - Node.js 22+
-- PostgreSQL running locally
-- Redis running locally
+- Neon Postgres project (pooled + direct URLs)
+- Redis (local or managed)
 
 ### A. First-time setup
 
@@ -80,13 +89,14 @@ Copy-Item src/server/.env.example src/server/.env
 Copy-Item src/client/.env.example src/client/.env
 ```
 
-Set `src/server/.env` for local services:
+Set `src/server/.env`:
 
 ```env
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:5432/b2c_ecommerce
+DATABASE_URL=<your_neon_pooled_url>
+DIRECT_URL=<your_neon_direct_url>
+DB_SSL_REQUIRED=true
+DB_ENV=development
 REDIS_URL=redis://localhost:6379
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
 NODE_ENV=development
 PORT=5000
 ALLOWED_ORIGINS=http://localhost:3000
@@ -96,12 +106,6 @@ COOKIE_SECRET=change_me
 ACCESS_TOKEN_SECRET=change_me
 REFRESH_TOKEN_SECRET=change_me
 SMS_PROVIDER=LOG
-```
-
-If Docker Postgres is used from host tools, use `127.0.0.1:5433` to avoid collision with local Windows Postgres service:
-
-```env
-DATABASE_URL=postgresql://jhaecom:jhaecom27@127.0.0.1:5433/b2c_ecommerce
 ```
 
 Install dependencies:
@@ -148,26 +152,10 @@ npm run dev
 - `admin@example.com` / `password123`
 - `user@example.com` / `password123`
 
-## Conflict-Free Rules
+## Run Rules
 
-- Do not run Docker stack and local PostgreSQL/Redis on the same ports simultaneously.
-- If Docker mode is active, stop it before Node mode:
-
-```bash
-cd src
-docker compose down
-```
-
+- Do not run Docker mode and Node mode at the same time on the same ports.
 - Migration must run before seed.
-- Seed resets existing data (users/orders/products), so use only when intended.
-
-## Fast Recovery After Docker Reset
-
-If Docker data/volumes are deleted, recover with:
-
-```bash
-cd src
-docker compose up -d --build
-docker compose exec server npx prisma migrate deploy
-docker compose exec server npm run seed
-```
+- Seeding is environment-routed (`prisma/seed.ts`): dev runs `seed-dev`, production runs `import-catalog`.
+- Dev cleanup (`deleteMany`) only runs when `SEED_RESET=true`.
+- Production catalog import requires explicit `ALLOW_PROD_CATALOG_IMPORT=true`.

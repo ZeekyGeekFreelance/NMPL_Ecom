@@ -346,12 +346,18 @@ export class UserService {
     previous: Array<{
       variantId: string;
       customPrice: number;
+      previousPrice?: number | null;
+      basePrice: number;
+      defaultDealerPrice?: number | null;
       sku: string;
       productName: string;
     }>,
     next: Array<{
       variantId: string;
       customPrice: number;
+      previousPrice?: number | null;
+      basePrice: number;
+      defaultDealerPrice?: number | null;
       sku: string;
       productName: string;
     }>
@@ -377,12 +383,15 @@ export class UserService {
         return;
       }
 
+      // basePrice is the retail price — always numeric, sourced from ProductVariant.price.
+      const basePrice = nextRow?.basePrice ?? previousRow?.basePrice ?? 0;
+
       changes.push({
         sku: nextRow?.sku ?? previousRow?.sku ?? variantId,
-        productName:
-          nextRow?.productName ?? previousRow?.productName ?? "Product",
+        productName: nextRow?.productName ?? previousRow?.productName ?? "Product",
         previousPrice,
         nextPrice,
+        basePrice,
       });
     });
 
@@ -932,6 +941,24 @@ export class UserService {
     });
   }
 
+  /**
+   * The set of dealer statuses that are permitted to have pricing configured.
+   * PENDING, REJECTED, and SUSPENDED dealers must NOT receive pricing.
+   */
+  private static readonly PRICING_ELIGIBLE_STATUSES = new Set<string>([
+    "APPROVED",
+    "LEGACY",
+  ]);
+
+  private assertDealerPricingEligible(status: string | null | undefined): void {
+    if (!status || !UserService.PRICING_ELIGIBLE_STATUSES.has(status)) {
+      throw new AppError(
+        403,
+        `Dealer pricing can only be configured for APPROVED or LEGACY dealers. Current status: ${status ?? "NONE"}.`
+      );
+    }
+  }
+
   async setDealerPrices(
     dealerId: string,
     prices: DealerPriceInput[],
@@ -958,6 +985,9 @@ export class UserService {
     if (!dealerProfile) {
       throw new AppError(404, "Dealer profile not found");
     }
+
+    // ✅ HARD RULE: pricing blocked for non-approved/non-legacy dealers.
+    this.assertDealerPricingEligible(dealerProfile.status);
 
     const normalizedPrices = Array.from(
       new Map(
@@ -1009,12 +1039,17 @@ export class UserService {
         "Internal team accounts cannot receive dealer pricing maps"
       );
     }
+
+    // Capture previous state before the write.
     const previousMappings = await this.userRepository.getDealerPrices(safeDealerId);
+
+    // Write prices — repository handles batched upsert + stale delete in one transaction.
     const updatedMappings = await this.userRepository.setDealerPrices(
       safeDealerId,
       normalizedPrices
     );
 
+    // ✅ Email fires ONLY after the DB transaction committed AND dealer is eligible.
     if (dealerUser) {
       const pricingChanges = this.buildDealerPricingDiff(
         previousMappings,
@@ -1060,6 +1095,9 @@ export class UserService {
     if (!dealerProfile) {
       throw new AppError(404, "Dealer profile not found");
     }
+
+    // ✅ HARD RULE: pricing dashboard blocked for non-approved/non-legacy dealers.
+    this.assertDealerPricingEligible(dealerProfile.status);
 
     const dealerUser = await this.userRepository.findUserById(safeDealerId);
     if (dealerUser && this.isAdminRole(dealerUser.role)) {

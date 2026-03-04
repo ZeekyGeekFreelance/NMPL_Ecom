@@ -14,7 +14,12 @@
     "prisma": "prisma",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
-    "seed": "ts-node seeds/seed.ts"
+    "seed": "prisma generate && ts-node prisma/seed.ts",
+    "seed:dev": "prisma generate && ts-node prisma/seed-dev.ts",
+    "seed:catalog": "prisma generate && ts-node prisma/import-catalog.ts"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "engines": {
     "node": ">=22 <23"

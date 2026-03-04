@@ -2,9 +2,8 @@ import prisma from "@/infra/database/database.config";
 import { Prisma, ROLE } from "@prisma/client";
 import { passwordUtils } from "@/shared/utils/authUtils";
 import AppError from "@/shared/errors/AppError";
-import crypto from "crypto";
 
-export type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type DealerStatus = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 
 export interface DealerProfile {
   id: string;
@@ -301,11 +300,11 @@ export class UserRepository {
             "updatedAt"
           )
           VALUES (
-            ${crypto.randomUUID()},
+            gen_random_uuid(),
             ${data.userId},
             ${data.businessName ?? null},
             ${data.contactPhone ?? null},
-            ${data.status},
+            ${data.status}::"DEALER_STATUS",
             ${approvedAt},
             ${data.approvedBy ?? null},
             ${now},
@@ -315,10 +314,10 @@ export class UserRepository {
           DO UPDATE SET
             "businessName" = COALESCE(EXCLUDED."businessName", "DealerProfile"."businessName"),
             "contactPhone" = COALESCE(EXCLUDED."contactPhone", "DealerProfile"."contactPhone"),
-            "status" = EXCLUDED."status",
-            "approvedAt" = EXCLUDED."approvedAt",
-            "approvedBy" = EXCLUDED."approvedBy",
-            "updatedAt" = EXCLUDED."updatedAt"
+            "status"       = EXCLUDED."status",
+            "approvedAt"   = EXCLUDED."approvedAt",
+            "approvedBy"   = EXCLUDED."approvedBy",
+            "updatedAt"    = EXCLUDED."updatedAt"
         `
       );
     } catch (error) {
@@ -402,10 +401,10 @@ export class UserRepository {
         Prisma.sql`
           UPDATE "DealerProfile"
           SET
-            "status" = ${status},
+            "status"     = ${status}::"DEALER_STATUS",
             "approvedAt" = ${approvedAt},
-            "approvedBy" = ${status === "APPROVED" ? approvedBy ?? null : null},
-            "updatedAt" = ${now}
+            "approvedBy" = ${(status === "APPROVED" || status === "LEGACY") ? approvedBy ?? null : null},
+            "updatedAt"  = ${now}
           WHERE "userId" = ${userId}
         `
       );
@@ -422,37 +421,46 @@ export class UserRepository {
   async setDealerPrices(dealerId: string, prices: DealerPriceInput[]) {
     try {
       await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw(
-          Prisma.sql`DELETE FROM "DealerPriceMapping" WHERE "dealerId" = ${dealerId}`
-        );
-
         if (!prices.length) {
+          // Wipe all mappings for this dealer when the price list is cleared.
+          await tx.$executeRaw(
+            Prisma.sql`DELETE FROM "DealerPriceMapping" WHERE "dealerId" = ${dealerId}`
+          );
           return;
         }
 
         const now = new Date();
-        for (const price of prices) {
-          await tx.$executeRaw(
-            Prisma.sql`
-              INSERT INTO "DealerPriceMapping" (
-                "id",
-                "dealerId",
-                "variantId",
-                "customPrice",
-                "createdAt",
-                "updatedAt"
-              )
-              VALUES (
-                ${crypto.randomUUID()},
-                ${dealerId},
-                ${price.variantId},
-                ${price.customPrice},
-                ${now},
-                ${now}
-              )
-            `
-          );
-        }
+        const incomingVariantIds = prices.map((p) => p.variantId);
+
+        // 1. Remove stale mappings that are no longer in the incoming set (single DELETE).
+        await tx.$executeRaw(
+          Prisma.sql`
+            DELETE FROM "DealerPriceMapping"
+            WHERE "dealerId" = ${dealerId}
+              AND "variantId" NOT IN (${Prisma.join(incomingVariantIds)})
+          `
+        );
+
+        // 2. Upsert all prices in a single batched statement.
+        //    ON CONFLICT hits the composite unique index (dealerId, variantId) — O(1) per row.
+        //    previousPrice is set to the existing customPrice on update, preserved on insert.
+        //    NOTE: id column has no DEFAULT in the DB — must supply gen_random_uuid() explicitly.
+        const valuesSql = prices.map(
+          (p) =>
+            Prisma.sql`(gen_random_uuid(), ${dealerId}, ${p.variantId}, ${p.customPrice}, ${now}, ${now})`
+        );
+
+        await tx.$executeRaw(
+          Prisma.sql`
+            INSERT INTO "DealerPriceMapping" ("id", "dealerId", "variantId", "customPrice", "createdAt", "updatedAt")
+            VALUES ${Prisma.join(valuesSql)}
+            ON CONFLICT ("dealerId", "variantId")
+            DO UPDATE SET
+              "previousPrice" = "DealerPriceMapping"."customPrice",
+              "customPrice"   = EXCLUDED."customPrice",
+              "updatedAt"     = EXCLUDED."updatedAt"
+          `
+        );
       });
     } catch (error) {
       if (this.isDealerTableMissing(error)) {
@@ -470,16 +478,24 @@ export class UserRepository {
         Array<{
           variantId: string;
           customPrice: number;
+          previousPrice: number | null;
+          basePrice: number;          // pv.price — the retail base price
+          defaultDealerPrice: number | null; // pv.defaultDealerPrice — platform dealer price
           sku: string;
           productName: string;
+          lastUpdated: Date;
         }>
       >(
         Prisma.sql`
           SELECT
             m."variantId",
             m."customPrice",
+            m."previousPrice",
+            pv."price"               AS "basePrice",
+            pv."defaultDealerPrice",
             pv."sku",
-            p."name" AS "productName"
+            p."name"                 AS "productName",
+            m."updatedAt"            AS "lastUpdated"
           FROM "DealerPriceMapping" m
           INNER JOIN "ProductVariant" pv ON pv."id" = m."variantId"
           INNER JOIN "Product" p ON p."id" = pv."productId"
@@ -495,6 +511,11 @@ export class UserRepository {
     }
   }
 
+  /**
+   * Resolves effective dealer prices for a set of variants in a single query.
+   * Resolution order: customPrice (DealerPriceMapping) → defaultDealerPrice (ProductVariant).
+   * Variants with neither mapping nor defaultDealerPrice are excluded from the map.
+   */
   async getDealerPriceMap(
     dealerId: string,
     variantIds: string[]
@@ -504,20 +525,23 @@ export class UserRepository {
     }
 
     try {
-      const prices = await prisma.$queryRaw<
-        Array<{ variantId: string; customPrice: number }>
+      const rows = await prisma.$queryRaw<
+        Array<{ variantId: string; resolvedPrice: number }>
       >(
         Prisma.sql`
           SELECT
-            "variantId",
-            "customPrice"
-          FROM "DealerPriceMapping"
-          WHERE "dealerId" = ${dealerId}
-            AND "variantId" IN (${Prisma.join(variantIds)})
+            pv."id"                                              AS "variantId",
+            COALESCE(m."customPrice", pv."defaultDealerPrice")   AS "resolvedPrice"
+          FROM "ProductVariant" pv
+          LEFT JOIN "DealerPriceMapping" m
+            ON m."variantId" = pv."id"
+           AND m."dealerId"  = ${dealerId}
+          WHERE pv."id" IN (${Prisma.join(variantIds)})
+            AND COALESCE(m."customPrice", pv."defaultDealerPrice") IS NOT NULL
         `
       );
 
-      return new Map(prices.map((price) => [price.variantId, price.customPrice]));
+      return new Map(rows.map((row) => [row.variantId, Number(row.resolvedPrice)]));
     } catch (error) {
       if (this.isDealerTableMissing(error)) {
         return new Map();

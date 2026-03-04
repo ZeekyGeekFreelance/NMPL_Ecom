@@ -7,7 +7,11 @@ import { bootState } from "@/bootstrap/state";
 const router = Router();
 
 const buildHealthPayload = async () => {
-  const dbConnected = await pingDB();
+  // Allow up to 10s for DB ping — Neon free tier has cold-start latency.
+  const dbConnected = await Promise.race([
+    pingDB(),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10_000)),
+  ]);
   const redisConnected = config.redis.enabled ? await pingRedis() : true;
   const heapUsedMb = Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
   const memoryHealthy = heapUsedMb <= config.server.memoryUnhealthyThresholdMb;

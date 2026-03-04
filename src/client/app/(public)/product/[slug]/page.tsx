@@ -27,7 +27,11 @@ const ProductDetailsPage = () => {
     {
       variables: { slug: resolvedSlug },
       skip: !resolvedSlug,
-      fetchPolicy: "no-cache",
+      // cache-and-network: serves the cached variant immediately (no flash)
+      // then updates it from the network in the background. Avoids the
+      // full round-trip on every poll that "no-cache" caused.
+      fetchPolicy: "cache-and-network",
+      nextFetchPolicy: "cache-first",
       pollInterval: dealerCatalogPollInterval,
     }
   );
@@ -56,12 +60,12 @@ const ProductDetailsPage = () => {
 
   if (!resolvedSlug || loading) return <ProductDetailSkeletonLoader />;
 
-  if (error) {
+  if (error && !data?.product) {
     return (
       <MainLayout>
         <div className="text-center py-12">
           <p className="text-lg text-red-500">
-            Error loading product: {error.message}
+            Unable to load product. Please refresh and try again.
           </p>
         </div>
       </MainLayout>

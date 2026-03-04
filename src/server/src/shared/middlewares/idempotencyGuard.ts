@@ -153,9 +153,11 @@ export const idempotencyGuard = async (
     next();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // Log internally but do not leak Redis/infrastructure details to the client.
+    console.error(`[idempotencyGuard] Internal error: ${message}`);
     res.status(500).json({
       success: false,
-      message: `Failed to apply idempotency guard: ${message}`,
+      message: "Request could not be processed. Please try again.",
     });
   }
 };

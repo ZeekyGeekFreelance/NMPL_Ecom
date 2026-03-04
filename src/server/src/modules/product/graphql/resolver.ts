@@ -40,7 +40,7 @@ type ProductCard = {
 type ProductConnection = {
   products: ProductCard[];
   hasMore: boolean;
-  totalCount: number;
+  totalCount: number | null;
 };
 
 type ListingAggregate = {
@@ -57,6 +57,9 @@ const MAX_NESTED_PAGE_SIZE = 50;
 const CATALOG_CACHE_TTL_MS = 120_000;
 const CATALOG_CACHE_MAX_ENTRIES = 400;
 
+const CATEGORY_CACHE_TTL_MS = 300_000; // 5 min — categories change rarely
+const CATEGORY_CACHE_MAX_ENTRIES = 50;
+
 const catalogListingCache = new Map<
   string,
   {
@@ -65,8 +68,20 @@ const catalogListingCache = new Map<
   }
 >();
 
+const categoryCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    value: any[];
+  }
+>();
+
 export const clearCatalogListingCache = () => {
   catalogListingCache.clear();
+};
+
+export const clearCategoryCache = () => {
+  categoryCache.clear();
 };
 
 const parsePagination = (
@@ -197,11 +212,12 @@ const buildProductWhere = (filters: ProductFilters) => {
   }
 
   if (filters.flags && filters.flags.length > 0) {
-    const flagConditions = filters.flags.map((flag) => ({ [flag]: true }));
-    if (!where.OR) {
-      where.OR = [];
+    // Flags are AND conditions on the product row (isNew, isFeatured, etc.).
+    // They must NOT be merged into the search OR block — that would return
+    // any product matching a flag regardless of whether it matches the search.
+    for (const flag of filters.flags) {
+      where[flag] = true;
     }
-    where.OR = [...where.OR, ...flagConditions];
   }
 
   if (filters.categoryId) {
@@ -280,6 +296,7 @@ const resolveProductConnection = async (
     cacheFilters: ProductFilters;
     first?: number;
     skip?: number;
+    needsTotalCount?: boolean;
   }
 ): Promise<ProductConnection> => {
   const pagination = parsePagination(options.first, options.skip, {
@@ -308,9 +325,9 @@ const resolveProductConnection = async (
   const result =
     cached ||
     (await (async () => {
-      const totalCount = await context.prisma.product.count({
-        where: options.where,
-      });
+      const totalCount = options.needsTotalCount
+        ? await context.prisma.product.count({ where: options.where })
+        : null;
 
       const products = await context.prisma.product.findMany({
         where: options.where,
@@ -337,22 +354,29 @@ const resolveProductConnection = async (
         products.map((product) => product.id)
       );
 
-      const mappedProducts: ProductCard[] = products.map((product) => {
-        const aggregate = aggregateByProductId.get(product.id);
-        return {
-          id: product.id,
-          name: product.name,
-          slug: product.slug,
-          thumbnail: aggregate?.thumbnail || null,
-          minPrice: aggregate?.minPrice || 0,
-          maxPrice: aggregate?.maxPrice || 0,
-          category: product.category || null,
-        };
-      });
+      const mappedProducts: ProductCard[] = products
+        .filter((product) => {
+          // Exclude products with no variants — they have no price to display
+          // and would render as broken cards on the frontend.
+          const aggregate = aggregateByProductId.get(product.id);
+          return aggregate !== undefined && aggregate.minPrice > 0;
+        })
+        .map((product) => {
+          const aggregate = aggregateByProductId.get(product.id)!;
+          return {
+            id: product.id,
+            name: product.name,
+            slug: product.slug,
+            thumbnail: aggregate.thumbnail || null,
+            minPrice: aggregate.minPrice,
+            maxPrice: aggregate.maxPrice,
+            category: product.category || null,
+          };
+        });
 
       const payload: ProductConnection = {
         products: mappedProducts,
-        hasMore: pagination.skip + mappedProducts.length < totalCount,
+        hasMore: mappedProducts.length === pagination.first,
         totalCount,
       };
 
@@ -404,6 +428,7 @@ export const productResolvers = {
         cacheFilters: filters,
         first,
         skip,
+        needsTotalCount: true,
       });
     },
     product: async (_: unknown, { slug }: { slug: string }, context: Context) => {
@@ -541,7 +566,13 @@ export const productResolvers = {
         label: "categories",
       });
 
-      return context.prisma.category.findMany({
+      const cacheKey = `categories:${pagination.first}:${pagination.skip}`;
+      const cached = categoryCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.value;
+      }
+
+      const rows = await context.prisma.category.findMany({
         take: pagination.first,
         skip: pagination.skip,
         orderBy: { createdAt: "desc" },
@@ -552,6 +583,14 @@ export const productResolvers = {
           description: true,
         },
       });
+
+      if (categoryCache.size >= CATEGORY_CACHE_MAX_ENTRIES) {
+        const oldestKey = categoryCache.keys().next().value;
+        if (oldestKey) categoryCache.delete(oldestKey);
+      }
+      categoryCache.set(cacheKey, { expiresAt: Date.now() + CATEGORY_CACHE_TTL_MS, value: rows });
+
+      return rows;
     },
   },
 

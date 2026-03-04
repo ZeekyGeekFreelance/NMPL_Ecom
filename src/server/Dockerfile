@@ -1,26 +1,19 @@
-# Use lightweight Node.js base
 FROM node:22-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Install dependencies only — source is mounted as a volume at runtime
 COPY package*.json ./
-
-# Install dependencies (including Prisma & TS)
 RUN npm ci
 
-# Copy Prisma schema and generate client
+# Generate Prisma client from schema
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copy project files
-COPY . .
-
-# Build TypeScript
-RUN npm run build
+# Remaining source files arrive via docker-compose volume mount (./server:/app)
+# so no COPY . . or build step needed for development
 
 EXPOSE 5000
 
-# Run compiled server
-CMD ["npm", "start"]
+# Default CMD — overridden by docker-compose command
+CMD ["npm", "run", "dev"]

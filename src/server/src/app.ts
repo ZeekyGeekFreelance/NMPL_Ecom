@@ -114,10 +114,23 @@ export const createApp = async () => {
     );
   }
 
-  app.use(session(sessionConfig));
+  const sessionMiddleware = session(sessionConfig);
+  const isPublicCatalog = (req: express.Request) =>
+    req.method === "POST" &&
+    req.path === "/api/v1/graphql" &&
+    req.headers["x-public-catalog"] === "1";
+
+  // Skip session + passport for public catalog — saves Redis round-trip per request.
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (isPublicCatalog(req)) { next(); return; }
+    sessionMiddleware(req, res, next);
+  });
 
   app.use(passport.initialize());
-  app.use(passport.session());
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (isPublicCatalog(req)) { next(); return; }
+    passport.session()(req, res, next);
+  });
   configurePassport();
 
   app.use((req, res, next) => {
@@ -145,6 +158,7 @@ export const createApp = async () => {
         "x-confirmation-handled",
         "x-idempotency-key",
         "Apollo-Require-Preflight",
+        "x-public-catalog",
       ],
     })
   );

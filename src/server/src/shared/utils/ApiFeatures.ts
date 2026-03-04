@@ -97,15 +97,41 @@ class ApiFeatures {
     return this;
   }
 
+  // Allowlisted fields that consumers may request via the ?fields= query param.
+  // Prevents arbitrary key injection into Prisma `select` clauses.
+  private static readonly ALLOWED_SELECT_FIELDS = new Set([
+    "id",
+    "name",
+    "slug",
+    "description",
+    "price",
+    "stock",
+    "sku",
+    "isNew",
+    "isTrending",
+    "isBestSeller",
+    "isFeatured",
+    "categoryId",
+    "createdAt",
+    "updatedAt",
+  ]);
+
   limitFields() {
     if (this.queryString.fields) {
-      const fields = this.queryString.fields
+      const requestedFields: string[] = String(this.queryString.fields)
         .split(",")
-        .reduce((acc: any, field: string) => {
-          acc[field] = true;
-          return acc;
-        }, {});
-      this.queryOptions.select = fields;
+        .map((f: string) => f.trim())
+        .filter((f: string) => ApiFeatures.ALLOWED_SELECT_FIELDS.has(f));
+
+      if (requestedFields.length > 0) {
+        this.queryOptions.select = requestedFields.reduce(
+          (acc: Record<string, boolean>, field: string) => {
+            acc[field] = true;
+            return acc;
+          },
+          {}
+        );
+      }
     }
     return this;
   }

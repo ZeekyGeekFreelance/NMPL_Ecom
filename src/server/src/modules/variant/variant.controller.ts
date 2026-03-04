@@ -88,6 +88,7 @@ export class VariantController {
         productId,
         sku,
         price,
+        defaultDealerPrice,
         stock,
         lowStockThreshold,
         barcode,
@@ -130,6 +131,10 @@ export class VariantController {
         productId,
         sku,
         price: Number(price),
+        defaultDealerPrice:
+          defaultDealerPrice !== undefined && defaultDealerPrice !== ""
+            ? Number(defaultDealerPrice)
+            : null,
         stock: Number(stock),
         lowStockThreshold: lowStockThreshold
           ? Number(lowStockThreshold)
@@ -156,6 +161,7 @@ export class VariantController {
       const {
         sku,
         price,
+        defaultDealerPrice,
         stock,
         lowStockThreshold,
         barcode,
@@ -201,6 +207,13 @@ export class VariantController {
       const variant = await this.variantService.updateVariant(variantId, {
         ...(sku && { sku }),
         ...(price !== undefined && { price: Number(price) }),
+        // defaultDealerPrice: explicit null clears it, a number sets it, undefined = no change
+        ...(defaultDealerPrice !== undefined && {
+          defaultDealerPrice:
+            defaultDealerPrice === null || defaultDealerPrice === ""
+              ? null
+              : Number(defaultDealerPrice),
+        }),
         ...(stock !== undefined && { stock: Number(stock) }),
         ...(lowStockThreshold !== undefined && {
           lowStockThreshold: Number(lowStockThreshold),

@@ -7,6 +7,8 @@ const axiosInstance: AxiosInstance = axios.create({
     "Content-Type": "application/json",
   },
   withCredentials: true,
+  // Hard ceiling so a stalled backend never hangs the UI indefinitely.
+  timeout: 30_000,
 });
 
 export default axiosInstance;

@@ -16,6 +16,7 @@ const FORBIDDEN_ARTIFACT_PATTERNS = [
 
 const ignoredProcessEnvFiles = new Set([
   path.normalize(path.join(sourceRoot, "config", "index.ts")),
+  path.normalize(path.join(sourceRoot, "bootstrap", "preflight.ts")),
 ]);
 
 const walkFiles = (dir) => {

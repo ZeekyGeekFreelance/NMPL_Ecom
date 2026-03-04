@@ -30,7 +30,7 @@ export const resolveEffectiveRole = ({
   }
 
   const normalizedDealerStatus = normalizeUpper(dealerStatus);
-  if (normalizedDealerStatus === "APPROVED") {
+  if (normalizedDealerStatus === "APPROVED" || normalizedDealerStatus === "LEGACY") {
     return "DEALER";
   }
 

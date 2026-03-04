@@ -39,6 +39,7 @@ const sendViaTwilio = async ({ to, body }: SendSmsInput): Promise<boolean> => {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
+        timeout: 10_000, // 10 s — prevents indefinite hangs if Twilio is unreachable
       }
     );
 

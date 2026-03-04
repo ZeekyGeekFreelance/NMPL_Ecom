@@ -22,11 +22,16 @@ export class WebhookController {
     }
 
     let event;
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      config.payment.stripeWebhookSecret!
-    );
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        config.payment.stripeWebhookSecret!
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new AppError(400, `Webhook signature verification failed: ${message}`);
+    }
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;

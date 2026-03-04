@@ -37,7 +37,7 @@ export interface AuthResponse {
     effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
     avatar: string | null;
     isDealer?: boolean;
-    dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+    dealerStatus?: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED" | null;
     dealerBusinessName?: string | null;
     dealerContactPhone?: string | null;
   };

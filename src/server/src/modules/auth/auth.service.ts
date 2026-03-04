@@ -399,7 +399,7 @@ export class AuthService {
       phone: string | null;
       avatar: string | null;
       isDealer?: boolean;
-      dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+      dealerStatus?: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED" | null;
       dealerBusinessName?: string | null;
       dealerContactPhone?: string | null;
     };
@@ -431,18 +431,26 @@ export class AuthService {
       user.id
     );
 
-    if (dealerProfile && dealerProfile.status !== "APPROVED") {
-      if (dealerProfile.status === "PENDING") {
+    if (dealerProfile) {
+      const approvedStatuses = new Set(["APPROVED", "LEGACY"]);
+      if (!approvedStatuses.has(dealerProfile.status)) {
+        if (dealerProfile.status === "PENDING") {
+          throw new AppError(
+            403,
+            "Dealer account is pending admin approval. Please wait for confirmation."
+          );
+        }
+        if (dealerProfile.status === "SUSPENDED") {
+          throw new AppError(
+            403,
+            "Dealer account is suspended. Please contact admin support."
+          );
+        }
         throw new AppError(
           403,
-          "Dealer account is pending admin approval. Please wait for confirmation."
+          "Dealer access is currently restricted. Please contact admin support."
         );
       }
-
-      throw new AppError(
-        403,
-        "Dealer access is currently restricted. Please contact admin support."
-      );
     }
 
     const accessToken = tokenUtils.generateAccessToken(
@@ -571,7 +579,7 @@ export class AuthService {
       effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
       avatar: string | null;
       isDealer?: boolean;
-      dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+      dealerStatus?: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED" | null;
       dealerBusinessName?: string | null;
       dealerContactPhone?: string | null;
     };
@@ -604,18 +612,26 @@ export class AuthService {
       throw new AppError(401, "Session expired. Please log in again.");
     }
 
-    if (user.dealerProfile && user.dealerProfile.status !== "APPROVED") {
-      if (user.dealerProfile.status === "PENDING") {
+    if (user.dealerProfile) {
+      const approvedStatuses = new Set(["APPROVED", "LEGACY"]);
+      if (!approvedStatuses.has(user.dealerProfile.status)) {
+        if (user.dealerProfile.status === "PENDING") {
+          throw new AppError(
+            403,
+            "Dealer account is pending admin approval. Please wait for confirmation."
+          );
+        }
+        if (user.dealerProfile.status === "SUSPENDED") {
+          throw new AppError(
+            403,
+            "Dealer account is suspended. Please contact admin support."
+          );
+        }
         throw new AppError(
           403,
-          "Dealer account is pending admin approval. Please wait for confirmation."
+          "Dealer access is currently restricted. Please contact admin support."
         );
       }
-
-      throw new AppError(
-        403,
-        "Dealer access is currently restricted. Please contact admin support."
-      );
     }
 
     const normalizedUser = {

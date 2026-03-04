@@ -166,10 +166,7 @@ const parseDatabaseTarget = (
 
   const host = parsedUrl.hostname.trim().toLowerCase();
   const portRaw = parsedUrl.port.trim();
-  if (!portRaw) {
-    throwConfigError("DATABASE_URL", "Explicit database port is required");
-  }
-  const port = Number(portRaw);
+  const port = portRaw ? Number(portRaw) : 5432;
   if (!host) {
     throwConfigError("DATABASE_URL", "Host is required");
   }
@@ -240,6 +237,10 @@ const publicApiBaseUrl = parseUrl("PUBLIC_API_BASE_URL", {
 }) as string;
 
 const databaseUrl = parseString("DATABASE_URL") as string;
+const directUrlRaw = parseString("DIRECT_URL", {
+  optional: true,
+  productionRequired: false,
+});
 const dbSslRequired = parseBoolean("DB_SSL_REQUIRED", {
   devDefault: false,
 }) as boolean;
@@ -254,6 +255,9 @@ const dbPoolTimeoutMs = parsePositiveInt("DB_POOL_TIMEOUT_MS", {
 }) as number;
 
 let dbTarget = parseDatabaseTarget(databaseUrl);
+const directDbTarget = directUrlRaw
+  ? parseDatabaseTarget(directUrlRaw)
+  : undefined;
 const dbUrl = new URL(dbTarget.normalizedUrl);
 
 if (!dbTarget.connectionLimit) {
@@ -285,6 +289,20 @@ if (isProduction && LOCALHOSTS.has(dbTarget.host)) {
   );
 }
 
+if (isProduction && !directDbTarget) {
+  throwConfigError(
+    "DIRECT_URL",
+    "Production boot requires DIRECT_URL for migration/status commands."
+  );
+}
+
+if (isProduction && directDbTarget && LOCALHOSTS.has(directDbTarget.host)) {
+  throwConfigError(
+    "DIRECT_URL",
+    "Production direct database host cannot be localhost/127.0.0.1/::1"
+  );
+}
+
 if (isProduction && !dbSslRequired) {
   throwConfigError("DB_SSL_REQUIRED", "Must be true in production");
 }
@@ -295,6 +313,16 @@ if (isProduction) {
     throwConfigError(
       "DATABASE_URL",
       "Production database URL must include sslmode=require"
+    );
+  }
+}
+
+if (isProduction && directDbTarget) {
+  const directSslMode = (directDbTarget.sslMode || "").toLowerCase();
+  if (directSslMode !== "require") {
+    throwConfigError(
+      "DIRECT_URL",
+      "Production DIRECT_URL must include sslmode=require"
     );
   }
 }
@@ -559,8 +587,11 @@ const appConfig = {
   },
   database: {
     url: dbTarget.normalizedUrl,
+    directUrl: directDbTarget?.normalizedUrl,
     host: dbTarget.host,
     port: dbTarget.port,
+    directHost: directDbTarget?.host ?? dbTarget.host,
+    directPort: directDbTarget?.port ?? dbTarget.port,
     sslRequired: dbSslRequired,
     poolMax: dbPoolMax,
     idleTimeoutMs: dbIdleTimeoutMs,
@@ -667,6 +698,8 @@ export const config = deepFreeze(appConfig);
 const configHashPayload = {
   dbHost: config.database.host,
   dbPort: config.database.port,
+  directDbHost: config.database.directHost,
+  directDbPort: config.database.directPort,
   redisHost: config.redis.host,
   redisPort: config.redis.port,
   serverPort: config.server.port,

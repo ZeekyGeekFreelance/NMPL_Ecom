@@ -1,7 +1,10 @@
-import "dotenv/config";
+// NOTE: .env is loaded by scripts/load-env.js via "-r" before this file runs.
+// That guarantees the environment is populated before any module (config, prisma) is evaluated.
+// Do NOT add a second dotenv.config() call here — it would run AFTER module-alias/register
+// has already triggered module evaluation.
+import path from "path";
 import "reflect-metadata";
 import { addAlias } from "module-alias";
-import path from "path";
 
 const runtimeRoot = path.resolve(__dirname);
 addAlias("@", runtimeRoot);
@@ -13,6 +16,7 @@ const { disconnectRedis } = require("./infra/cache/redis") as typeof import("./i
 const {
   assertApiPortParity,
   assertClusterParity,
+  assertMigrationsApplied,
   assertMixedModeMismatch,
   assertPortAvailable,
   assertResourceGuards,
@@ -90,6 +94,7 @@ async function bootstrap() {
   await assertPortAvailable();
   assertResourceGuards();
   await assertMixedModeMismatch();
+  assertMigrationsApplied();
   bootState.migrationsApplied = true;
 
   const app = await createApp();
