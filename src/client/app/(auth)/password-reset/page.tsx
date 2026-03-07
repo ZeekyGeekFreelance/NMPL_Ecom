@@ -1,25 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import Link from "next/link";
 import Button from "@/app/components/atoms/Button";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { useForgotPasswordMutation } from "@/app/store/apis/AuthApi";
+import Input from "@/app/components/atoms/Input";
+import {
+  normalizeEmailValue,
+  validateEmailValue,
+} from "@/app/lib/validators/common";
+
+interface PasswordResetRequestForm {
+  email: string;
+}
 
 const PasswordReset = () => {
-  const [email, setEmail] = useState("");
   const [forgotPassword, { isLoading }] = useForgotPasswordMutation();
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const handleRequestLink = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      setErrorMessage("Email is required.");
-      setSuccessMessage("");
-      return;
-    }
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors, isValid },
+  } = useForm<PasswordResetRequestForm>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
+    defaultValues: {
+      email: "",
+    },
+  });
 
+  const watchedEmail = watch("email");
+
+  useEffect(() => {
+    if (successMessage) {
+      setSuccessMessage("");
+    }
+    if (errorMessage) {
+      setErrorMessage("");
+    }
+  }, [watchedEmail]);
+
+  const handleRequestLink = async (values: PasswordResetRequestForm) => {
+    const normalizedEmail = normalizeEmailValue(values.email);
     try {
       const response = await forgotPassword({ email: normalizedEmail }).unwrap();
       setSuccessMessage(
@@ -56,22 +84,36 @@ const PasswordReset = () => {
             Enter your registered email address. We will send a password reset link.
           </p>
 
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
-            placeholder="you@example.com"
-          />
+          <form onSubmit={handleSubmit(handleRequestLink)} className="space-y-3">
+            <Input
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              control={control}
+              validation={{
+                required: "Email is required.",
+                validate: (value: string) => validateEmailValue(value),
+              }}
+              onChange={(event) => {
+                setValue("email", normalizeEmailValue(event.target.value), {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                });
+              }}
+              error={errors.email?.message}
+              className="py-2.5 text-sm"
+            />
 
-          <Button
-            type="button"
-            className="bg-primary text-white w-full py-[12px] rounded"
-            disabled={isLoading}
-            onClick={handleRequestLink}
-          >
-            {isLoading ? "Sending..." : "Send reset link"}
-          </Button>
+            <Button
+              type="submit"
+              className={`bg-primary text-white w-full py-[12px] rounded ${
+                isLoading || !isValid ? "cursor-not-allowed opacity-60" : ""
+              }`}
+              disabled={isLoading || !isValid}
+            >
+              {isLoading ? "Sending..." : "Send reset link"}
+            </Button>
+          </form>
 
           <Link className="mt-4 inline-block hover:underline text-sm" href="/sign-in">
             Back to sign in

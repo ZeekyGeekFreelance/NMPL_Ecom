@@ -4,6 +4,7 @@ import {
   useCreateProductMutation,
   useDeleteProductMutation,
   useGetAllProductsQuery,
+  useLazyGetProductByIdQuery,
   useUpdateProductMutation,
 } from "@/app/store/apis/ProductApi";
 import { useState } from "react";
@@ -32,6 +33,59 @@ const normalizeVariantAttributes = (
     }))
     .filter((attribute) => attribute.attributeId && attribute.valueId);
 
+const mapProductToFormData = (product: any): ProductFormData => ({
+  id: String(product?.id || ""),
+  name: product?.name || "",
+  isNew: Boolean(product?.isNew),
+  isTrending: Boolean(product?.isTrending),
+  isBestSeller: Boolean(product?.isBestSeller),
+  isFeatured: Boolean(product?.isFeatured),
+  categoryId: product?.categoryId || "",
+  description: product?.description || "",
+  variants: (Array.isArray(product?.variants) ? product.variants : []).map(
+    (variant: any) => ({
+      ...variant,
+      id: String(variant?.id || ""),
+      sku: variant?.sku ?? "",
+      price: Number(variant?.price ?? 0),
+    defaultDealerPrice:
+      variant?.defaultDealerPrice === null ||
+      variant?.defaultDealerPrice === undefined
+        ? null
+        : Number(variant.defaultDealerPrice),
+    stock: Number(variant?.stock ?? 0),
+    lowStockThreshold: Number(variant?.lowStockThreshold ?? 10),
+    barcode: variant?.barcode ?? "",
+    attributes: normalizeVariantAttributes(variant?.attributes),
+      images: Array.isArray(variant?.images) ? variant.images : [],
+    })
+  ),
+});
+
+const extractProductPayload = (response: any): any | null => {
+  if (!response || typeof response !== "object") {
+    return null;
+  }
+
+  if (response.id) {
+    return response;
+  }
+
+  if (response.product?.id) {
+    return response.product;
+  }
+
+  if (response.data?.id) {
+    return response.data;
+  }
+
+  if (response.data?.product?.id) {
+    return response.data.product;
+  }
+
+  return null;
+};
+
 const ProductsDashboard = () => {
   const { showToast } = useToast();
   const [createProduct, { isLoading: isCreating, error: createError }] =
@@ -39,6 +93,8 @@ const ProductsDashboard = () => {
   const [updateProduct, { isLoading: isUpdating, error: updateError }] =
     useUpdateProductMutation();
   const [deleteProduct, { isLoading: isDeleting }] = useDeleteProductMutation();
+  const [fetchProductById, { isFetching: isFetchingEditProduct }] =
+    useLazyGetProductByIdQuery();
 
   const pathname = usePathname();
   const shouldFetchProducts = pathname === "/dashboard/products";
@@ -72,6 +128,13 @@ const ProductsDashboard = () => {
     data.variants.forEach((variant, index) => {
       payload.append(`variants[${index}][sku]`, variant.sku || "");
       payload.append(`variants[${index}][price]`, variant.price.toString());
+      payload.append(
+        `variants[${index}][defaultDealerPrice]`,
+        variant.defaultDealerPrice === null ||
+          variant.defaultDealerPrice === undefined
+          ? ""
+          : String(variant.defaultDealerPrice)
+      );
       payload.append(`variants[${index}][stock]`, variant.stock.toString());
       payload.append(
         `variants[${index}][lowStockThreshold]`,
@@ -131,6 +194,13 @@ const ProductsDashboard = () => {
       payload.append(`variants[${index}][id]`, variant.id || "");
       payload.append(`variants[${index}][sku]`, variant.sku || "");
       payload.append(`variants[${index}][price]`, String(variant.price ?? 0));
+      payload.append(
+        `variants[${index}][defaultDealerPrice]`,
+        variant.defaultDealerPrice === null ||
+          variant.defaultDealerPrice === undefined
+          ? ""
+          : String(variant.defaultDealerPrice)
+      );
       payload.append(`variants[${index}][stock]`, String(variant.stock ?? 0));
       payload.append(
         `variants[${index}][lowStockThreshold]`,
@@ -193,6 +263,38 @@ const ProductsDashboard = () => {
   const handleDeleteProduct = (id: string) => {
     setProductToDelete(id);
     setIsConfirmModalOpen(true);
+  };
+
+  const handleOpenEditProduct = async (row: any) => {
+    try {
+      const response = await fetchProductById(String(row.id)).unwrap();
+      const fullProduct = extractProductPayload(response);
+
+      if (!fullProduct) {
+        throw new Error("Invalid product payload received for edit mode.");
+      }
+
+      setEditingProduct(mapProductToFormData(fullProduct));
+      setIsModalOpen(true);
+    } catch (error) {
+      console.error("Failed to fetch product details for edit:", error);
+      const fallbackProduct = mapProductToFormData(row);
+
+      if (fallbackProduct.variants.length > 0) {
+        setEditingProduct(fallbackProduct);
+        setIsModalOpen(true);
+        showToast(
+          "Loaded cached product data. Some latest variant details may be missing.",
+          "info"
+        );
+        return;
+      }
+
+      showToast(
+        getApiErrorMessage(error, "Failed to load full product details for editing."),
+        "error"
+      );
+    }
   };
 
   const confirmDelete = async () => {
@@ -263,33 +365,12 @@ const ProductsDashboard = () => {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => {
-              setEditingProduct({
-                id: row.id,
-                name: row.name,
-                isNew: row.isNew,
-                isTrending: row.isTrending,
-                isBestSeller: row.isBestSeller,
-                isFeatured: row.isFeatured,
-                categoryId: row.categoryId,
-                description: row.description || "",
-                variants: (row.variants || []).map((variant: any) => ({
-                  ...variant,
-                  sku: variant?.sku ?? "",
-                  price: Number(variant?.price ?? 0),
-                  stock: Number(variant?.stock ?? 0),
-                  lowStockThreshold: Number(variant?.lowStockThreshold ?? 10),
-                  barcode: variant?.barcode ?? "",
-                  attributes: normalizeVariantAttributes(variant.attributes),
-                  images: Array.isArray(variant.images) ? variant.images : [],
-                })),
-              });
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+            onClick={() => void handleOpenEditProduct(row)}
+            disabled={isFetchingEditProduct}
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 disabled:cursor-not-allowed disabled:text-blue-300"
           >
             <Edit size={16} />
-            Edit
+            {isFetchingEditProduct ? "Loading..." : "Edit"}
           </button>
           <button
             type="button"

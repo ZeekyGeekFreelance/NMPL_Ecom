@@ -11,6 +11,7 @@ export interface ProductFormData {
     id: string;
     sku: string;
     price: number;
+    defaultDealerPrice?: number | null;
     images: Array<File | string>;
     stock: number;
     lowStockThreshold?: number;

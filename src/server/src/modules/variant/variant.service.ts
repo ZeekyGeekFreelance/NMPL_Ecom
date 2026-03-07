@@ -134,6 +134,27 @@ export class VariantService {
   }) {
     const { productId, attributes } = data;
 
+    if (!Number.isFinite(Number(data.price)) || Number(data.price) <= 0) {
+      throw new AppError(400, "Retail price must be a positive number");
+    }
+    if (!Number.isFinite(Number(data.stock)) || Number(data.stock) < 0) {
+      throw new AppError(400, "Stock must be a non-negative number");
+    }
+    if (
+      data.defaultDealerPrice !== undefined &&
+      data.defaultDealerPrice !== null
+    ) {
+      if (
+        !Number.isFinite(Number(data.defaultDealerPrice)) ||
+        Number(data.defaultDealerPrice) < 0
+      ) {
+        throw new AppError(400, "Dealer base price must be numeric and >= 0");
+      }
+      if (Number(data.defaultDealerPrice) > Number(data.price)) {
+        throw new AppError(400, "Dealer base price cannot exceed retail price");
+      }
+    }
+
     const product = await prisma.product.findUnique({
       where: { id: productId },
     });
@@ -231,7 +252,7 @@ export class VariantService {
     }
 
     const createdVariant = await this.variantRepository.createVariant(data);
-    clearCatalogListingCache();
+    await clearCatalogListingCache();
     return createdVariant;
   }
 
@@ -262,6 +283,41 @@ export class VariantService {
       if (existingSku) {
         throw new AppError(400, "SKU already exists");
       }
+    }
+
+    if (data.price !== undefined) {
+      if (!Number.isFinite(Number(data.price)) || Number(data.price) <= 0) {
+        throw new AppError(400, "Retail price must be a positive number");
+      }
+    }
+
+    const retailPriceForValidation = Number(data.price ?? existingVariant.price);
+    if (
+      data.defaultDealerPrice !== undefined &&
+      data.defaultDealerPrice !== null
+    ) {
+      if (
+        !Number.isFinite(Number(data.defaultDealerPrice)) ||
+        Number(data.defaultDealerPrice) < 0
+      ) {
+        throw new AppError(400, "Dealer base price must be numeric and >= 0");
+      }
+      if (Number(data.defaultDealerPrice) > retailPriceForValidation) {
+        throw new AppError(400, "Dealer base price cannot exceed retail price");
+      }
+    }
+
+    if (
+      data.defaultDealerPrice === undefined &&
+      data.price !== undefined &&
+      existingVariant.defaultDealerPrice !== null &&
+      existingVariant.defaultDealerPrice !== undefined &&
+      Number(existingVariant.defaultDealerPrice) > retailPriceForValidation
+    ) {
+      throw new AppError(
+        400,
+        "Retail price cannot be below current dealer base price. Update or clear dealer base price first."
+      );
     }
 
     if (data.attributes) {
@@ -355,7 +411,7 @@ export class VariantService {
     }
 
     const updatedVariant = await this.variantRepository.updateVariant(variantId, data);
-    clearCatalogListingCache();
+    await clearCatalogListingCache();
     return updatedVariant;
   }
 
@@ -404,7 +460,7 @@ export class VariantService {
       return { restock, isLowStock };
     });
 
-    clearCatalogListingCache();
+    await clearCatalogListingCache();
     return restockResult;
   }
 
@@ -425,6 +481,6 @@ export class VariantService {
     }
 
     await this.variantRepository.deleteVariant(variantId);
-    clearCatalogListingCache();
+    await clearCatalogListingCache();
   }
 }

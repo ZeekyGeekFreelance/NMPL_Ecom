@@ -26,8 +26,23 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const displayImage =
     product.thumbnail ||
     generateProductPlaceholder(product.name);
-  const lowestPrice = Number(product.minPrice ?? product.price ?? 0);
-  const isOutOfStock = lowestPrice <= 0;
+  const retailPrice = Number(product.minPrice ?? product.price ?? 0);
+  const maxPriceRaw = Number(product.maxPrice);
+  const dealerPriceRaw = Number(product.dealerMinPrice);
+  const hasDealerPrice =
+    Number.isFinite(dealerPriceRaw) &&
+    dealerPriceRaw > 0 &&
+    dealerPriceRaw !== retailPrice;
+  const dealerPrice = hasDealerPrice ? dealerPriceRaw : null;
+  const effectivePrice = dealerPrice ?? retailPrice;
+  const hasPriceRange =
+    Number.isFinite(maxPriceRaw) &&
+    maxPriceRaw > 0 &&
+    maxPriceRaw > effectivePrice;
+  const mobileBasePrice = dealerPrice !== null ? retailPrice : hasPriceRange ? maxPriceRaw : null;
+  const showMobileStrikePrice =
+    mobileBasePrice !== null && mobileBasePrice > effectivePrice;
+  const isOutOfStock = effectivePrice <= 0;
 
   return (
     <div
@@ -98,9 +113,40 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <div className="flex items-center justify-between mb-2 sm:mb-3">
             <div className="flex items-center space-x-2">
               {!isOutOfStock ? (
-                <span className="text-indigo-700 font-bold text-sm sm:text-lg lg:text-xl">
-                  {formatPrice(lowestPrice)}
-                </span>
+                <div className="flex flex-col gap-0.5">
+                  <div className="sm:hidden">
+                    {showMobileStrikePrice ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500 line-through">
+                          {formatPrice(mobileBasePrice)}
+                        </span>
+                        <span className="text-sm text-gray-700">
+                          {formatPrice(effectivePrice)}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-700">
+                        {formatPrice(effectivePrice)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="hidden sm:flex sm:flex-col sm:gap-0.5">
+                    {dealerPrice !== null ? (
+                      <>
+                        <span className="text-sm lg:text-base text-gray-500 line-through">
+                          Retail: {formatPrice(retailPrice)}
+                        </span>
+                        <span className="text-lg lg:text-xl text-gray-700">
+                          Dealer: {formatPrice(dealerPrice)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm lg:text-base text-gray-700">
+                        {formatPrice(effectivePrice)}
+                      </span>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <span className="text-gray-500 font-medium text-sm sm:text-lg lg:text-xl">
                   Out of stock

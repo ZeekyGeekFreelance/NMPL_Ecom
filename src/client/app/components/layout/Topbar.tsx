@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronRight,
   Gift,
@@ -31,6 +31,7 @@ const Topbar = ({
   const [collapsed, setCollapsed] = useState(false);
   const [currentAnnouncement, setCurrentAnnouncement] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const fallbackConfig = {
     shopLink: "/shop",
@@ -111,6 +112,54 @@ const Topbar = ({
   const theme =
     themeColors[themeColor as keyof typeof themeColors] || themeColors.indigo;
 
+  const showPreviousAnnouncement = () => {
+    setCurrentAnnouncement(
+      (previous) => (previous - 1 + announcements.length) % announcements.length
+    );
+  };
+
+  const showNextAnnouncement = () => {
+    setCurrentAnnouncement((previous) => (previous + 1) % announcements.length);
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) {
+      return;
+    }
+
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const swipeStart = swipeStartRef.current;
+    swipeStartRef.current = null;
+
+    if (!swipeStart) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
+
+    const deltaX = touch.clientX - swipeStart.x;
+    const deltaY = touch.clientY - swipeStart.y;
+    const swipeThreshold = 35;
+
+    if (Math.abs(deltaX) < swipeThreshold || Math.abs(deltaX) <= Math.abs(deltaY)) {
+      return;
+    }
+
+    if (deltaX > 0) {
+      showPreviousAnnouncement();
+      return;
+    }
+
+    showNextAnnouncement();
+  };
+
   return (
     <div
       className={`bg-indigo-950 text-white relative transition-all duration-300 ease-in-out ${
@@ -172,15 +221,12 @@ const Topbar = ({
           <div
             className="sm:hidden flex items-center justify-center py-2 relative w-full overflow-hidden"
             style={{ height: isPreview ? "auto" : "24px" }}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
             <div className="flex w-full justify-between items-center">
               <button
-                onClick={() =>
-                  setCurrentAnnouncement(
-                    (prev) =>
-                      (prev - 1 + announcements.length) % announcements.length
-                  )
-                }
+                onClick={showPreviousAnnouncement}
                 className={`${theme.text} p-1 rounded-full ${theme.hover}`}
                 aria-label="Previous announcement"
               >
@@ -210,11 +256,7 @@ const Topbar = ({
               </div>
 
               <button
-                onClick={() =>
-                  setCurrentAnnouncement(
-                    (prev) => (prev + 1) % announcements.length
-                  )
-                }
+                onClick={showNextAnnouncement}
                 className={`${theme.text} p-1 rounded-full ${theme.hover}`}
                 aria-label="Next announcement"
               >

@@ -29,13 +29,20 @@ const RestockModal: React.FC<RestockModalProps> = ({
   const [pendingRestockData, setPendingRestockData] =
     useState<RestockFormData | null>(null);
   const form = useForm<RestockFormData>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       quantity: 0,
       notes: "",
     },
   });
 
-  const { control, handleSubmit, reset, formState: { errors } } = form;
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { errors, isValid },
+  } = form;
 
   const closeAll = () => {
     if (isLoading) {
@@ -141,9 +148,9 @@ const RestockModal: React.FC<RestockModalProps> = ({
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !isValid}
                   className={`px-6 py-3 text-white rounded-lg shadow-md font-medium flex items-center justify-center min-w-24 ${
-                    isLoading
+                    isLoading || !isValid
                       ? "bg-blue-400 cursor-not-allowed"
                       : "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
                   } transition-all duration-200`}

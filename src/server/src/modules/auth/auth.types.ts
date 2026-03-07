@@ -21,9 +21,16 @@ export interface RegisterUserParams {
   contactPhone?: string;
 }
 
+export interface ApplyDealerAccessParams {
+  userId: string;
+  businessName?: string;
+  contactPhone?: string;
+}
+
 export interface SignInParams {
   email: string;
   password: string;
+  portal?: RegistrationPurpose;
 }
 
 export interface AuthResponse {

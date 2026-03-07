@@ -105,7 +105,11 @@ const optionalAuthForNonCatalogQueries: express.RequestHandler = (
   res,
   next
 ) => {
-  if (isPublicCatalogOperation(req)) {
+  const hasAccessTokenCookie =
+    typeof req.cookies?.accessToken === "string" &&
+    req.cookies.accessToken.trim().length > 0;
+
+  if (isPublicCatalogOperation(req) && !hasAccessTokenCookie) {
     next();
     return;
   }

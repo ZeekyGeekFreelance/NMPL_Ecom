@@ -8,11 +8,12 @@ import React, {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@apollo/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Filter, Loader2, ChevronDown } from "lucide-react";
+import { Package, Filter, Loader2 } from "lucide-react";
 import { GET_PRODUCTS, GET_CATEGORIES } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 import ProductCard from "../product/ProductCard";
 import MainLayout from "@/app/components/templates/MainLayout";
+import Dropdown from "@/app/components/molecules/Dropdown";
 import ProductFilters, {
   FilterValues,
   SortByOption,
@@ -38,6 +39,11 @@ const normalizeText = (value: string) =>
     .replace(/\s+/g, " ");
 
 const getVariantMinPrice = (product: Product) => {
+  const listingDealerMinPrice = Number(product.dealerMinPrice);
+  if (Number.isFinite(listingDealerMinPrice) && listingDealerMinPrice > 0) {
+    return listingDealerMinPrice;
+  }
+
   const listingMinPrice = Number(product.minPrice);
   if (Number.isFinite(listingMinPrice) && listingMinPrice > 0) {
     return listingMinPrice;
@@ -176,28 +182,30 @@ const ShopPage: React.FC = () => {
   const {
     loading,
     error,
+    data: queryData,
     fetchMore,
   } = useQuery(GET_PRODUCTS, {
     variables: { first: requestPageSize, skip: 0, filters: serverFilters },
     fetchPolicy: "cache-and-network",
     nextFetchPolicy: "cache-first",
     pollInterval: dealerCatalogPollInterval,
-    onCompleted: (data) => {
-      setDisplayedProducts(data.products.products);
-      setHasMore(data.products.hasMore);
-      setSkip(0);
-    },
   });
+
+  // Sync query results into display state.  Using a useEffect instead of
+  // onCompleted avoids stale-closure issues when filters change rapidly and
+  // ensures we never regress to an empty list while a background refetch is
+  // in-flight (the previous data stays visible until new data arrives).
+  useEffect(() => {
+    const fresh = queryData?.products;
+    if (!fresh) return;
+    setDisplayedProducts(fresh.products);
+    setHasMore(fresh.hasMore);
+    setSkip(0);
+  }, [queryData]);
 
   useEffect(() => {
     setFilters(initialFilters);
   }, [initialFilters]);
-
-  useEffect(() => {
-    setDisplayedProducts([]);
-    setSkip(0);
-    setHasMore(true);
-  }, [serverFilterSignature]);
 
   useEffect(() => {
     if (!sidebarOpen || isDesktop) {
@@ -267,8 +275,7 @@ const ShopPage: React.FC = () => {
   );
 
   const handleSortChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const nextSort = event.target.value as SortByOption;
+    (nextSort: SortByOption) => {
       applyFilters({
         ...filters,
         sortBy: nextSort,
@@ -415,24 +422,18 @@ const ShopPage: React.FC = () => {
                     >
                       Sort by
                     </label>
-                    <div className="relative">
-                      <select
-                        id="shop-sort-control"
-                        value={currentSortBy}
-                        onChange={handleSortChange}
-                        className="h-11 min-w-[210px] appearance-none rounded-lg border border-gray-300 bg-gray-100 px-3.5 pr-9 text-sm font-medium text-gray-800 transition-colors focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                      >
-                        {SORT_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={16}
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                      />
-                    </div>
+                    <Dropdown
+                      label="Sort by"
+                      options={SORT_OPTIONS}
+                      value={currentSortBy}
+                      onChange={(value) => {
+                        if (value) {
+                          handleSortChange(value as SortByOption);
+                        }
+                      }}
+                      clearable={false}
+                      className="min-w-[210px] bg-gray-100 font-medium text-gray-800"
+                    />
                   </div>
                 </div>
               </div>

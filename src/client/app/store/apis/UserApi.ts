@@ -5,7 +5,7 @@ interface DealerProfile {
   id: string;
   businessName: string | null;
   contactPhone: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
   approvedAt: string | null;
   approvedBy: string | null;
   createdAt: string;
@@ -28,6 +28,8 @@ interface DealerUser {
 interface DealerPrice {
   variantId: string;
   customPrice: number;
+  basePrice?: number;
+  defaultDealerPrice?: number | null;
   sku: string;
   productName: string;
 }
@@ -151,7 +153,10 @@ export const userApi = apiSlice.injectEndpoints({
     }),
     updateDealerStatus: builder.mutation<
       { dealer: DealerUser },
-      { id: string; status: "PENDING" | "APPROVED" | "REJECTED" }
+      {
+        id: string;
+        status: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
+      }
     >({
       query: ({ id, status }) => ({
         url: `/users/dealers/${id}/status`,

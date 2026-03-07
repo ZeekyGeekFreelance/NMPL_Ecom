@@ -148,6 +148,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
               id: "",
               sku: "",
               price: 0,
+              defaultDealerPrice: null,
               stock: 0,
               lowStockThreshold: 10,
               barcode: "",
@@ -216,7 +217,7 @@ const VariantForm: React.FC<VariantFormProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Price
+                Retail Price
               </label>
               <Controller
                 name={`variants.${index}.price`}
@@ -239,6 +240,71 @@ const VariantForm: React.FC<VariantFormProps> = ({
               {errors.variants?.[index]?.price && (
                 <p className="text-red-500 text-xs mt-1">
                   {errors.variants[index].price?.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Dealer Base Price
+              </label>
+              <Controller
+                name={`variants.${index}.defaultDealerPrice`}
+                control={control}
+                rules={{
+                  validate: (value) => {
+                    if (value === null || value === undefined) {
+                      return true;
+                    }
+
+                    const dealerPrice = Number(value);
+                    if (Number.isNaN(dealerPrice)) {
+                      return "Dealer base price must be numeric";
+                    }
+
+                    if (dealerPrice < 0) {
+                      return "Dealer base price cannot be negative";
+                    }
+
+                    const retailPrice = Number(
+                      getValues(`variants.${index}.price`) ?? 0
+                    );
+
+                    if (
+                      Number.isFinite(retailPrice) &&
+                      retailPrice > 0 &&
+                      dealerPrice > retailPrice
+                    ) {
+                      return "Dealer base price cannot exceed retail price";
+                    }
+
+                    return true;
+                  },
+                }}
+                render={({ field }) => (
+                  <input
+                    {...field}
+                    value={field.value ?? ""}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    onChange={(event) => {
+                      const rawValue = event.target.value;
+                      if (rawValue === "") {
+                        field.onChange(null);
+                        return;
+                      }
+
+                      field.onChange(Number(rawValue));
+                    }}
+                    className={inputStyles}
+                    placeholder="Optional dealer baseline"
+                  />
+                )}
+              />
+              {errors.variants?.[index]?.defaultDealerPrice && (
+                <p className="text-red-500 text-xs mt-1">
+                  {String(errors.variants[index].defaultDealerPrice?.message || "")}
                 </p>
               )}
             </div>

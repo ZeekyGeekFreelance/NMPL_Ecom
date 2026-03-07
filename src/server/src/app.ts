@@ -17,6 +17,7 @@ import configurePassport from "./infra/passport/passport";
 import { cookieParserOptions } from "./shared/constants";
 import globalError from "./shared/errors/globalError";
 import { logRequest } from "./shared/middlewares/logRequest";
+import { normalizeTextPayload } from "./shared/middlewares/normalizeTextPayload";
 import { configureRoutes } from "./routes";
 import { configureGraphQL } from "./graphql";
 import webhookRoutes from "./modules/webhook/webhook.routes";
@@ -90,6 +91,7 @@ export const createApp = async () => {
       parameterLimit: 500,
     })
   );
+  app.use(normalizeTextPayload);
   app.use(cookieParser(config.security.cookieSecret, cookieParserOptions));
 
   const sessionConfig: session.SessionOptions = {

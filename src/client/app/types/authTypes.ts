@@ -8,7 +8,13 @@ export interface User {
   email: string;
   phone?: string | null;
   isDealer?: boolean;
-  dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  dealerStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "LEGACY"
+    | "REJECTED"
+    | "SUSPENDED"
+    | null;
   dealerBusinessName?: string | null;
   dealerContactPhone?: string | null;
   user?: {
@@ -21,7 +27,13 @@ export interface User {
     email: string;
     phone?: string | null;
     isDealer?: boolean;
-    dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+    dealerStatus?:
+      | "PENDING"
+      | "APPROVED"
+      | "LEGACY"
+      | "REJECTED"
+      | "SUSPENDED"
+      | null;
     dealerBusinessName?: string | null;
     dealerContactPhone?: string | null;
   };

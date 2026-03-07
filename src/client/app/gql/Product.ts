@@ -5,25 +5,25 @@ export const GET_HOME_PAGE_DATA = gql`
   query GetHomePageData($pageSize: Int) {
     featured: products(first: $pageSize, filters: { isFeatured: true }) {
       products {
-        id slug name thumbnail minPrice maxPrice
+        id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
     }
     trending: products(first: $pageSize, filters: { isTrending: true }) {
       products {
-        id slug name thumbnail minPrice maxPrice
+        id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
     }
     newArrivals: products(first: $pageSize, filters: { isNew: true }) {
       products {
-        id slug name thumbnail minPrice maxPrice
+        id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
     }
     bestSellers: products(first: $pageSize, filters: { isBestSeller: true }) {
       products {
-        id slug name thumbnail minPrice maxPrice
+        id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
     }
@@ -38,7 +38,7 @@ export const GET_PRODUCTS = gql`
   query GetProducts($first: Int, $skip: Int, $filters: ProductFilters) {
     products(first: $first, skip: $skip, filters: $filters) {
       products {
-        id slug name thumbnail minPrice maxPrice
+        id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
       hasMore
@@ -51,7 +51,7 @@ export const GET_PRODUCTS_SUMMARY = gql`
   query GetFlaggedProducts($first: Int, $flags: [String!]) {
     products(first: $first, filters: { flags: $flags }) {
       products {
-        id slug name thumbnail minPrice maxPrice
+        id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
     }
@@ -64,7 +64,7 @@ export const GET_SINGLE_PRODUCT = gql`
     product(slug: $slug) {
       id name slug isNew isFeatured isTrending isBestSeller description
       variants {
-        id sku price images stock lowStockThreshold barcode
+        id sku price retailPrice images stock lowStockThreshold barcode
         attributes {
           id
           attribute { id name slug }

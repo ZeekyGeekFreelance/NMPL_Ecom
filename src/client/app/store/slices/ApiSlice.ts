@@ -3,6 +3,7 @@ import { logout } from "./AuthSlice";
 import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
 import { clearPendingAuthIntent } from "@/app/lib/authIntent";
+import { normalizePayloadTextFields } from "@/app/lib/textNormalization";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -137,6 +138,50 @@ const withMutationSafetyHeaders = (args: any) => {
   return args;
 };
 
+const shouldNormalizeRequestBody = (body: unknown): boolean => {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    return false;
+  }
+
+  if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) {
+    return false;
+  }
+
+  if (typeof Blob !== "undefined" && body instanceof Blob) {
+    return false;
+  }
+
+  if (body instanceof ArrayBuffer) {
+    return false;
+  }
+
+  return true;
+};
+
+const withNormalizedMutationBody = (args: any) => {
+  if (typeof args === "string") {
+    return args;
+  }
+
+  const { method } = getRequestMeta(args);
+  if (!MUTATION_METHODS.has(method)) {
+    return args;
+  }
+
+  if (!shouldNormalizeRequestBody(args?.body)) {
+    return args;
+  }
+
+  return {
+    ...args,
+    body: normalizePayloadTextFields(args.body),
+  };
+};
+
 const shouldAttemptTokenRefresh = (
   normalizedUrl: string,
   authUser: unknown | null | undefined
@@ -219,7 +264,7 @@ const refreshAuthToken = (api: any, extraOptions: any) => {
 };
 
 const baseQueryWithReauth = async (args, api, extraOptions) => {
-  const requestArgs = withMutationSafetyHeaders(args);
+  const requestArgs = withMutationSafetyHeaders(withNormalizedMutationBody(args));
 
   let result = await baseQuery(requestArgs, api, extraOptions);
 
@@ -275,6 +320,7 @@ export const apiSlice = createApi({
     "Logs",
     "Attribute",
     "Variant",
+    "DeliveryRate",
   ],
   endpoints: () => ({}),
 });

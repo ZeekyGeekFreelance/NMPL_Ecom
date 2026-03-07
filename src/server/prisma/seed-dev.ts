@@ -106,6 +106,7 @@ const cleanupDevData = async (): Promise<void> => {
   await prisma.attribute.deleteMany();
   await prisma.category.deleteMany();
   await prisma.deliveryRate.deleteMany();
+  await prisma.deliveryStateRate.deleteMany();
   await prisma.appSetting.deleteMany();
   await prisma.log.deleteMany();
   await prisma.address.deleteMany();

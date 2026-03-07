@@ -30,8 +30,8 @@ export class UpdateUserDto {
   password?: string;
 
   @IsOptional()
-  @IsIn(["USER", "ADMIN", "SUPERADMIN"], {
-    message: "Role must be USER, ADMIN, or SUPERADMIN",
+  @IsIn(["USER", "DEALER", "ADMIN", "SUPERADMIN"], {
+    message: "Role must be USER, DEALER, ADMIN, or SUPERADMIN",
   })
   role?: string;
 }
@@ -51,9 +51,8 @@ export class UpdateOwnProfileDto {
 
   @IsOptional()
   @IsString({ message: "Phone number must be a string" })
-  @Matches(/^[0-9()+\-\s]{7,20}$/, {
-    message:
-      "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
   })
   phone?: string;
 }
@@ -76,9 +75,8 @@ export class CreateAdminDto {
 
   @IsNotEmpty({ message: "Phone number is required" })
   @IsString({ message: "Phone number must be a string" })
-  @Matches(/^[0-9()+\-\s]{7,20}$/, {
-    message:
-      "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
   })
   phone!: string;
 
@@ -113,9 +111,8 @@ export class CreateDealerDto {
 
   @IsNotEmpty({ message: "Contact phone is required" })
   @IsString({ message: "Contact phone must be a string" })
-  @Matches(/^[0-9()+\-\s]{7,20}$/, {
-    message:
-      "Contact phone must be 7-20 characters and contain only valid digits/symbols",
+  @Matches(/^\d{10}$/, {
+    message: "Contact phone must be exactly 10 digits",
   })
   contactPhone!: string;
 }

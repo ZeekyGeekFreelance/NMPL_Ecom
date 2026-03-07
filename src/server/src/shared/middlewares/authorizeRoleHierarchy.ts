@@ -5,10 +5,11 @@ import prisma from "@/infra/database/database.config";
 const getRoleHierarchy = (role: string): number => {
   const hierarchy: { [key: string]: number } = {
     USER: 1,
+    DEALER: 1,
     ADMIN: 2,
     SUPERADMIN: 3,
   };
-  return hierarchy[role] || 0;
+  return hierarchy[String(role || "").toUpperCase()] || 0;
 };
 
 const authorizeRoleHierarchy = (minRequiredRole: string) => {
@@ -18,7 +19,7 @@ const authorizeRoleHierarchy = (minRequiredRole: string) => {
         return next(new AppError(401, "Unauthorized: No user found"));
       }
 
-      const userRole = req.user.role;
+      const userRole = req.user.effectiveRole || req.user.role;
       const targetUserId = req.params.id;
 
       if (!targetUserId) {

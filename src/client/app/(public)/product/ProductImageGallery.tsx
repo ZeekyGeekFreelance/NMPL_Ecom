@@ -1,13 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ZoomIn,
-  Maximize2,
-  Minimize2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 
 interface ProductImageGalleryProps {
@@ -25,15 +19,15 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
     defaultImage || images[0] || generateProductPlaceholder(name)
   );
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [isZoomed, setIsZoomed] = useState(false);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const galleryRef = useRef<HTMLDivElement>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const thumbnailButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
-    const nextImage = defaultImage || images[0] || generateProductPlaceholder(name);
+    const nextImage =
+      defaultImage || images[0] || generateProductPlaceholder(name);
     setSelectedImage(nextImage);
-    setIsZoomed(false);
+    setIsViewerOpen(false);
   }, [defaultImage, images, name]);
 
   useEffect(() => {
@@ -46,20 +40,21 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
   }, [selectedImage, images]);
 
   useEffect(() => {
-    const handleFullScreenChange = () => {
-      setIsFullScreen(!!document.fullscreenElement);
-    };
+    const selectedThumb = thumbnailButtonRefs.current[selectedIndex];
+    if (!selectedThumb) {
+      return;
+    }
 
-    document.addEventListener("fullscreenchange", handleFullScreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullScreenChange);
-    };
-  }, []);
+    selectedThumb.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [selectedIndex]);
 
   const handleImageSelect = (img: string, index: number) => {
     setSelectedImage(img);
     setSelectedIndex(index);
-    setIsZoomed(false);
   };
 
   const handlePrevImage = () => {
@@ -67,7 +62,6 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
       selectedIndex === 0 ? images.length - 1 : selectedIndex - 1;
     setSelectedImage(images[newIndex] || defaultImage);
     setSelectedIndex(newIndex);
-    setIsZoomed(false);
   };
 
   const handleNextImage = () => {
@@ -75,44 +69,50 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
       selectedIndex === images.length - 1 ? 0 : selectedIndex + 1;
     setSelectedImage(images[newIndex] || defaultImage);
     setSelectedIndex(newIndex);
-    setIsZoomed(false);
   };
 
-  const handleZoomToggle = () => {
-    setIsZoomed((previous) => !previous);
+  const handleOpenViewer = () => {
+    setIsViewerOpen(true);
   };
 
-  const handleFullScreenToggle = async () => {
-    if (!galleryRef.current) return;
+  const handleCloseViewer = () => {
+    setIsViewerOpen(false);
+  };
 
-    if (!isFullScreen) {
-      try {
-        await galleryRef.current.requestFullscreen();
-        setIsFullScreen(true);
-      } catch (err) {
-        console.error("Failed to enter fullscreen:", err);
-      }
-    } else {
-      try {
-        await document.exitFullscreen();
-        setIsFullScreen(false);
-      } catch (err) {
-        console.error("Failed to exit fullscreen:", err);
-      }
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touch = e.touches[0];
+    if (!touch) {
+      return;
+    }
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) {
+      return;
     }
 
-    setIsZoomed(false);
-  };
+    const touch = e.changedTouches[0];
+    if (!touch) {
+      return;
+    }
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isZoomed) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    const swipeThreshold = 40;
 
-    const { left, top, width, height } =
-      e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - left) / width) * 100;
-    const y = ((e.clientY - top) / height) * 100;
+    if (Math.abs(deltaX) < swipeThreshold || Math.abs(deltaX) < Math.abs(deltaY)) {
+      return;
+    }
 
-    setMousePosition({ x, y });
+    if (deltaX > 0) {
+      handlePrevImage();
+      return;
+    }
+
+    handleNextImage();
   };
 
   if (images.length === 0) {
@@ -133,25 +133,9 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
   const maxVisibleDots = 8;
 
   return (
-    <div
-      ref={galleryRef}
-      className={`relative ${
-        isFullScreen ? "bg-black h-screen w-screen p-3 sm:p-6" : "p-4 sm:p-6"
-      }`}
-    >
-      <button
-        onClick={handleFullScreenToggle}
-        className="absolute top-4 right-4 z-20 rounded-full p-2 bg-white/85 shadow-md hover:bg-gray-100"
-        aria-label={isFullScreen ? "Exit fullscreen" : "View fullscreen"}
-      >
-        {isFullScreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-      </button>
-
-      <div
-        className={`flex flex-col gap-4 ${
-          isFullScreen ? "h-full max-w-6xl mx-auto" : ""
-        }`}
-      >
+    <>
+    <div className="relative p-4 sm:p-6">
+      <div className="flex flex-col gap-4">
         <div className="relative flex-1 min-h-0">
           <div className="absolute inset-y-0 left-2 sm:left-4 flex items-center z-10">
             <button
@@ -173,49 +157,31 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
             </button>
           </div>
 
-          <div className="absolute top-4 right-16 flex gap-2 z-10">
-            <button
-              onClick={handleZoomToggle}
-              className={`bg-white/85 rounded-full p-2 shadow-md transition-all ${
-                isZoomed ? "bg-indigo-100 text-indigo-600" : "hover:bg-gray-100"
-              }`}
-              aria-label={isZoomed ? "Exit zoom" : "Zoom image"}
-            >
-              <ZoomIn size={20} />
-            </button>
-          </div>
-
           <div
-            className={`flex items-center justify-center overflow-hidden rounded-2xl ${
-              isFullScreen
-                ? "h-full bg-black"
-                : "min-h-[360px] sm:min-h-[500px] bg-gray-50 px-6 py-4"
-            }`}
-            onMouseMove={handleMouseMove}
-            style={{ cursor: isZoomed ? "zoom-out" : "zoom-in" }}
-            onClick={handleZoomToggle}
+            className="relative flex items-center justify-center overflow-hidden rounded-2xl min-h-[360px] sm:min-h-[500px] bg-gray-50 px-6 py-4"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onClick={handleOpenViewer}
+            style={{ cursor: "pointer" }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleOpenViewer();
+              }
+            }}
+            aria-label="Open image viewer"
           >
             <div
-              className={`relative overflow-hidden rounded-xl w-full ${
-                isFullScreen ? "h-full max-h-full" : "h-[340px] sm:h-[460px]"
-              }`}
+              className="relative overflow-hidden rounded-xl w-full h-[340px] sm:h-[460px]"
             >
               <Image
                 src={selectedImage}
                 alt={name}
                 fill
                 sizes="(max-width: 768px) 100vw, 50vw"
-                className={`object-contain transition-all duration-300 ${
-                  isZoomed ? "scale-150" : "scale-100"
-                }`}
-                style={
-                  isZoomed
-                    ? {
-                        transformOrigin: `${mousePosition.x}% ${mousePosition.y}%`,
-                        objectPosition: "center",
-                      }
-                    : {}
-                }
+                className="object-contain"
                 priority
                 onError={(e) => {
                   e.currentTarget.src = generateProductPlaceholder(name);
@@ -229,22 +195,17 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
           </div>
         </div>
 
-        <div className={`${isFullScreen ? "pb-2" : ""}`}>
-          <div className="flex items-center justify-center gap-3 px-2">
-            <button
-              onClick={handlePrevImage}
-              className="shrink-0 rounded-full border border-gray-300 bg-white p-1.5 text-gray-700 hover:bg-gray-50"
-              aria-label="Previous thumbnail"
-            >
-              <ChevronLeft size={16} />
-            </button>
-
+        <div>
+          <div className="px-2">
             <div className="flex-1 overflow-x-auto">
               <div className="mx-auto flex min-w-max items-center justify-center gap-2 py-1 px-1">
                 {images.map((img, index) => (
                   <button
                     key={`${img}-${index}`}
                     onClick={() => handleImageSelect(img, index)}
+                    ref={(element) => {
+                      thumbnailButtonRefs.current[index] = element;
+                    }}
                     className={`relative border-2 rounded-xl p-1 transition-all duration-200 shrink-0 ${
                       selectedImage === img
                         ? "border-indigo-600 shadow-md"
@@ -269,14 +230,6 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
                 ))}
               </div>
             </div>
-
-            <button
-              onClick={handleNextImage}
-              className="shrink-0 rounded-full border border-gray-300 bg-white p-1.5 text-gray-700 hover:bg-gray-50"
-              aria-label="Next thumbnail"
-            >
-              <ChevronRight size={16} />
-            </button>
           </div>
 
           <div className="mt-2 flex items-center justify-center gap-1.5">
@@ -301,6 +254,59 @@ const ProductImageGallery: React.FC<ProductImageGalleryProps> = ({
         </div>
       </div>
     </div>
+    {isViewerOpen && (
+      <div
+        className="fixed inset-0 z-[120] bg-black/90 p-3 sm:p-8"
+        onClick={handleCloseViewer}
+      >
+        <div
+          className="relative mx-auto flex h-full w-full max-w-6xl items-center justify-center"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={handleCloseViewer}
+            className="absolute right-2 top-2 z-30 rounded-full bg-black/50 p-2 text-white transition hover:bg-black/70"
+            aria-label="Close image viewer"
+          >
+            <X size={22} />
+          </button>
+          <button
+            type="button"
+            onClick={handlePrevImage}
+            className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition hover:bg-black/70"
+            aria-label="Previous image"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <button
+            type="button"
+            onClick={handleNextImage}
+            className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition hover:bg-black/70"
+            aria-label="Next image"
+          >
+            <ChevronRight size={22} />
+          </button>
+          <div className="relative h-full w-full">
+            <Image
+              src={selectedImage}
+              alt={`${name} full view`}
+              fill
+              sizes="100vw"
+              className="object-contain"
+              priority
+              onError={(event) => {
+                event.currentTarget.src = generateProductPlaceholder(name);
+              }}
+            />
+          </div>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
+            {selectedIndex + 1} / {images.length || 1}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

@@ -6,6 +6,8 @@ export interface Product {
   thumbnail?: string | null;
   minPrice?: number;
   maxPrice?: number;
+  dealerMinPrice?: number | null;
+  dealerMaxPrice?: number | null;
   price?: number;
   isNew: boolean;
   isFeatured: boolean;
@@ -16,6 +18,7 @@ export interface Product {
     id: string;
     sku: string;
     price: number;
+    retailPrice?: number;
     images: string[];
     stock: number;
     lowStockThreshold: number;

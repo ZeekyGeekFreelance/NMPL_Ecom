@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import MainLayout from "@/app/components/templates/MainLayout";
 import ShippingAddressCard from "../ShippingAddressCard";
@@ -24,6 +25,17 @@ const OrderTrackingPage = () => {
     skip: !normalizedOrderId,
   });
   const order = data?.order || data?.data?.order;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#tracking") {
+      return;
+    }
+
+    const trackingSection = document.getElementById("tracking");
+    if (trackingSection) {
+      trackingSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [order?.id]);
 
   if (isLoading) {
     return (
@@ -50,7 +62,9 @@ const OrderTrackingPage = () => {
           <OrderItems order={order} />
 
           <div className="col-span-2 space-y-6">
-            <OrderStatus order={order} />
+            <div id="tracking" className="scroll-mt-24">
+              <OrderStatus order={order} />
+            </div>
 
             <OrderSummary
               order={order}

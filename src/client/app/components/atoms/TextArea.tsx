@@ -3,6 +3,10 @@
 import React from "react";
 import { Controller } from "react-hook-form";
 import { LucideIcon } from "lucide-react";
+import {
+  normalizeHumanTextForField,
+  toTitleCaseWordsForTyping,
+} from "@/app/lib/textNormalization";
 
 interface TextAreaProps {
   label?: string;
@@ -15,6 +19,8 @@ interface TextAreaProps {
   icon?: LucideIcon;
   className?: string;
   error?: string;
+  normalizeMode?: "auto" | "off" | "title";
+  normalizeFieldHint?: string;
 }
 
 const TextArea: React.FC<TextAreaProps> = ({
@@ -28,6 +34,8 @@ const TextArea: React.FC<TextAreaProps> = ({
   icon: Icon,
   className = "",
   error,
+  normalizeMode = "auto",
+  normalizeFieldHint,
 }) => {
   return (
     <div className="relative w-full">
@@ -47,6 +55,26 @@ const TextArea: React.FC<TextAreaProps> = ({
               rounded focus:outline-none focus:ring-[2px] focus:ring-lime-700 resize-none ${className}`}
             rows={rows}
             cols={cols}
+            onChange={(event) => {
+              const fieldHint =
+                normalizeFieldHint || name || label || placeholder || "";
+
+              let nextValue = event.target.value;
+              if (normalizeMode !== "off") {
+                nextValue =
+                  normalizeMode === "title"
+                    ? toTitleCaseWordsForTyping(nextValue)
+                    : normalizeHumanTextForField(nextValue, fieldHint, {
+                        typing: true,
+                      });
+              }
+
+              if (nextValue !== event.target.value) {
+                event.target.value = nextValue;
+              }
+
+              field.onChange(nextValue);
+            }}
           />
         )}
       />

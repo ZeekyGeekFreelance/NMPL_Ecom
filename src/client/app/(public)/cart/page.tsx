@@ -2,10 +2,11 @@
 import BreadCrumb from "@/app/components/feedback/BreadCrumb";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { Trash2, ShoppingCart, Minus, Plus, ShieldAlert } from "lucide-react";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import CartSummary from "@/app/(public)/cart/CartSummary";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import {
   useGetCartQuery,
   useRemoveFromCartMutation,
@@ -56,8 +57,13 @@ const Cart = () => {
   const { data, isLoading: userCartLoading } = useGetCartQuery(undefined, {
     skip: !shouldLoadCart,
   });
-  const [removeFromCart] = useRemoveFromCartMutation();
+  const [removeFromCart, { isLoading: isRemovingFromCart }] =
+    useRemoveFromCartMutation();
   const [updateCartItem] = useUpdateCartItemMutation();
+  const [itemPendingRemoval, setItemPendingRemoval] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const cartItems = useMemo(
     () => (shouldLoadCart ? data?.cart?.cartItems || [] : []),
@@ -81,9 +87,23 @@ const Cart = () => {
   }, [cartItems]);
   debugLog("subtotal => ", subtotal);
 
-  const handleRemoveFromCart = async (item: any) => {
+  const requestRemoveFromCart = (item: any) => {
+    setItemPendingRemoval({
+      id: item.id,
+      name: formatVariantName(item),
+    });
+  };
+
+  const handleRemoveFromCart = async () => {
+    const pendingRemoval = itemPendingRemoval;
+    if (!pendingRemoval) {
+      return;
+    }
+
+    setItemPendingRemoval(null);
+
     try {
-      await removeFromCart(item.id).unwrap();
+      await removeFromCart(pendingRemoval.id).unwrap();
       showToast("Item removed from cart", "success");
     } catch (error) {
       showToast(
@@ -262,7 +282,8 @@ const Cart = () => {
                         {formatPrice(item.variant.price * item.quantity)}
                       </p>
                       <button
-                        onClick={() => handleRemoveFromCart(item)}
+                        type="button"
+                        onClick={() => requestRemoveFromCart(item)}
                         className="text-red-500 hover:text-red-600 transition-colors"
                       >
                         <Trash2 size={16} />
@@ -281,6 +302,17 @@ const Cart = () => {
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={itemPendingRemoval !== null}
+        title="Remove item from cart?"
+        message={`Do you want to remove \"${itemPendingRemoval?.name || "this item"}\" from your cart?`}
+        type="danger"
+        confirmLabel="Remove"
+        onConfirm={() => void handleRemoveFromCart()}
+        onCancel={() => setItemPendingRemoval(null)}
+        isConfirming={isRemovingFromCart}
+        disableCancelWhileConfirming
+      />
     </MainLayout>
   );
 };

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import PasswordField from "@/app/components/molecules/PasswordField";
-import { z } from "zod";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { useSignupMutation } from "@/app/store/apis/AuthApi";
 import GoogleIcon from "@/app/assets/icons/google.png";
@@ -16,6 +15,15 @@ import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
 import { AUTH_API_BASE_URL } from "@/app/lib/constants/config";
 import { useRegistrationOtp } from "../shared/useRegistrationOtp";
+import {
+  normalizeEmailValue,
+  normalizePhoneDigits,
+  sanitizeLooseTextInput,
+  sanitizeTextInput,
+  validateDisplayName,
+  validateEmailValue,
+  validateTenDigitPhone,
+} from "@/app/lib/validators/common";
 
 interface InputForm {
   name: string;
@@ -24,31 +32,6 @@ interface InputForm {
   password: string;
   emailOtpCode: string;
 }
-
-const nameSchema = (value: string) => {
-  const result = z
-    .string()
-    .min(2, "Name must be at least 2 characters long")
-    .safeParse(value);
-  return result.success || result.error.errors[0].message;
-};
-
-const emailSchema = (value: string) => {
-  const result = z.string().email("Invalid email address").safeParse(value);
-  return result.success || result.error.errors[0].message;
-};
-
-const phoneSchema = (value: string) => {
-  const result = z
-    .string()
-    .trim()
-    .regex(
-      /^[0-9()+\-\s]{7,20}$/,
-      "Phone number must be 7-20 characters and contain only valid digits/symbols"
-    )
-    .safeParse(value);
-  return result.success || result.error.errors[0].message;
-};
 
 const Signup = () => {
   const [signUp, { isLoading, error }] = useSignupMutation();
@@ -72,10 +55,13 @@ const Signup = () => {
     register,
     watch,
     getValues,
+    setValue,
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<InputForm>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       name: "",
       email: "",
@@ -87,7 +73,13 @@ const Signup = () => {
 
   const onSubmit = async (formData: InputForm) => {
     try {
-      await signUp(formData).unwrap();
+      await signUp({
+        ...formData,
+        name: sanitizeTextInput(formData.name),
+        email: normalizeEmailValue(formData.email),
+        phone: normalizePhoneDigits(formData.phone, 10),
+        emailOtpCode: formData.emailOtpCode.replace(/\D/g, "").slice(0, 6),
+      }).unwrap();
       router.push("/");
     } catch {
       // Error is surfaced from mutation state.
@@ -103,6 +95,11 @@ const Signup = () => {
     const phone = getValues("phone");
     await sendOtp(email, phone);
   };
+
+  const canRequestOtp =
+    canSendOtp &&
+    validateEmailValue(watch("email")) === true &&
+    validateTenDigitPhone(watch("phone")) === true;
 
   return (
     <GuestOnlyGuard>
@@ -127,7 +124,13 @@ const Signup = () => {
                 control={control}
                 validation={{
                   required: "Name is required",
-                  validate: nameSchema,
+                  validate: (value: string) => validateDisplayName(value),
+                }}
+                onChange={(event) => {
+                  setValue("name", sanitizeLooseTextInput(event.target.value), {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
                 }}
                 error={errors.name?.message}
                 className="py-2.5 text-sm"
@@ -135,12 +138,18 @@ const Signup = () => {
 
               <Input
                 name="email"
-                type="text"
+                type="email"
                 placeholder="Email"
                 control={control}
                 validation={{
                   required: "Email is required",
-                  validate: emailSchema,
+                  validate: (value: string) => validateEmailValue(value),
+                }}
+                onChange={(event) => {
+                  setValue("email", normalizeEmailValue(event.target.value), {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
                 }}
                 error={errors.email?.message}
                 className="py-2.5 text-sm"
@@ -148,12 +157,19 @@ const Signup = () => {
 
               <Input
                 name="phone"
-                type="text"
+                type="tel"
                 placeholder="Phone number"
                 control={control}
                 validation={{
                   required: "Phone number is required",
-                  validate: phoneSchema,
+                  validate: (value: string) => validateTenDigitPhone(value),
+                }}
+                onChange={(event) => {
+                  setValue(
+                    "phone",
+                    normalizePhoneDigits(event.target.value, 10),
+                    { shouldValidate: true, shouldDirty: true }
+                  );
                 }}
                 error={errors.phone?.message}
                 className="py-2.5 text-sm"
@@ -170,9 +186,9 @@ const Signup = () => {
                 <button
                   type="button"
                   onClick={handleSendOtp}
-                  disabled={!canSendOtp}
+                  disabled={!canRequestOtp}
                   className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
-                    !canSendOtp ? "cursor-not-allowed opacity-70" : ""
+                    !canRequestOtp ? "cursor-not-allowed opacity-70" : ""
                   }`}
                 >
                   {isSendingOtp
@@ -204,6 +220,13 @@ const Signup = () => {
                       message: "Email OTP must be a valid 6-digit code",
                     },
                   }}
+                  onChange={(event) => {
+                    setValue(
+                      "emailOtpCode",
+                      event.target.value.replace(/\D/g, "").slice(0, 6),
+                      { shouldValidate: true, shouldDirty: true }
+                    );
+                  }}
                   error={errors.emailOtpCode?.message}
                   className="py-2.5 text-sm"
                 />
@@ -213,8 +236,9 @@ const Signup = () => {
 
               <button
                 type="submit"
+                disabled={isLoading || !isValid}
                 className={`btn-primary w-full ${
-                  isLoading ? "cursor-not-allowed bg-gray-400" : ""
+                  isLoading || !isValid ? "cursor-not-allowed bg-gray-400" : ""
                 }`}
               >
                 {isLoading ? (

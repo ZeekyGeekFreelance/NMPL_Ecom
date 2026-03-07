@@ -1,10 +1,9 @@
 "use client";
+
 import { useAddToCartMutation } from "@/app/store/apis/CartApi";
 import { useAuth } from "@/app/hooks/useAuth";
 import useToast from "@/app/hooks/ui/useToast";
 import { Product } from "@/app/types/productTypes";
-import { Palette, Ruler, Info, Package, Check, X } from "lucide-react";
-import { motion } from "framer-motion";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import Link from "next/link";
@@ -20,7 +19,6 @@ interface ProductInfoProps {
   onVariantChange: (attributeName: string, value: string) => void;
   attributeGroups: Record<string, { values: Set<string> }>;
   selectedAttributes: Record<string, string>;
-  resetSelections: () => void;
 }
 
 const ProductInfo: React.FC<ProductInfoProps> = ({
@@ -32,7 +30,6 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   onVariantChange,
   attributeGroups,
   selectedAttributes,
-  resetSelections,
 }) => {
   const { showToast } = useToast();
   const { isAuthenticated, user, isLoading: isAuthLoading } = useAuth();
@@ -41,10 +38,10 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const searchParams = useSearchParams();
   const formatPrice = useFormatPrice();
   const [addToCart, { isLoading }] = useAddToCartMutation();
-  const isCustomerUser =
-    isAuthenticated && isCustomerDisplayRole(resolveDisplayRole(user));
+  const displayRole = resolveDisplayRole(user);
+  const isCustomerUser = isAuthenticated && isCustomerDisplayRole(displayRole);
   const isGuest = !isAuthenticated;
-  const showDealerSignupNudge = !(isAuthenticated && user?.isDealer);
+  const showDealerSignupNudge = !isAuthenticated || displayRole === "USER";
 
   const getCurrentPathWithSearch = () => {
     const query = searchParams?.toString();
@@ -151,26 +148,42 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
       return;
     }
 
-    const isAdded = await addSelectedVariantToCart();
-    if (!isAdded) {
+    if (!isCustomerUser) {
+      showToast("Cart is available only for customer accounts.", "error");
       return;
     }
 
-    showToast("Item added to cart. Verify and place your order.", "success");
+    setPendingAuthIntent({
+      actionType: "buy_now",
+      productId: id,
+      variantId: variant.id,
+      quantity: 1,
+      returnTo: "/cart",
+    });
+
     router.push("/cart");
   };
 
-  const price = selectedVariant
-    ? selectedVariant.price
-    : variants[0]?.price || 0;
-  const stock = selectedVariant
-    ? selectedVariant.stock
-    : variants[0]?.stock || 0;
+  const effectivePrice = selectedVariant
+    ? Number(selectedVariant.price ?? 0)
+    : Number(variants[0]?.price ?? 0);
+  const retailPrice = selectedVariant
+    ? Number(selectedVariant.retailPrice ?? selectedVariant.price ?? 0)
+    : Number(variants[0]?.retailPrice ?? variants[0]?.price ?? 0);
+  const hasDealerSpecificPrice =
+    Number.isFinite(effectivePrice) &&
+    Number.isFinite(retailPrice) &&
+    effectivePrice > 0 &&
+    retailPrice > 0 &&
+    effectivePrice !== retailPrice;
+  const discountPercent = hasDealerSpecificPrice
+    ? Math.max(0, Math.round(((retailPrice - effectivePrice) / retailPrice) * 100))
+    : 0;
+  const stock = selectedVariant ? selectedVariant.stock : variants[0]?.stock || 0;
   const selectedSku = selectedVariant?.sku || variants[0]?.sku || "N/A";
   const cartActionAllowed = stock > 0 && !!selectedVariant;
   const canUseCart = !isAuthLoading && cartActionAllowed && (isGuest || isCustomerUser);
 
-  // Compute available colors and sizes
   const colorValues = new Set<string>();
   const sizeValues = new Set<string>();
   variants.forEach((variant) => {
@@ -183,17 +196,6 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
     });
   });
 
-  // Generate attribute summary
-  const attributeSummary = Object.entries(attributeGroups)
-    .map(([attrName, { values }]) => {
-      const valueList = Array.from(values).join(", ");
-      return `${
-        attrName.charAt(0).toUpperCase() + attrName.slice(1)
-      }: ${valueList}`;
-    })
-    .join("; ");
-
-  // Color mapping for common colors
   const getColorValue = (colorName: string) => {
     const colorMap: Record<string, string> = {
       red: "#ef4444",
@@ -204,7 +206,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
       pink: "#ec4899",
       orange: "#f97316",
       brown: "#a16207",
-      black: "#000000",
+      black: "#0f172a",
       white: "#ffffff",
       gray: "#6b7280",
       grey: "#6b7280",
@@ -227,296 +229,284 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
     return colorMap[colorName.toLowerCase()] || "#6b7280";
   };
 
+  const variantMatchesSelections = (
+    variant: Product["variants"][0],
+    selections: Record<string, string>
+  ) =>
+    Object.entries(selections).every(([attributeName, attributeValue]) =>
+      variant.attributes.some(
+        (attribute) =>
+          attribute.attribute.name === attributeName &&
+          attribute.value.value === attributeValue
+      )
+    );
+
+  const isOptionAvailable = (attributeName: string, value: string) => {
+    const intendedSelections = {
+      ...selectedAttributes,
+      [attributeName]: value,
+    };
+
+    return variants.some(
+      (variant) =>
+        variant.stock > 0 && variantMatchesSelections(variant, intendedSelections)
+    );
+  };
+
+  const getOptionDisplayPrice = (attributeName: string, value: string) => {
+    const intendedSelections = {
+      ...selectedAttributes,
+      [attributeName]: value,
+    };
+
+    const matchedVariant =
+      variants.find(
+        (variant) =>
+          variant.stock > 0 && variantMatchesSelections(variant, intendedSelections)
+      ) ??
+      variants.find((variant) => variantMatchesSelections(variant, intendedSelections));
+
+    if (!matchedVariant) {
+      return null;
+    }
+
+    const optionPrice = Number(matchedVariant.price ?? 0);
+    if (!Number.isFinite(optionPrice) || optionPrice <= 0) {
+      return null;
+    }
+
+    return formatPrice(optionPrice);
+  };
+
   return (
-    <div className="flex flex-col gap-6 px-4 sm:px-6 py-6">
-      {/* Product Name */}
-      <h1 className="text-xl sm:text-2xl font-semibold text-gray-800">
-        {name}
-      </h1>
-
-      {/* Stock */}
-      <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-        <span
-          className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
-            stock > 0
-              ? "bg-indigo-100 text-indigo-600"
-              : "bg-red-100 text-red-600"
-          }`}
-        >
-          {stock > 0 ? `${stock} in stock` : "Out of stock"}
-        </span>
-      </div>
-
-      {/* Price */}
-      <div className="text-2xl sm:text-3xl font-bold text-gray-900">
-        {formatPrice(price)}
-      </div>
-      <div className="text-sm text-gray-600">SKU: {selectedSku}</div>
-
-      {/* Available Options */}
-      <div className="space-y-3">
-        {colorValues.size > 0 && (
-          <div className="flex items-center gap-2">
-            <Palette className="w-4 h-4 text-gray-500" />
-            <span className="text-gray-600 text-sm">
-              Available in {colorValues.size}{" "}
-              {colorValues.size === 1 ? "color" : "colors"}
-            </span>
-          </div>
-        )}
-
-        {sizeValues.size > 0 && (
-          <div className="flex items-center gap-2">
-            <Ruler className="w-4 h-4 text-gray-500" />
-            <span className="text-gray-600 text-sm">
-              Available in {sizeValues.size}{" "}
-              {sizeValues.size === 1 ? "size" : "sizes"}
-            </span>
-          </div>
-        )}
-
-        {attributeSummary && (
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-gray-500" />
-            <span className="text-gray-600 text-sm">{attributeSummary}</span>
-          </div>
-        )}
-
-        {colorValues.size === 0 &&
-          sizeValues.size === 0 &&
-          attributeSummary === "" && (
-            <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-500 text-sm">
-                No options available
-              </span>
-            </div>
-          )}
-      </div>
-
-      {/* Variant Selection */}
+    <div className="px-4 py-6 sm:px-6">
       <div className="space-y-6">
-        {Object.entries(attributeGroups).map(([attributeName, { values }]) => {
-          const isColor = attributeName.toLowerCase() === "color";
-          const isSize = attributeName.toLowerCase() === "size";
-          const valuesArray = Array.from(values);
+        <header className="border-b border-gray-200 pb-4">
+          <h1 className="text-[1.55rem] font-semibold leading-tight tracking-[-0.01em] text-slate-900 sm:text-[1.7rem]">
+            {name}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+        </header>
 
-          return (
-            <div key={attributeName} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-semibold text-gray-900 capitalize">
-                  {attributeName}
-                </label>
-                {selectedAttributes[attributeName] && (
-                  <button
-                    onClick={() => onVariantChange(attributeName, "")}
-                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                  >
-                    <X size={12} />
-                    Clear
-                  </button>
+        <section className="space-y-2 border-b border-gray-200 pb-5">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-[1.95rem] font-semibold tracking-tight text-slate-900">
+              {formatPrice(effectivePrice)}
+            </span>
+            {hasDealerSpecificPrice && (
+              <>
+                <span className="text-[1.35rem] text-slate-500 line-through">
+                  {formatPrice(retailPrice)}
+                </span>
+                {discountPercent > 0 && (
+                  <span className="text-[1.2rem] font-semibold text-amber-600">
+                    ({discountPercent}% OFF)
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+          <p className="text-sm font-medium text-emerald-700">inclusive of all taxes</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">
+            <span>SKU: {selectedSku}</span>
+            <span className="h-1 w-1 rounded-full bg-slate-300" />
+            <span className={stock > 0 ? "text-emerald-600" : "text-rose-500"}>
+              {stock > 0 ? `${stock} in stock` : "Out of stock"}
+            </span>
+            {colorValues.size > 0 && (
+              <>
+                <span className="h-1 w-1 rounded-full bg-slate-300" />
+                <span>{colorValues.size} colors</span>
+              </>
+            )}
+            {sizeValues.size > 0 && (
+              <>
+                <span className="h-1 w-1 rounded-full bg-slate-300" />
+                <span>{sizeValues.size} sizes</span>
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-5">
+          {Object.entries(attributeGroups).map(([attributeName, { values }]) => {
+            const isColor = attributeName.toLowerCase() === "color";
+            const isSize = attributeName.toLowerCase() === "size";
+            const valuesArray = Array.from(values).sort((left, right) =>
+              left.localeCompare(right, undefined, {
+                numeric: true,
+                sensitivity: "base",
+              })
+            );
+
+            return (
+              <div key={attributeName} className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold uppercase tracking-[0.08em] text-slate-900">
+                    {isSize ? "Select Size" : attributeName}
+                  </p>
+                  {selectedAttributes[attributeName] && (
+                    <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">
+                      Selected: {selectedAttributes[attributeName]}
+                    </span>
+                  )}
+                </div>
+
+                {isColor ? (
+                  <div className="flex flex-wrap gap-3">
+                    {valuesArray.map((value) => {
+                      const isSelected = selectedAttributes[attributeName] === value;
+                      const isUnavailable = !isOptionAvailable(attributeName, value);
+                      const colorValue = getColorValue(value);
+                      const isWhite =
+                        colorValue.toLowerCase() === "#ffffff" ||
+                        colorValue.toLowerCase() === "#fff";
+
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => {
+                            if (!isUnavailable) {
+                              onVariantChange(attributeName, value);
+                            }
+                          }}
+                          disabled={isUnavailable}
+                          className={`group relative flex min-w-[3.5rem] flex-col items-center gap-1 ${
+                            isUnavailable
+                              ? "cursor-not-allowed opacity-75"
+                              : "cursor-pointer"
+                          }`}
+                        >
+                          <span
+                            className={`relative block h-9 w-9 rounded-full border transition ${
+                              isSelected
+                                ? "ring-2 ring-indigo-500 ring-offset-2"
+                                : "border-slate-300 group-hover:border-slate-500"
+                            }`}
+                            style={{ backgroundColor: colorValue }}
+                          >
+                            {isWhite && (
+                              <span className="absolute inset-0 rounded-full border border-slate-300" />
+                            )}
+                            {isUnavailable && (
+                              <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+                                <span className="absolute left-1/2 top-1/2 h-px w-[72%] -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-slate-500/80" />
+                              </span>
+                            )}
+                          </span>
+                          <span
+                            className={`text-[11px] font-medium tracking-[0.04em] ${
+                              isSelected ? "text-slate-900" : "text-slate-600"
+                            }`}
+                          >
+                            {value}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2.5">
+                    {valuesArray.map((value) => {
+                      const isSelected = selectedAttributes[attributeName] === value;
+                      const isUnavailable = !isOptionAvailable(attributeName, value);
+                      const optionPrice = isSize
+                        ? getOptionDisplayPrice(attributeName, value)
+                        : null;
+
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => {
+                            if (!isUnavailable) {
+                              onVariantChange(attributeName, value);
+                            }
+                          }}
+                          disabled={isUnavailable}
+                          className={`relative min-w-[78px] rounded-full border px-4 py-2 text-center transition ${
+                            isSelected
+                              ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                              : isUnavailable
+                              ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                              : "border-slate-300 bg-white text-slate-900 hover:border-slate-500"
+                          }`}
+                        >
+                          <span className="block text-sm font-semibold leading-tight">{value}</span>
+                          {optionPrice && (
+                            <span
+                              className={`mt-1 block text-[11px] font-medium leading-tight ${
+                                isSelected ? "text-slate-200" : "text-slate-500"
+                              }`}
+                            >
+                              {optionPrice}
+                            </span>
+                          )}
+                          {isUnavailable && (
+                            <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+                              <span className="absolute left-1/2 top-1/2 h-px w-[78%] -translate-x-1/2 -translate-y-1/2 -rotate-[20deg] bg-slate-400/85" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
+            );
+          })}
+        </section>
 
-              {isColor ? (
-                // Color Selection with Circles
-                <div className="flex flex-wrap gap-3">
-                  {valuesArray.map((value) => {
-                    const isSelected =
-                      selectedAttributes[attributeName] === value;
-                    const colorValue = getColorValue(value);
-                    const isWhite =
-                      colorValue.toLowerCase() === "#ffffff" ||
-                      colorValue.toLowerCase() === "#fff";
-
-                    return (
-                      <motion.button
-                        key={value}
-                        onClick={() => onVariantChange(attributeName, value)}
-                        className={`relative group ${
-                          isSelected
-                            ? "ring-2 ring-indigo-500 ring-offset-2"
-                            : "ring-1 ring-gray-200 hover:ring-2 hover:ring-indigo-300"
-                        } rounded-full transition-all duration-200`}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        <div
-                          className="w-12 h-12 rounded-full flex items-center justify-center"
-                          style={{ backgroundColor: colorValue }}
-                        >
-                          {isSelected && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="text-white"
-                            >
-                              <Check size={16} />
-                            </motion.div>
-                          )}
-                        </div>
-                        {isWhite && (
-                          <div className="absolute inset-0 rounded-full border border-gray-300" />
-                        )}
-                        <span className="sr-only">{value}</span>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              ) : isSize ? (
-                // Size Selection with Buttons
-                <div className="flex flex-wrap gap-2">
-                  {valuesArray.map((value) => {
-                    const isSelected =
-                      selectedAttributes[attributeName] === value;
-                    const isOutOfStock = !variants.some(
-                      (variant) =>
-                        variant.attributes.some(
-                          (attr) =>
-                            attr.attribute.name === attributeName &&
-                            attr.value.value === value
-                        ) && variant.stock > 0
-                    );
-
-                    return (
-                      <motion.button
-                        key={value}
-                        onClick={() =>
-                          !isOutOfStock && onVariantChange(attributeName, value)
-                        }
-                        disabled={isOutOfStock}
-                        className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all duration-200 ${
-                          isSelected
-                            ? "bg-indigo-600 text-white shadow-lg"
-                            : isOutOfStock
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed line-through"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-md"
-                        }`}
-                        whileHover={!isOutOfStock ? { scale: 1.02 } : {}}
-                        whileTap={!isOutOfStock ? { scale: 0.98 } : {}}
-                      >
-                        {value}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              ) : (
-                // Other Attributes with Buttons
-                <div className="flex flex-wrap gap-2">
-                  {valuesArray.map((value) => {
-                    const isSelected =
-                      selectedAttributes[attributeName] === value;
-
-                    return (
-                      <motion.button
-                        key={value}
-                        onClick={() => onVariantChange(attributeName, value)}
-                        className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all duration-200 ${
-                          isSelected
-                            ? "bg-indigo-600 text-white shadow-lg"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-md"
-                        }`}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        {value}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Selected Value Display */}
-              {selectedAttributes[attributeName] && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 text-sm text-gray-600"
-                >
-                  <span className="font-medium">Selected:</span>
-                  <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md">
-                    {selectedAttributes[attributeName]}
-                  </span>
-                </motion.div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Reset Button */}
-        {Object.keys(selectedAttributes).length > 0 && (
-          <motion.button
-            onClick={resetSelections}
-            className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+        <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={!canUseCart || isLoading}
+            onClick={handleAddToCart}
+            className={`h-12 w-full rounded-md px-4 text-sm font-semibold uppercase tracking-[0.08em] transition ${
+              isLoading || !canUseCart
+                ? "cursor-not-allowed bg-slate-300 text-slate-500"
+                : "bg-indigo-600 text-white hover:bg-indigo-700"
+            }`}
           >
-            <X size={16} />
-            Reset All Selections
-          </motion.button>
-        )}
-      </div>
-
-      {/* Description */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900">Description</h3>
-        <p className="text-gray-600 text-sm leading-relaxed">{description}</p>
-      </div>
-
-      {showDealerSignupNudge && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          <span className="font-medium">Are you a dealer?</span>{" "}
-          <Link
-            href="/dealer/register"
-            className="text-indigo-600 hover:text-indigo-700 hover:underline"
+            {isLoading
+              ? "Adding..."
+              : isAuthLoading
+              ? "Checking..."
+              : canUseCart
+              ? "Add to Cart"
+              : !isGuest && !isCustomerUser
+              ? "Cart Unavailable"
+              : "Select a Variant"}
+          </button>
+          <button
+            type="button"
+            disabled={!canUseCart || isLoading}
+            onClick={handleBuyNow}
+            className={`h-12 w-full rounded-md border px-4 text-sm font-semibold uppercase tracking-[0.08em] transition ${
+              canUseCart && !isLoading
+                ? "border-slate-300 bg-white text-slate-900 hover:border-slate-900"
+                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+            }`}
           >
-            Request dealer sign-up
-          </Link>
+            Buy Now
+          </button>
         </div>
-      )}
 
-      {/* Action Buttons */}
-      <div className="space-y-3">
-        <button
-          disabled={!canUseCart || isLoading}
-          onClick={handleAddToCart}
-          className={`w-full py-3 sm:py-4 text-sm sm:text-base font-semibold text-white rounded-xl transition-all duration-300 ${
-            isLoading || !canUseCart
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
-          }`}
-        >
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Adding to Cart...
-            </div>
-          ) : isAuthLoading ? (
-            "Checking session..."
-          ) : canUseCart ? (
-            "Add to Cart"
-          ) : !isGuest && !isCustomerUser ? (
-            "Cart Unavailable for Admin"
-          ) : (
-            "Select a Variant"
-          )}
-        </button>
-        <button
-          type="button"
-          disabled={!canUseCart || isLoading}
-          onClick={handleBuyNow}
-          className={`w-full py-3 sm:py-4 text-sm sm:text-base font-semibold border-2 rounded-xl transition-all duration-300 ${
-            canUseCart && !isLoading
-              ? "border-indigo-600 text-indigo-600 hover:bg-indigo-50 hover:shadow-lg transform hover:scale-[1.02]"
-              : "border-gray-300 text-gray-400 cursor-not-allowed"
-          }`}
-        >
-          Buy Now
-        </button>
+        {showDealerSignupNudge && (
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <span className="font-medium">Are you a dealer?</span>{" "}
+            <Link
+              href="/dealer/register"
+              className="font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              Request dealer sign-up
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default ProductInfo;
-

@@ -13,7 +13,13 @@ interface User {
   effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
   avatar: string | null;
   isDealer?: boolean;
-  dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  dealerStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "LEGACY"
+    | "REJECTED"
+    | "SUSPENDED"
+    | null;
   dealerBusinessName?: string | null;
   dealerContactPhone?: string | null;
 }
@@ -37,7 +43,11 @@ export const authApi = apiSlice.injectEndpoints({
     }),
     signIn: builder.mutation<
       { message: string; user: User },
-      { email: string; password: string }
+      {
+        email: string;
+        password: string;
+        portal?: "USER_PORTAL" | "DEALER_PORTAL";
+      }
     >({
       query: (credentials) => ({
         url: "/auth/sign-in",
@@ -78,6 +88,24 @@ export const authApi = apiSlice.injectEndpoints({
           if (!data.requiresApproval) {
             dispatch(setUser({ user: data.user }));
           }
+        } catch {
+          // Ignore mutation rejection here; components already consume error state.
+        }
+      },
+    }),
+    applyDealerAccess: builder.mutation<
+      { message: string; user: User; requiresApproval?: boolean },
+      { businessName?: string; contactPhone?: string }
+    >({
+      query: (data) => ({
+        url: "/auth/dealer/apply",
+        method: "POST",
+        body: data,
+      }),
+      onQueryStarted: async (_, { dispatch, queryFulfilled }) => {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(setUser({ user: data.user }));
         } catch {
           // Ignore mutation rejection here; components already consume error state.
         }
@@ -141,6 +169,7 @@ export const {
   useRequestRegistrationOtpMutation,
   useSignInMutation,
   useSignupMutation,
+  useApplyDealerAccessMutation,
   useSignOutMutation,
   useForgotPasswordMutation,
   useResetPasswordMutation,

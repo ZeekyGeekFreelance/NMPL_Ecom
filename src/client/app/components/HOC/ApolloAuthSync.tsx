@@ -11,8 +11,15 @@ const getAuthSignature = (
         id: string;
         accountReference?: string;
         role: string;
+        effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
         isDealer?: boolean;
-        dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+        dealerStatus?:
+          | "PENDING"
+          | "APPROVED"
+          | "LEGACY"
+          | "REJECTED"
+          | "SUSPENDED"
+          | null;
       }
     | null
     | undefined
@@ -24,6 +31,7 @@ const getAuthSignature = (
   return [
     user.id,
     user.role,
+    user.effectiveRole || "no-effective-role",
     user.isDealer ? "dealer" : "non-dealer",
     user.dealerStatus || "no-dealer-status",
   ].join("|");
@@ -58,6 +66,7 @@ export default function ApolloAuthSync() {
     isLoading,
     user?.id,
     user?.role,
+    user?.effectiveRole,
     user?.isDealer,
     user?.dealerStatus,
   ]);

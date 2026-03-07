@@ -26,6 +26,8 @@ const typeDefs = gql`
     thumbnail: String
     minPrice: Float!
     maxPrice: Float!
+    dealerMinPrice: Float
+    dealerMaxPrice: Float
     category: Category
   }
 
@@ -34,6 +36,7 @@ const typeDefs = gql`
     sku: String!
     images: [String!]!
     price: Float!
+    retailPrice: Float!
     stock: Int!
     lowStockThreshold: Int!
     barcode: String

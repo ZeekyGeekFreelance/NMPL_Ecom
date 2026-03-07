@@ -17,9 +17,20 @@ import {
 import { useGetAllVariantsQuery } from "@/app/store/apis/VariantApi";
 import useToast from "@/app/hooks/ui/useToast";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
-import { Loader2, Search, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, Search, Trash2, X } from "lucide-react";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import {
+  normalizeEmailValue,
+  normalizePhoneDigits,
+  sanitizeLooseTextInput,
+  sanitizeTextInput,
+  validateBusinessName,
+  validateDisplayName,
+  validateEmailValue,
+  validatePasswordPolicy,
+  validateTenDigitPhone,
+} from "@/app/lib/validators/common";
 
 type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
 type DealerFilter = "ALL" | DealerStatus;
@@ -95,6 +106,63 @@ const DealersDashboard = () => {
     businessName: "",
     contactPhone: "",
   });
+  const [showCreateDealerPassword, setShowCreateDealerPassword] = useState(false);
+  const [createDealerSubmitAttempted, setCreateDealerSubmitAttempted] =
+    useState(false);
+
+  const createDealerFieldErrors = useMemo(() => {
+    const errors: Partial<Record<keyof typeof createDealerForm, string>> = {};
+
+    const nameValidation = validateDisplayName(createDealerForm.name, 2, 120, "Name");
+    if (nameValidation !== true) {
+      errors.name = nameValidation;
+    }
+
+    const emailValidation = validateEmailValue(createDealerForm.email);
+    if (emailValidation !== true) {
+      errors.email = emailValidation;
+    }
+
+    const passwordValidation = validatePasswordPolicy(createDealerForm.password);
+    if (passwordValidation !== true) {
+      errors.password = passwordValidation;
+    }
+
+    const businessNameValidation = validateBusinessName(createDealerForm.businessName);
+    if (businessNameValidation !== true) {
+      errors.businessName = businessNameValidation;
+    }
+
+    const contactPhoneValidation = validateTenDigitPhone(
+      createDealerForm.contactPhone,
+      "Contact phone"
+    );
+    if (contactPhoneValidation !== true) {
+      errors.contactPhone = contactPhoneValidation;
+    }
+
+    return errors;
+  }, [createDealerForm]);
+
+  const hasCreateDealerValidationErrors = Object.values(createDealerFieldErrors).some(
+    Boolean
+  );
+
+  const getVisibleCreateDealerFieldError = (
+    field: keyof typeof createDealerForm,
+    value: string
+  ) => {
+    const error = createDealerFieldErrors[field];
+    if (!error) {
+      return null;
+    }
+
+    if (createDealerSubmitAttempted || value.trim().length > 0) {
+      return error;
+    }
+
+    return null;
+  };
 
   const { data: dealerPriceData, isFetching: isFetchingDealerPrices } =
     useGetDealerPricesQuery(selectedDealerId || "", {
@@ -238,19 +306,58 @@ const DealersDashboard = () => {
     () => Object.values(priceMap).filter((value) => value?.trim() !== "").length,
     [priceMap]
   );
+  const createDealerNameError = getVisibleCreateDealerFieldError(
+    "name",
+    createDealerForm.name
+  );
+  const createDealerEmailError = getVisibleCreateDealerFieldError(
+    "email",
+    createDealerForm.email
+  );
+  const createDealerPasswordError = getVisibleCreateDealerFieldError(
+    "password",
+    createDealerForm.password
+  );
+  const createDealerBusinessNameError = getVisibleCreateDealerFieldError(
+    "businessName",
+    createDealerForm.businessName
+  );
+  const createDealerContactPhoneError = getVisibleCreateDealerFieldError(
+    "contactPhone",
+    createDealerForm.contactPhone
+  );
 
   const handleCreateDealer = async (event: React.FormEvent) => {
     event.preventDefault();
+    setCreateDealerSubmitAttempted(true);
+
+    if (hasCreateDealerValidationErrors) {
+      const firstError = [
+        createDealerFieldErrors.name,
+        createDealerFieldErrors.email,
+        createDealerFieldErrors.password,
+        createDealerFieldErrors.businessName,
+        createDealerFieldErrors.contactPhone,
+      ].find(Boolean);
+
+      if (firstError) {
+        showToast(firstError, "error");
+      }
+      return;
+    }
+
     try {
       await createDealer({
-        name: createDealerForm.name,
-        email: createDealerForm.email,
+        name: sanitizeTextInput(createDealerForm.name),
+        email: normalizeEmailValue(createDealerForm.email),
         password: createDealerForm.password,
-        businessName: createDealerForm.businessName,
-        contactPhone: createDealerForm.contactPhone,
+        businessName: sanitizeTextInput(createDealerForm.businessName),
+        contactPhone: normalizePhoneDigits(createDealerForm.contactPhone, 10),
       }).unwrap();
 
       setIsCreateModalOpen(false);
+      setCreateDealerSubmitAttempted(false);
+      setShowCreateDealerPassword(false);
       setCreateDealerForm({
         name: "",
         email: "",
@@ -342,6 +449,29 @@ const DealersDashboard = () => {
       return;
     }
 
+    const variantById = new Map(
+      variants.map((variant) => [variant.id, variant] as const)
+    );
+    const pricesAboveRetail = normalizedPrices.filter((row) => {
+      const variant = variantById.get(row.variantId);
+      return (
+        variant !== undefined &&
+        Number.isFinite(Number(variant.price)) &&
+        row.customPrice > Number(variant.price)
+      );
+    });
+
+    if (pricesAboveRetail.length > 0) {
+      const firstInvalidVariant = variantById.get(pricesAboveRetail[0].variantId);
+      showToast(
+        `Custom dealer price cannot exceed retail price${
+          firstInvalidVariant?.sku ? ` (${firstInvalidVariant.sku})` : ""
+        }`,
+        "error"
+      );
+      return;
+    }
+
     openConfirmation({
       title: "Save dealer prices?",
       message:
@@ -379,6 +509,25 @@ const DealersDashboard = () => {
       filteredVariants.forEach((variant) => {
         if (!next[variant.id] || next[variant.id].trim() === "") {
           next[variant.id] = String(variant.price);
+        }
+      });
+      return next;
+    });
+  };
+
+  const fillVisibleWithDealerBasePrices = () => {
+    setPriceMap((prev) => {
+      const next = { ...prev };
+      filteredVariants.forEach((variant) => {
+        const dealerBasePrice = Number(variant.defaultDealerPrice);
+        const hasDealerBasePrice =
+          Number.isFinite(dealerBasePrice) && dealerBasePrice >= 0;
+
+        if (
+          hasDealerBasePrice &&
+          (!next[variant.id] || next[variant.id].trim() === "")
+        ) {
+          next[variant.id] = String(dealerBasePrice);
         }
       });
       return next;
@@ -434,7 +583,11 @@ const DealersDashboard = () => {
             </p>
           </div>
           <button
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={() => {
+              setCreateDealerSubmitAttempted(false);
+              setShowCreateDealerPassword(false);
+              setIsCreateModalOpen(true);
+            }}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
           >
             Create Dealer
@@ -603,7 +756,11 @@ const DealersDashboard = () => {
         {isCreateModalOpen && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            onClick={() => setIsCreateModalOpen(false)}
+            onClick={() => {
+              setIsCreateModalOpen(false);
+              setCreateDealerSubmitAttempted(false);
+              setShowCreateDealerPassword(false);
+            }}
           >
             <form
               onClick={(event) => event.stopPropagation()}
@@ -623,11 +780,16 @@ const DealersDashboard = () => {
                   onChange={(event) =>
                     setCreateDealerForm((prev) => ({
                       ...prev,
-                      name: event.target.value,
+                      name: sanitizeLooseTextInput(event.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  className={`w-full rounded-lg border px-3 py-2 ${
+                    createDealerNameError ? "border-red-500 bg-red-50" : "border-gray-300"
+                  }`}
                 />
+                {createDealerNameError ? (
+                  <p className="mt-1 text-xs text-red-600">{createDealerNameError}</p>
+                ) : null}
                 <input
                   type="email"
                   required
@@ -636,25 +798,55 @@ const DealersDashboard = () => {
                   onChange={(event) =>
                     setCreateDealerForm((prev) => ({
                       ...prev,
-                      email: event.target.value,
+                      email: normalizeEmailValue(event.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  className={`w-full rounded-lg border px-3 py-2 ${
+                    createDealerEmailError ? "border-red-500 bg-red-50" : "border-gray-300"
+                  }`}
                 />
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  placeholder="Temporary password"
-                  value={createDealerForm.password}
-                  onChange={(event) =>
-                    setCreateDealerForm((prev) => ({
-                      ...prev,
-                      password: event.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                />
+                {createDealerEmailError ? (
+                  <p className="mt-1 text-xs text-red-600">{createDealerEmailError}</p>
+                ) : null}
+                <div className="relative">
+                  <input
+                    type={showCreateDealerPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    placeholder="Temporary password"
+                    value={createDealerForm.password}
+                    onChange={(event) =>
+                      setCreateDealerForm((prev) => ({
+                        ...prev,
+                        password: event.target.value,
+                      }))
+                    }
+                    className={`w-full rounded-lg border px-3 py-2 pr-10 ${
+                      createDealerPasswordError
+                        ? "border-red-500 bg-red-50"
+                        : "border-gray-300"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowCreateDealerPassword((previous) => !previous)
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    aria-label={
+                      showCreateDealerPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showCreateDealerPassword ? (
+                      <EyeOff size={18} />
+                    ) : (
+                      <Eye size={18} />
+                    )}
+                  </button>
+                </div>
+                {createDealerPasswordError ? (
+                  <p className="mt-1 text-xs text-red-600">{createDealerPasswordError}</p>
+                ) : null}
                 <input
                   type="text"
                   placeholder="Business name"
@@ -662,38 +854,62 @@ const DealersDashboard = () => {
                   onChange={(event) =>
                     setCreateDealerForm((prev) => ({
                       ...prev,
-                      businessName: event.target.value,
+                      businessName: sanitizeLooseTextInput(event.target.value),
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  className={`w-full rounded-lg border px-3 py-2 ${
+                    createDealerBusinessNameError
+                      ? "border-red-500 bg-red-50"
+                      : "border-gray-300"
+                  }`}
                 />
+                {createDealerBusinessNameError ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    {createDealerBusinessNameError}
+                  </p>
+                ) : null}
                 <input
-                  type="text"
+                  type="tel"
                   required
-                  pattern="^[0-9()+\-\s]{7,20}$"
+                  pattern="^[0-9]{10}$"
+                  maxLength={10}
+                  inputMode="numeric"
                   placeholder="Contact phone"
                   value={createDealerForm.contactPhone}
                   onChange={(event) =>
                     setCreateDealerForm((prev) => ({
                       ...prev,
-                      contactPhone: event.target.value,
+                      contactPhone: normalizePhoneDigits(event.target.value, 10),
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  className={`w-full rounded-lg border px-3 py-2 ${
+                    createDealerContactPhoneError
+                      ? "border-red-500 bg-red-50"
+                      : "border-gray-300"
+                  }`}
                 />
+                {createDealerContactPhoneError ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    {createDealerContactPhoneError}
+                  </p>
+                ) : null}
               </div>
 
               <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white px-6 py-4 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    setCreateDealerSubmitAttempted(false);
+                    setShowCreateDealerPassword(false);
+                  }}
                   className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreatingDealer}
+                  disabled={isCreatingDealer || hasCreateDealerValidationErrors}
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {isCreatingDealer ? (
@@ -726,7 +942,8 @@ const DealersDashboard = () => {
                   <span className="font-medium text-gray-900">
                     {selectedDealer?.name || "selected dealer"}
                   </span>
-                  . Empty custom price means fallback to base price.
+                  . Empty custom price means fallback to dealer base price (if set),
+                  otherwise retail price.
                 </p>
               </div>
 
@@ -763,7 +980,7 @@ const DealersDashboard = () => {
                       </label>
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
-                      This hides variants still using base price and only shows variants with an active custom dealer price.
+                      This hides variants still using fallback pricing and only shows variants with an active custom dealer price.
                     </p>
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -773,6 +990,13 @@ const DealersDashboard = () => {
                         className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium hover:bg-white"
                       >
                         Prefill visible with base price
+                      </button>
+                      <button
+                        type="button"
+                        onClick={fillVisibleWithDealerBasePrices}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium hover:bg-white"
+                      >
+                        Prefill visible with dealer base price
                       </button>
                       <button
                         type="button"
@@ -801,7 +1025,10 @@ const DealersDashboard = () => {
                             SKU
                           </th>
                           <th className="px-3 py-2 text-left font-medium text-gray-700">
-                            Base Price
+                            Retail Price
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-700">
+                            Dealer Base Price
                           </th>
                           <th className="px-3 py-2 text-left font-medium text-gray-700">
                             Custom Price
@@ -821,7 +1048,7 @@ const DealersDashboard = () => {
                         {filteredVariants.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={8}
+                              colSpan={9}
                               className="px-3 py-8 text-center text-sm text-gray-500"
                             >
                               No variants match your filter.
@@ -832,8 +1059,19 @@ const DealersDashboard = () => {
                             const customPriceRaw = priceMap[variant.id] || "";
                             const hasCustomPrice = customPriceRaw.trim() !== "";
                             const parsedCustomPrice = Number(customPriceRaw);
+                            const retailPrice = Number(variant.price);
+                            const dealerBasePrice = Number(variant.defaultDealerPrice);
+                            const hasDealerBasePrice =
+                              Number.isFinite(dealerBasePrice) && dealerBasePrice >= 0;
+                            const isCustomPriceAboveRetail =
+                              hasCustomPrice &&
+                              !Number.isNaN(parsedCustomPrice) &&
+                              parsedCustomPrice > retailPrice;
                             const isInvalidCustomPrice =
-                              hasCustomPrice && Number.isNaN(parsedCustomPrice);
+                              hasCustomPrice &&
+                              (Number.isNaN(parsedCustomPrice) ||
+                                parsedCustomPrice < 0 ||
+                                isCustomPriceAboveRetail);
 
                             return (
                               <tr
@@ -852,6 +1090,11 @@ const DealersDashboard = () => {
                                 <td className="px-3 py-2 text-gray-700">
                                   {formatPrice(variant.price)}
                                 </td>
+                                <td className="px-3 py-2 text-gray-700">
+                                  {hasDealerBasePrice
+                                    ? formatPrice(dealerBasePrice)
+                                    : "Not set"}
+                                </td>
                                 <td className="px-3 py-2">
                                   <input
                                     type="number"
@@ -864,17 +1107,24 @@ const DealersDashboard = () => {
                                         [variant.id]: event.target.value,
                                       }))
                                     }
-                                    placeholder="Use base price"
+                                    placeholder="Use fallback pricing"
                                     className={`w-full rounded-lg border px-2 py-1.5 text-sm ${
                                       isInvalidCustomPrice
                                         ? "border-red-400 bg-red-50"
                                         : "border-gray-300"
                                     }`}
                                   />
+                                  {isCustomPriceAboveRetail && (
+                                    <p className="mt-1 text-xs text-red-600">
+                                      Cannot exceed retail price.
+                                    </p>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-gray-700">
                                   {hasCustomPrice && !isInvalidCustomPrice
                                     ? formatPrice(parsedCustomPrice)
+                                    : hasDealerBasePrice
+                                    ? formatPrice(dealerBasePrice)
                                     : formatPrice(variant.price)}
                                 </td>
                                 <td className="px-3 py-2 text-gray-700">
@@ -894,7 +1144,7 @@ const DealersDashboard = () => {
                                     </button>
                                   ) : (
                                     <span className="text-xs text-gray-500">
-                                      Base price active
+                                      Fallback pricing active
                                     </span>
                                   )}
                                 </td>

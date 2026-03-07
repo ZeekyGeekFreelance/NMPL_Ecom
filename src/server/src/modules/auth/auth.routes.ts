@@ -5,6 +5,7 @@ import { cookieOptions } from "@/shared/constants";
 import handleSocialLogin from "@/shared/utils/auth/handleSocialLogin";
 import AppError from "@/shared/errors/AppError";
 import optionalAuth from "@/shared/middlewares/optionalAuth";
+import protect from "@/shared/middlewares/protect";
 import {
   authRateLimiter,
   otpRateLimiter,
@@ -13,6 +14,7 @@ import {
 } from "@/shared/middlewares/rateLimiter";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
+  ApplyDealerAccessDto,
   RegisterDto,
   RequestRegistrationOtpDto,
   ForgotPasswordDto,
@@ -248,6 +250,13 @@ router.post(
   registrationLimiter,
   validateDto(RegisterDto),
   authController.signup
+);
+
+router.post(
+  "/dealer/apply",
+  protect,
+  validateDto(ApplyDealerAccessDto),
+  authController.applyDealerAccess
 );
 
 /**

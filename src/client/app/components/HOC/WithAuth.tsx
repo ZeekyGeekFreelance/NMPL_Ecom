@@ -63,11 +63,15 @@ export function withAuth<P extends object>(
 
       if (allowedRoles?.length && !allowedRoles.includes(resolvedRole as AppRole)) {
         setIsRedirecting(true);
-        const fallbackPath =
-          options?.unauthorizedRedirectTo ||
-          (resolvedRole === "ADMIN" || resolvedRole === "SUPERADMIN"
-            ? "/dashboard"
-            : "/");
+        const fallbackPath = options?.unauthorizedRedirectTo || (() => {
+          if (resolvedRole === "ADMIN" || resolvedRole === "SUPERADMIN") {
+            return "/dashboard";
+          }
+          if (resolvedRole === "DEALER") {
+            return "/orders";
+          }
+          return "/";
+        })();
         router.replace(fallbackPath);
         return;
       }

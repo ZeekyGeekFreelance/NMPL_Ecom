@@ -9,6 +9,7 @@ import { AttributeRepository } from "../attribute/attribute.repository";
 import { VariantRepository } from "../variant/variant.repository";
 import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
 import { clearCatalogListingCache } from "./graphql/resolver";
+import { normalizeHumanTextForField } from "@/shared/utils/textNormalization";
 
 export class ProductService {
   private static readonly BASE_VARIANT_DELETE_MESSAGE =
@@ -181,6 +182,7 @@ export class ProductService {
       id: string;
       sku: string;
       price: number;
+      defaultDealerPrice?: number | null;
       stock: number;
       lowStockThreshold: number;
       barcode?: string | null;
@@ -191,6 +193,7 @@ export class ProductService {
       id?: string;
       sku: string;
       price: number;
+      defaultDealerPrice?: number | null;
       stock: number;
       lowStockThreshold?: number;
       barcode?: string;
@@ -220,6 +223,14 @@ export class ProductService {
         return true;
       }
       if (Number(matchedExisting.price) !== Number(incomingVariant.price)) {
+        return true;
+      }
+      const existingDefaultDealerPrice = matchedExisting.defaultDealerPrice ?? null;
+      const incomingDefaultDealerPrice =
+        incomingVariant.defaultDealerPrice === undefined
+          ? existingDefaultDealerPrice
+          : incomingVariant.defaultDealerPrice ?? null;
+      if (existingDefaultDealerPrice !== incomingDefaultDealerPrice) {
         return true;
       }
       if (Number(matchedExisting.stock) !== Number(incomingVariant.stock)) {
@@ -400,6 +411,10 @@ export class ProductService {
     }[];
   }) {
     const { variants, ...productData } = data;
+    const normalizedProductData = {
+      ...productData,
+      name: normalizeHumanTextForField(productData.name, "name"),
+    };
 
     if (!variants || variants.length === 0) {
       throw new AppError(400, "At least one variant is required");
@@ -424,6 +439,26 @@ export class ProductService {
           `${variantLabel} must have a positive price.`
         );
       }
+      if (
+        variant.defaultDealerPrice !== undefined &&
+        variant.defaultDealerPrice !== null
+      ) {
+        if (Number.isNaN(Number(variant.defaultDealerPrice))) {
+          throw this.buildVariantValidationError(
+            `${variantLabel} dealer base price must be numeric.`
+          );
+        }
+        if (Number(variant.defaultDealerPrice) < 0) {
+          throw this.buildVariantValidationError(
+            `${variantLabel} dealer base price must be >= 0.`
+          );
+        }
+        if (Number(variant.defaultDealerPrice) > Number(variant.price)) {
+          throw this.buildVariantValidationError(
+            `${variantLabel} dealer base price cannot exceed retail price.`
+          );
+        }
+      }
       if (variant.stock < 0) {
         throw this.buildVariantValidationError(
           `${variantLabel} must have non-negative stock.`
@@ -438,9 +473,9 @@ export class ProductService {
 
     // Validate category and required attributes
     let requiredAttributeIds: string[] = [];
-    if (productData.categoryId) {
+    if (normalizedProductData.categoryId) {
       const category = await prisma.category.findUnique({
-        where: { id: productData.categoryId },
+        where: { id: normalizedProductData.categoryId },
         include: {
           attributes: {
             where: { isRequired: true },
@@ -554,8 +589,8 @@ export class ProductService {
     // Create product and variants in a transaction
     const createdProduct = await prisma.$transaction(async (tx) => {
       const product = await this.productRepository.createProduct({
-        ...productData,
-        slug: slugify(productData.name),
+        ...normalizedProductData,
+        slug: slugify(normalizedProductData.name),
       }, tx);
 
       for (const variant of variants) {
@@ -590,7 +625,7 @@ export class ProductService {
       });
     });
 
-    clearCatalogListingCache();
+    await clearCatalogListingCache();
     return createdProduct;
   }
 
@@ -625,6 +660,12 @@ export class ProductService {
     }
 
     const { variants, ...productData } = updatedData;
+    const normalizedProductData = {
+      ...productData,
+      ...(typeof productData.name === "string"
+        ? { name: normalizeHumanTextForField(productData.name, "name") }
+        : {}),
+    };
 
     // Validate variants if provided
     if (variants) {
@@ -638,6 +679,12 @@ export class ProductService {
       }
 
       const skuRegex = /^[a-zA-Z0-9-]+$/;
+      const existingVariantById = new Map(
+        existingProduct.variants.map((row) => [row.id, row])
+      );
+      const existingVariantBySku = new Map(
+        existingProduct.variants.map((row) => [row.sku, row])
+      );
       variants.forEach((variant, index) => {
         const variantLabel = this.toVariantLabel(index);
         if (
@@ -654,6 +701,33 @@ export class ProductService {
           throw this.buildVariantValidationError(
             `${variantLabel} must have a positive price.`
           );
+        }
+        const existingVariant =
+          (variant.id && existingVariantById.get(variant.id)) ||
+          existingVariantBySku.get(variant.sku);
+        const effectiveDealerBasePrice =
+          variant.defaultDealerPrice !== undefined
+            ? variant.defaultDealerPrice
+            : existingVariant?.defaultDealerPrice;
+        if (
+          effectiveDealerBasePrice !== undefined &&
+          effectiveDealerBasePrice !== null
+        ) {
+          if (Number.isNaN(Number(effectiveDealerBasePrice))) {
+            throw this.buildVariantValidationError(
+              `${variantLabel} dealer base price must be numeric.`
+            );
+          }
+          if (Number(effectiveDealerBasePrice) < 0) {
+            throw this.buildVariantValidationError(
+              `${variantLabel} dealer base price must be >= 0.`
+            );
+          }
+          if (Number(effectiveDealerBasePrice) > Number(variant.price)) {
+            throw this.buildVariantValidationError(
+              `${variantLabel} dealer base price cannot exceed retail price.`
+            );
+          }
         }
         if (variant.stock < 0) {
           throw this.buildVariantValidationError(
@@ -753,7 +827,8 @@ export class ProductService {
         );
       }
 
-      const categoryId = productData.categoryId || existingProduct.categoryId;
+      const categoryId =
+        normalizedProductData.categoryId || existingProduct.categoryId;
       let requiredAttributeIds: string[] = [];
       if (categoryId) {
         const requiredAttributes = await prisma.categoryAttribute.findMany({
@@ -783,7 +858,10 @@ export class ProductService {
       });
     }
 
-    const hasProductChanges = this.hasProductFieldChanges(existingProduct, productData);
+    const hasProductChanges = this.hasProductFieldChanges(
+      existingProduct,
+      normalizedProductData
+    );
     const hasVariantChanges =
       Array.isArray(variants) &&
       this.hasVariantCollectionChanges(existingProduct.variants as any, variants);
@@ -799,8 +877,10 @@ export class ProductService {
       await this.productRepository.updateProduct(
         productId,
         {
-          ...productData,
-          ...(productData.name && { slug: slugify(productData.name) }),
+          ...normalizedProductData,
+          ...(normalizedProductData.name && {
+            slug: slugify(normalizedProductData.name),
+          }),
         },
         tx
       );
@@ -939,7 +1019,7 @@ export class ProductService {
       });
     });
 
-    clearCatalogListingCache();
+    await clearCatalogListingCache();
 
     return {
       product: updatedProduct,
@@ -987,7 +1067,9 @@ export class ProductService {
       value === "1";
 
     const rows = records.map((record, index) => {
-      const name = record.name ? String(record.name).trim() : "";
+      const name = record.name
+        ? normalizeHumanTextForField(String(record.name), "name")
+        : "";
       const sku = record.sku ? String(record.sku).trim() : "";
       const price = Number(record.price);
       const stock = Number.parseInt(String(record.stock), 10);
@@ -1123,7 +1205,7 @@ export class ProductService {
     });
 
     if (result.createdVariants > 0) {
-      clearCatalogListingCache();
+      await clearCatalogListingCache();
     }
 
     return { count: result.createdVariants, skipped: result.skippedVariants };
@@ -1136,6 +1218,6 @@ export class ProductService {
     }
 
     await this.productRepository.deleteProduct(productId);
-    clearCatalogListingCache();
+    await clearCatalogListingCache();
   }
 }

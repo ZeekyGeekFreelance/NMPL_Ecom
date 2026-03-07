@@ -7,7 +7,7 @@ import SliderImg4 from "@/app/assets/images/shoes-slider.jpeg";
 
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type TouchEvent } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -61,6 +61,7 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!isPreview && isPlaying) {
@@ -94,6 +95,44 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
     setCurrentImageIndex(index);
   };
 
+  const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
+    const touch = event.touches[0];
+    if (!touch) {
+      return;
+    }
+
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLElement>) => {
+    const swipeStart = swipeStartRef.current;
+    swipeStartRef.current = null;
+
+    if (!swipeStart) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
+
+    const deltaX = touch.clientX - swipeStart.x;
+    const deltaY = touch.clientY - swipeStart.y;
+    const swipeThreshold = 45;
+
+    if (Math.abs(deltaX) < swipeThreshold || Math.abs(deltaX) <= Math.abs(deltaY)) {
+      return;
+    }
+
+    if (deltaX > 0) {
+      prevSlide();
+      return;
+    }
+
+    nextSlide();
+  };
+
   const slideVariants = {
     enter: (direction: number) => ({
       x: direction > 0 ? 80 : -80,
@@ -120,7 +159,11 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
         isPreview ? "scale-90 my-2" : "my-2 sm:my-4 lg:my-6"
       }`}
     >
-      <div className="relative w-full overflow-hidden rounded-2xl shadow-2xl">
+      <div
+        className="relative w-full overflow-hidden rounded-2xl shadow-2xl"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className="aspect-[16/9] sm:aspect-[16/7] lg:aspect-[16/6] relative">
           <AnimatePresence initial={false} custom={direction}>
             <motion.div

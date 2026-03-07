@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Button from "@/app/components/atoms/Button";
@@ -7,9 +7,23 @@ import { useResetPasswordMutation } from "@/app/store/apis/AuthApi";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import { validatePasswordPolicy } from "@/app/lib/validators/common";
+
+type ResetPasswordForm = {
+  password: string;
+  confirmPassword: string;
+};
 
 const PasswordResetWithToken = () => {
-  const { handleSubmit, control } = useForm({
+  const {
+    handleSubmit,
+    control,
+    watch,
+    trigger,
+    formState: { errors, isValid },
+  } = useForm<ResetPasswordForm>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       password: "",
       confirmPassword: "",
@@ -20,17 +34,16 @@ const PasswordResetWithToken = () => {
   const [resetPassword, { isLoading }] = useResetPasswordMutation();
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
+  const passwordValue = watch("password");
+  const confirmPasswordValue = watch("confirmPassword");
 
-  const onSubmit = async (formData: {
-    password: string;
-    confirmPassword: string;
-  }) => {
-    if (formData.password !== formData.confirmPassword) {
-      setMessage("Passwords do not match");
-      setIsError(true);
-      return;
+  useEffect(() => {
+    if (confirmPasswordValue) {
+      void trigger("confirmPassword");
     }
+  }, [confirmPasswordValue, passwordValue, trigger]);
 
+  const onSubmit = async (formData: ResetPasswordForm) => {
     try {
       await resetPassword({
         token: token as string,
@@ -50,7 +63,7 @@ const PasswordResetWithToken = () => {
     <div className="min-h-screen flex flex-col items-center justify-center">
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="flex flex-col items-center justify-center bg-white p-6 rounded shadow-md w-[500px] gap-4"
+        className="flex w-full max-w-[500px] flex-col items-center justify-center gap-4 rounded bg-white p-6 shadow-md"
       >
         <h1 className="text-2xl font-bold mb-4">Reset Your Password</h1>
 
@@ -73,22 +86,9 @@ const PasswordResetWithToken = () => {
           control={control}
           validation={{
             required: "Password is required",
-            minLength: { value: 8, message: "Minimum 8 characters" },
-            validate: {
-              hasUppercase: (value: string) =>
-                /[A-Z]/.test(value) ||
-                "Password must contain at least one uppercase letter",
-              hasLowercase: (value: string) =>
-                /[a-z]/.test(value) ||
-                "Password must contain at least one lowercase letter",
-              hasNumber: (value: string) =>
-                /[0-9]/.test(value) ||
-                "Password must contain at least one number",
-              hasSpecialChar: (value: string) =>
-                /[!@#$%^&*]/.test(value) ||
-                "Password must contain at least one special character (!@#$%^&*)",
-            },
+            validate: (value: string) => validatePasswordPolicy(value),
           }}
+          error={errors.password?.message}
           className="py-4"
         />
 
@@ -97,14 +97,19 @@ const PasswordResetWithToken = () => {
           name="confirmPassword"
           placeholder="Confirm Password"
           control={control}
-          validation={{ required: "Confirm your password" }}
+          validation={{
+            required: "Confirm your password",
+            validate: (value: string) =>
+              value === passwordValue || "Passwords do not match",
+          }}
+          error={errors.confirmPassword?.message}
           className="py-4"
         />
 
         <Button
           type="submit"
           className="bg-primary mt-4 text-white w-full py-[12px] rounded"
-          disabled={isLoading}
+          disabled={isLoading || !isValid}
         >
           {isLoading ? "Resetting..." : "Reset Password"}
         </Button>

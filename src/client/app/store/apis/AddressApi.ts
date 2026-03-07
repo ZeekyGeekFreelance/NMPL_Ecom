@@ -34,6 +34,8 @@ export type CreateAddressPayload = {
   isDefault?: boolean;
 };
 
+export type UpdateAddressPayload = Partial<CreateAddressPayload>;
+
 export const addressApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getAddresses: builder.query<{ addresses: Address[] }, void>({
@@ -61,6 +63,26 @@ export const addressApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["Address"],
     }),
+    updateAddress: builder.mutation<
+      { address: Address },
+      { addressId: string; body: UpdateAddressPayload }
+    >({
+      query: ({ addressId, body }) => ({
+        url: `/addresses/${addressId}`,
+        method: "PATCH",
+        body,
+        credentials: "include",
+      }),
+      invalidatesTags: ["Address"],
+    }),
+    deleteAddress: builder.mutation<{ message: string }, string>({
+      query: (addressId) => ({
+        url: `/addresses/${addressId}`,
+        method: "DELETE",
+        credentials: "include",
+      }),
+      invalidatesTags: ["Address"],
+    }),
   }),
 });
 
@@ -68,5 +90,6 @@ export const {
   useGetAddressesQuery,
   useCreateAddressMutation,
   useSetDefaultAddressMutation,
+  useUpdateAddressMutation,
+  useDeleteAddressMutation,
 } = addressApi;
-

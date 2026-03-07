@@ -6,6 +6,7 @@ import { GET_PRODUCTS } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 import ProductSection from "@/app/(public)/product/ProductSection";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
+import { useAuth } from "@/app/hooks/useAuth";
 
 interface HydratedProductSectionProps {
   title: string;
@@ -22,6 +23,8 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
 }) => {
   const apolloClient = useApolloClient();
   const pollInterval = useDealerCatalogPollInterval();
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const refreshedUserIdRef = useRef<string | null>(null);
 
   // Seed the Apollo cache with SSR data before the first render so that
   // useQuery("cache-first") finds it immediately and never fires a network
@@ -56,7 +59,7 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
 
   const hasSSRData = initialProducts.length > 0;
 
-  const { data, error, networkStatus } = useQuery(GET_PRODUCTS, {
+  const { data, error, networkStatus, refetch } = useQuery(GET_PRODUCTS, {
     variables: { first: 12, skip: 0, filters },
     // cache-first: the seeded cache entry above will be served immediately,
     // no network request on mount.  Subsequent reads (e.g. after pollInterval
@@ -73,6 +76,21 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
     // fetch so the section can self-populate without a page reload.
     skip: false,
   });
+
+  // Home sections are initially seeded from SSR. If auth resolves after hydration,
+  // refresh once per user so dealer-specific prices replace anonymous catalog data.
+  useEffect(() => {
+    if (isAuthLoading || !user?.id) {
+      return;
+    }
+
+    if (refreshedUserIdRef.current === user.id) {
+      return;
+    }
+
+    refreshedUserIdRef.current = user.id;
+    void refetch();
+  }, [isAuthLoading, user?.id, refetch]);
 
   // Promote fresh network data into display state but never regress to empty.
   useEffect(() => {

@@ -16,12 +16,23 @@ const initialState: ToastState = {
   toasts: [],
 };
 
+const createToastId = () => {
+  if (
+    typeof globalThis !== "undefined" &&
+    typeof globalThis.crypto?.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `toast-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
 export const toastSlice = createSlice({
   name: "toast",
   initialState,
   reducers: {
     addToast: (state, action: PayloadAction<Omit<Toast, "id">>) => {
-      state.toasts.push({ id: crypto.randomUUID(), ...action.payload });
+      state.toasts.push({ id: createToastId(), ...action.payload });
     },
     removeToast: (state, action: PayloadAction<string>) => {
       state.toasts = state.toasts.filter(

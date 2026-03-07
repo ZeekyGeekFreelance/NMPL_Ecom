@@ -101,11 +101,40 @@ export class AuthController {
     });
   });
 
+  applyDealerAccess = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const { businessName, contactPhone } = req.body as {
+        businessName?: string;
+        contactPhone?: string;
+      };
+
+      const { user, wasResubmission } =
+        await this.authService.applyDealerAccessForCurrentUser({
+          userId: currentUserId,
+          businessName,
+          contactPhone,
+        });
+
+      sendResponse(res, 200, {
+        message: wasResubmission
+          ? "Dealer access request re-submitted. Await admin approval."
+          : "Dealer access request submitted. Await admin approval.",
+        data: { user, requiresApproval: true },
+      });
+    }
+  );
+
   signin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { email, password } = req.body;
+    const { email, password, portal } = req.body;
     const { user, accessToken, refreshToken } = await this.authService.signin({
       email,
       password,
+      portal,
     });
 
     res.cookie("refreshToken", refreshToken, cookieOptions);

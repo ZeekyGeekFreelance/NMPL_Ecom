@@ -34,7 +34,7 @@ export class InvoiceController {
 
     const invoice = await this.invoiceService.getInvoiceByOrder(orderId, {
       id: requester?.id || "",
-      role: requester?.role || "",
+      role: requester?.effectiveRole || requester?.role || "",
     });
 
     sendResponse(res, 200, {
@@ -51,7 +51,7 @@ export class InvoiceController {
       orderId,
       {
         id: requester?.id || "",
-        role: requester?.role || "",
+        role: requester?.effectiveRole || requester?.role || "",
       }
     );
 
@@ -71,7 +71,7 @@ export class InvoiceController {
       invoiceId,
       {
         id: requester?.id || "",
-        role: requester?.role || "",
+        role: requester?.effectiveRole || requester?.role || "",
       }
     );
 

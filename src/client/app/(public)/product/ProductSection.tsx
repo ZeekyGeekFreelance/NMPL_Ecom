@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Package } from "lucide-react";
 import { ApolloError } from "@apollo/client";
@@ -61,6 +61,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
 }) => {
   const [itemsPerSlide, setItemsPerSlide] = useState(1);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const syncItemsPerSlide = () => {
@@ -103,6 +104,57 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     () => buildPaginationGuide(totalSlides, currentSlide),
     [totalSlides, currentSlide]
   );
+
+  const goToNextSlide = () => {
+    setCurrentSlide((previous) => (previous + 1) % totalSlides);
+  };
+
+  const goToPreviousSlide = () => {
+    setCurrentSlide((previous) => (previous === 0 ? totalSlides - 1 : previous - 1));
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) {
+      return;
+    }
+
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (totalSlides <= 1) {
+      swipeStartRef.current = null;
+      return;
+    }
+
+    const swipeStart = swipeStartRef.current;
+    swipeStartRef.current = null;
+
+    if (!swipeStart) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
+
+    const deltaX = touch.clientX - swipeStart.x;
+    const deltaY = touch.clientY - swipeStart.y;
+    const swipeThreshold = 45;
+
+    if (Math.abs(deltaX) < swipeThreshold || Math.abs(deltaX) <= Math.abs(deltaY)) {
+      return;
+    }
+
+    if (deltaX > 0) {
+      goToPreviousSlide();
+      return;
+    }
+
+    goToNextSlide();
+  };
 
   if (error) {
     const friendlyErrorMessage =
@@ -192,7 +244,11 @@ const ProductSection: React.FC<ProductSectionProps> = ({
           </motion.div>
         )}
 
-        <div className="overflow-hidden">
+        <div
+          className="overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <motion.div
             className="flex"
             animate={{ x: `-${currentSlide * 100}%` }}

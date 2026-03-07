@@ -19,6 +19,7 @@ import { configureChatRoutes } from "@/modules/chat/chat.routes";
 import attributesRoutes from "@/modules/attribute/attribute.routes";
 import variantsRoutes from '@/modules/variant/variant.routes'
 import invoiceRoutes from "@/modules/invoice/invoice.routes";
+import deliveryRateRoutes from "@/modules/deliveryRate/deliveryRate.routes";
 import idempotencyGuard from "@/shared/middlewares/idempotencyGuard";
 import mutationAuditLogger from "@/shared/middlewares/mutationAuditLogger";
 
@@ -46,6 +47,7 @@ export const configureV1Routes = (io: SocketIOServer) => {
   router.use("/chat", configureChatRoutes(io));
   router.use('/variants', variantsRoutes)
   router.use("/invoices", invoiceRoutes);
+  router.use("/delivery-rates", deliveryRateRoutes);
 
   return router;
 };

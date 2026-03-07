@@ -4,9 +4,23 @@ export type AccountBoundary = "INTERNAL" | "EXTERNAL";
 type RoleInput = {
   role?: string | null;
   effectiveRole?: string | null;
-  dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null | string;
+  dealerStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "LEGACY"
+    | "REJECTED"
+    | "SUSPENDED"
+    | null
+    | string;
   dealerProfile?: {
-    status?: "PENDING" | "APPROVED" | "REJECTED" | null | string;
+    status?:
+      | "PENDING"
+      | "APPROVED"
+      | "LEGACY"
+      | "REJECTED"
+      | "SUSPENDED"
+      | null
+      | string;
   } | null;
   isDealer?: boolean | null;
 };
@@ -37,11 +51,19 @@ export const resolveDisplayRole = (input?: RoleInput | null): DisplayRole => {
     return "ADMIN";
   }
 
+  if (normalizedBaseRole === "DEALER") {
+    return "DEALER";
+  }
+
   const normalizedDealerStatus = normalizeUpper(
     input?.dealerProfile?.status ?? input?.dealerStatus
   );
 
-  if (normalizedDealerStatus === "APPROVED") {
+  if (
+    normalizedDealerStatus === "APPROVED" ||
+    normalizedDealerStatus === "LEGACY" ||
+    normalizedDealerStatus === "SUSPENDED"
+  ) {
     return "DEALER";
   }
 

@@ -41,9 +41,16 @@ type AuthUser = {
   email: string;
   phone?: string | null;
   role: string;
+  effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
   avatar: string | null;
   isDealer?: boolean;
-  dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  dealerStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "LEGACY"
+    | "REJECTED"
+    | "SUSPENDED"
+    | null;
   dealerBusinessName?: string | null;
   dealerContactPhone?: string | null;
 };
@@ -83,6 +90,7 @@ const shouldUpdateUserState = (
     currentUser.phone !== nextUser.phone ||
     currentUser.name !== nextUser.name ||
     currentUser.role !== nextUser.role ||
+    currentUser.effectiveRole !== nextUser.effectiveRole ||
     currentUser.avatar !== nextUser.avatar ||
     currentUser.isDealer !== nextUser.isDealer ||
     currentUser.dealerStatus !== nextUser.dealerStatus ||

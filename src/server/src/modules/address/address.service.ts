@@ -2,6 +2,12 @@ import AppError from "@/shared/errors/AppError";
 import { AddressRepository } from "./address.repository";
 import prisma from "@/infra/database/database.config";
 import { ADDRESS_TYPE } from "@prisma/client";
+import {
+  INDIA_COUNTRY_NAME,
+  canonicalizeAddressCity,
+  canonicalizeAddressState,
+  isIndiaCountry,
+} from "./address.location";
 
 type AddressPayload = {
   type?: ADDRESS_TYPE;
@@ -20,28 +26,97 @@ type AddressPayload = {
 export class AddressService {
   constructor(private addressRepository: AddressRepository) {}
 
+  private resolveCanonicalLocation(stateValue: string, cityValue: string) {
+    const canonicalState = canonicalizeAddressState(stateValue);
+    if (!canonicalState) {
+      throw new AppError(400, "Select a valid state from the list.");
+    }
+
+    const canonicalCity = canonicalizeAddressCity(canonicalState, cityValue);
+    if (!canonicalCity) {
+      throw new AppError(400, "Select a valid city for the selected state.");
+    }
+
+    return {
+      state: canonicalState,
+      city: canonicalCity,
+    };
+  }
+
   private normalizeAddressInput(payload: AddressPayload) {
-    const normalizeString = (value: unknown) => String(value ?? "").trim();
+    const normalizeString = (value: unknown) =>
+      String(value ?? "").replace(/[<>`]/g, "").trim();
+    const normalizeSingleSpaced = (value: unknown) =>
+      normalizeString(value).replace(/\s+/g, " ");
     const normalizeNullableString = (value: unknown) => {
-      const normalized = normalizeString(value);
+      const normalized = normalizeSingleSpaced(value);
       return normalized ? normalized : null;
     };
 
+    const normalizedFullName = normalizeSingleSpaced(payload.fullName);
+    const normalizedLine1 = normalizeSingleSpaced(payload.line1);
+    const normalizedCity = normalizeSingleSpaced(payload.city);
+    const normalizedState = normalizeSingleSpaced(payload.state);
+    const normalizedCountry = normalizeSingleSpaced(payload.country);
+
     const normalizedPincode = normalizeString(payload.pincode);
-    if (normalizedPincode && !/^[A-Za-z0-9-]{3,12}$/.test(normalizedPincode)) {
-      throw new AppError(400, "Pincode must be between 3 and 12 characters.");
+    if (normalizedPincode && !/^\d{6}$/.test(normalizedPincode)) {
+      throw new AppError(400, "Pincode must be exactly 6 digits.");
+    }
+    const normalizedPhoneNumber = normalizeString(payload.phoneNumber);
+    if (normalizedPhoneNumber && !/^\d{10}$/.test(normalizedPhoneNumber)) {
+      throw new AppError(400, "Phone number must be exactly 10 digits.");
+    }
+
+    if (normalizedFullName && (normalizedFullName.length < 2 || normalizedFullName.length > 120)) {
+      throw new AppError(400, "Full name must be between 2 and 120 characters.");
+    }
+
+    if (normalizedLine1 && (normalizedLine1.length < 5 || normalizedLine1.length > 255)) {
+      throw new AppError(
+        400,
+        "Address line 1 must be between 5 and 255 characters."
+      );
+    }
+
+    if (normalizedCity && (normalizedCity.length < 2 || normalizedCity.length > 120)) {
+      throw new AppError(400, "City must be between 2 and 120 characters.");
+    }
+
+    if (normalizedState && (normalizedState.length < 2 || normalizedState.length > 120)) {
+      throw new AppError(400, "State must be between 2 and 120 characters.");
+    }
+
+    if (
+      normalizedCountry &&
+      (normalizedCountry.length < 2 || normalizedCountry.length > 120)
+    ) {
+      throw new AppError(400, "Country must be between 2 and 120 characters.");
+    }
+    if (normalizedCountry && !isIndiaCountry(normalizedCountry)) {
+      throw new AppError(400, `Country must be ${INDIA_COUNTRY_NAME}.`);
+    }
+
+    const normalizedLine2 = normalizeNullableString(payload.line2);
+    if (normalizedLine2 && normalizedLine2.length > 255) {
+      throw new AppError(400, "Address line 2 cannot exceed 255 characters.");
+    }
+
+    const normalizedLandmark = normalizeNullableString(payload.landmark);
+    if (normalizedLandmark && normalizedLandmark.length > 255) {
+      throw new AppError(400, "Landmark cannot exceed 255 characters.");
     }
 
     return {
       type: payload.type || ADDRESS_TYPE.HOME,
-      fullName: normalizeString(payload.fullName),
-      phoneNumber: normalizeString(payload.phoneNumber),
-      line1: normalizeString(payload.line1),
-      line2: normalizeNullableString(payload.line2),
-      landmark: normalizeNullableString(payload.landmark),
-      city: normalizeString(payload.city),
-      state: normalizeString(payload.state),
-      country: normalizeString(payload.country),
+      fullName: normalizedFullName,
+      phoneNumber: normalizedPhoneNumber,
+      line1: normalizedLine1,
+      line2: normalizedLine2,
+      landmark: normalizedLandmark,
+      city: normalizedCity,
+      state: normalizedState,
+      country: normalizedCountry ? INDIA_COUNTRY_NAME : "",
       pincode: normalizedPincode,
       isDefault: Boolean(payload.isDefault),
     };
@@ -64,17 +139,19 @@ export class AddressService {
 
   async createAddress(userId: string, payload: AddressPayload) {
     const normalized = this.normalizeAddressInput(payload);
-    if (
-      !normalized.fullName ||
-      !normalized.phoneNumber ||
-      !normalized.line1 ||
-      !normalized.city ||
-      !normalized.state ||
-      !normalized.country ||
-      !normalized.pincode
-    ) {
-      throw new AppError(400, "Address fields are incomplete.");
-    }
+    if (!normalized.fullName) throw new AppError(400, "Full name is required.");
+    if (!normalized.phoneNumber)
+      throw new AppError(400, "Phone number is required.");
+    if (!normalized.line1)
+      throw new AppError(400, "Address line 1 is required.");
+    if (!normalized.city) throw new AppError(400, "City is required.");
+    if (!normalized.state) throw new AppError(400, "State is required.");
+    if (!normalized.country) throw new AppError(400, "Country is required.");
+    if (!normalized.pincode) throw new AppError(400, "Pincode is required.");
+    const canonicalLocation = this.resolveCanonicalLocation(
+      normalized.state,
+      normalized.city
+    );
 
     return prisma.$transaction(async (tx) => {
       const existingCount = await this.addressRepository.countUserAddresses(userId);
@@ -92,9 +169,9 @@ export class AddressService {
           line1: normalized.line1,
           line2: normalized.line2,
           landmark: normalized.landmark,
-          city: normalized.city,
-          state: normalized.state,
-          country: normalized.country,
+          city: canonicalLocation.city,
+          state: canonicalLocation.state,
+          country: INDIA_COUNTRY_NAME,
           pincode: normalized.pincode,
           isDefault: shouldMakeDefault,
         },
@@ -110,6 +187,15 @@ export class AddressService {
     }
 
     const normalized = this.normalizeAddressInput(payload);
+    const effectiveState =
+      payload.state !== undefined ? normalized.state : existingAddress.state;
+    const effectiveCity =
+      payload.city !== undefined ? normalized.city : existingAddress.city;
+    const shouldValidateLocation =
+      payload.state !== undefined || payload.city !== undefined;
+    const canonicalLocation = shouldValidateLocation
+      ? this.resolveCanonicalLocation(effectiveState, effectiveCity)
+      : null;
     const updateData = {
       ...(payload.type ? { type: normalized.type } : {}),
       ...(payload.fullName !== undefined ? { fullName: normalized.fullName } : {}),
@@ -119,12 +205,20 @@ export class AddressService {
       ...(payload.line1 !== undefined ? { line1: normalized.line1 } : {}),
       ...(payload.line2 !== undefined ? { line2: normalized.line2 } : {}),
       ...(payload.landmark !== undefined ? { landmark: normalized.landmark } : {}),
-      ...(payload.city !== undefined ? { city: normalized.city } : {}),
-      ...(payload.state !== undefined ? { state: normalized.state } : {}),
-      ...(payload.country !== undefined ? { country: normalized.country } : {}),
+      ...(payload.city !== undefined && canonicalLocation
+        ? { city: canonicalLocation.city }
+        : {}),
+      ...(payload.state !== undefined && canonicalLocation
+        ? { state: canonicalLocation.state }
+        : {}),
+      ...(payload.country !== undefined ? { country: INDIA_COUNTRY_NAME } : {}),
       ...(payload.pincode !== undefined ? { pincode: normalized.pincode } : {}),
       ...(payload.isDefault !== undefined ? { isDefault: normalized.isDefault } : {}),
     };
+
+    if (Object.keys(updateData).length === 0) {
+      throw new AppError(400, "At least one address field is required to update.");
+    }
 
     return prisma.$transaction(async (tx) => {
       if (payload.isDefault === true) {

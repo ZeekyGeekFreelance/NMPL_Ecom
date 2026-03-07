@@ -1,11 +1,13 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import MainLayout from "@/app/components/templates/MainLayout";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
+import Dropdown from "@/app/components/molecules/Dropdown";
 import {
   useGetMeQuery,
   useUpdateMyProfileMutation,
@@ -16,12 +18,25 @@ import { useAppDispatch } from "@/app/store/hooks";
 import { setUser } from "@/app/store/slices/AuthSlice";
 import {
   useCreateAddressMutation,
+  useDeleteAddressMutation,
   useGetAddressesQuery,
   useSetDefaultAddressMutation,
+  useUpdateAddressMutation,
   type Address,
   type AddressType,
 } from "@/app/store/apis/AddressApi";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import {
+  ADDRESS_STATE_OPTIONS,
+  AddressFieldErrors,
+  INDIA_COUNTRY_NAME,
+  getAddressCitiesByState,
+  getAddressFieldErrors,
+  getAddressValidationError,
+  normalizeAddressPayload,
+  normalizeAddressPhone,
+  normalizeAddressPincode,
+} from "@/app/lib/validators/address";
 import {
   AlertCircle,
   ArrowRight,
@@ -34,15 +49,17 @@ import {
   MapPin,
   Phone,
   PackageSearch,
+  Pencil,
   PlusCircle,
   ReceiptText,
   Shield,
+  Trash2,
   User,
   Users,
   WalletCards,
 } from "lucide-react";
 
-type Role = "USER" | "ADMIN" | "SUPERADMIN";
+type Role = "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
 type AccountKind = Role | "DEALER";
 type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -83,6 +100,8 @@ type AddressFormState = {
   isDefault: boolean;
 };
 
+type AddressTouchedFields = Partial<Record<keyof AddressFieldErrors, boolean>>;
+
 const getEmptyAddressForm = (): AddressFormState => ({
   type: "HOME",
   fullName: "",
@@ -92,7 +111,7 @@ const getEmptyAddressForm = (): AddressFormState => ({
   landmark: "",
   city: "",
   state: "",
-  country: "India",
+  country: INDIA_COUNTRY_NAME,
   pincode: "",
   isDefault: false,
 });
@@ -280,15 +299,15 @@ const getDisplayNameError = (value: string): string | null => {
 };
 
 const normalizePhoneNumber = (phone: string): string =>
-  phone.replace(/\s+/g, " ").trim();
+  phone.replace(/\D/g, "");
 
 const getPhoneNumberError = (value: string): string | null => {
   if (!value) {
     return "Phone number is required.";
   }
 
-  if (!/^[0-9()+\-\s]{7,20}$/.test(value)) {
-    return "Phone number must be 7-20 characters and contain only valid digits/symbols.";
+  if (!/^\d{10}$/.test(value)) {
+    return "Phone number must be exactly 10 digits.";
   }
 
   return null;
@@ -332,13 +351,19 @@ const UserProfile = () => {
   const normalizedCurrentPhone = normalizePhoneNumber(user?.phone || "");
   const normalizedEditableName = normalizeDisplayName(editableName);
   const normalizedEditablePhone = normalizePhoneNumber(editablePhone);
+  const profileNameError = getDisplayNameError(normalizedEditableName);
+  const profilePhoneError = getPhoneNumberError(normalizedEditablePhone);
   const canSaveProfile = useMemo(
     () =>
       !isUpdatingProfile &&
+      !profileNameError &&
+      !profilePhoneError &&
       (normalizedEditableName !== normalizedCurrentName ||
         normalizedEditablePhone !== normalizedCurrentPhone),
     [
       isUpdatingProfile,
+      profileNameError,
+      profilePhoneError,
       normalizedCurrentName,
       normalizedCurrentPhone,
       normalizedEditableName,
@@ -348,8 +373,52 @@ const UserProfile = () => {
   const shouldShowAddressBook =
     accountKind === "USER" || accountKind === "DEALER";
   const [isAddressFormOpen, setIsAddressFormOpen] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
+  const [addressPendingDelete, setAddressPendingDelete] = useState<Address | null>(
+    null
+  );
+  const addressFormRef = useRef<HTMLFormElement | null>(null);
   const [addressForm, setAddressForm] = useState<AddressFormState>(
     getEmptyAddressForm()
+  );
+  const [addressSubmitAttempted, setAddressSubmitAttempted] = useState(false);
+  const [addressTouchedFields, setAddressTouchedFields] = useState<AddressTouchedFields>(
+    {}
+  );
+  const addressFieldErrors = useMemo(
+    () =>
+      getAddressFieldErrors({
+        fullName: addressForm.fullName,
+        phoneNumber: addressForm.phoneNumber,
+        line1: addressForm.line1,
+        line2: addressForm.line2,
+        landmark: addressForm.landmark,
+        city: addressForm.city,
+        state: addressForm.state,
+        country: addressForm.country,
+        pincode: addressForm.pincode,
+      }),
+    [addressForm]
+  );
+  const markAddressFieldTouched = (field: keyof AddressFieldErrors) => {
+    setAddressTouchedFields((previous) => ({ ...previous, [field]: true }));
+  };
+  const getVisibleAddressFieldError = (field: keyof AddressFieldErrors, value: string) => {
+    const error = addressFieldErrors[field];
+    if (!error) {
+      return null;
+    }
+
+    if (addressSubmitAttempted || addressTouchedFields[field] || value.trim().length > 0) {
+      return error;
+    }
+
+    return null;
+  };
+  const availableCities = useMemo(
+    () => getAddressCitiesByState(addressForm.state),
+    [addressForm.state]
   );
   const {
     data: addressesResponse,
@@ -361,12 +430,17 @@ const UserProfile = () => {
   });
   const [createAddress, { isLoading: isCreatingAddress }] =
     useCreateAddressMutation();
+  const [updateAddress, { isLoading: isUpdatingAddress }] =
+    useUpdateAddressMutation();
   const [setDefaultAddress, { isLoading: isSettingDefaultAddress }] =
     useSetDefaultAddressMutation();
+  const [deleteAddress, { isLoading: isDeletingAddress }] =
+    useDeleteAddressMutation();
   const addresses = useMemo(
     () => parseAddressesPayload(addressesResponse),
     [addressesResponse]
   );
+  const isSubmittingAddress = isCreatingAddress || isUpdatingAddress;
 
   useEffect(() => {
     setEditableName(user?.name || "");
@@ -381,22 +455,76 @@ const UserProfile = () => {
     }
 
     if (addresses.length === 0) {
+      setEditingAddressId(null);
       setIsAddressFormOpen(true);
     }
   }, [addresses.length, isAddressesLoading, shouldShowAddressBook]);
 
+  const focusAddressForm = () => {
+    if (!addressFormRef.current || typeof window === "undefined") {
+      return;
+    }
+
+    const targetTop =
+      addressFormRef.current.getBoundingClientRect().top + window.scrollY - 16;
+    window.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
+    window.requestAnimationFrame(() => {
+      addressFormRef.current?.focus({ preventScroll: true });
+    });
+  };
+
+  useEffect(() => {
+    if (!isAddressFormOpen || !editingAddressId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      focusAddressForm();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [editingAddressId, isAddressFormOpen]);
+
+  const resetAddressFormState = () => {
+    setAddressForm(getEmptyAddressForm());
+    setAddressSubmitAttempted(false);
+    setAddressTouchedFields({});
+    setEditingAddressId(null);
+  };
+
+  const openAddressEditor = (address: Address) => {
+    setAddressForm({
+      type: address.type,
+      fullName: address.fullName,
+      phoneNumber: address.phoneNumber,
+      line1: address.line1,
+      line2: address.line2 || "",
+      landmark: address.landmark || "",
+      city: address.city,
+      state: address.state,
+      country: address.country || INDIA_COUNTRY_NAME,
+      pincode: address.pincode,
+      isDefault: address.isDefault,
+    });
+    setAddressSubmitAttempted(false);
+    setAddressTouchedFields({});
+    setEditingAddressId(address.id);
+    setIsAddressFormOpen(true);
+  };
+
+  const openDeleteAddressConfirm = (address: Address) => {
+    setAddressPendingDelete(address);
+  };
+
   const handleNameChange = (value: string) => {
     setEditableName(value);
-    if (nameError) {
-      setNameError(null);
-    }
+    setNameError(getDisplayNameError(normalizeDisplayName(value)));
   };
 
   const handlePhoneChange = (value: string) => {
-    setEditablePhone(value);
-    if (phoneError) {
-      setPhoneError(null);
-    }
+    const normalizedPhone = normalizePhoneNumber(value).slice(0, 10);
+    setEditablePhone(normalizedPhone);
+    setPhoneError(getPhoneNumberError(normalizedPhone));
   };
 
   const handleSaveProfile = async () => {
@@ -479,6 +607,48 @@ const UserProfile = () => {
     key: keyof AddressFormState,
     value: string | boolean
   ) => {
+    if (key === "state" && typeof value === "string") {
+      setAddressForm((previous) => ({
+        ...previous,
+        state: value,
+        city: "",
+        country: INDIA_COUNTRY_NAME,
+      }));
+      return;
+    }
+
+    if (key === "city" && typeof value === "string") {
+      setAddressForm((previous) => ({
+        ...previous,
+        city: value,
+      }));
+      return;
+    }
+
+    if (key === "country" && typeof value === "string") {
+      setAddressForm((previous) => ({
+        ...previous,
+        country: INDIA_COUNTRY_NAME,
+      }));
+      return;
+    }
+
+    if (key === "phoneNumber" && typeof value === "string") {
+      setAddressForm((previous) => ({
+        ...previous,
+        phoneNumber: normalizeAddressPhone(value),
+      }));
+      return;
+    }
+
+    if (key === "pincode" && typeof value === "string") {
+      setAddressForm((previous) => ({
+        ...previous,
+        pincode: normalizeAddressPincode(value),
+      }));
+      return;
+    }
+
     setAddressForm((previous) => ({
       ...previous,
       [key]: value,
@@ -487,53 +657,69 @@ const UserProfile = () => {
 
   const handleCreateAddress = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setAddressSubmitAttempted(true);
 
-    const requiredFields: Array<keyof AddressFormState> = [
-      "fullName",
-      "phoneNumber",
-      "line1",
-      "city",
-      "state",
-      "country",
-      "pincode",
-    ];
+    const normalizedAddress = normalizeAddressPayload({
+      fullName: addressForm.fullName,
+      phoneNumber: addressForm.phoneNumber,
+      line1: addressForm.line1,
+      line2: addressForm.line2,
+      landmark: addressForm.landmark,
+      city: addressForm.city,
+      state: addressForm.state,
+      country: addressForm.country,
+      pincode: addressForm.pincode,
+    });
 
-    const hasMissingField = requiredFields.some(
-      (field) => !String(addressForm[field] ?? "").trim()
-    );
-
-    if (hasMissingField) {
-      showToast("Please complete all required address fields.", "error");
+    const addressValidationError = getAddressValidationError(normalizedAddress);
+    if (addressValidationError) {
+      showToast(addressValidationError, "error");
       return;
     }
 
     try {
-      const response = await createAddress({
+      const payload = {
         type: addressForm.type,
-        fullName: addressForm.fullName.trim(),
-        phoneNumber: addressForm.phoneNumber.trim(),
-        line1: addressForm.line1.trim(),
-        line2: addressForm.line2.trim() || undefined,
-        landmark: addressForm.landmark.trim() || undefined,
-        city: addressForm.city.trim(),
-        state: addressForm.state.trim(),
-        country: addressForm.country.trim(),
-        pincode: addressForm.pincode.trim(),
+        fullName: normalizedAddress.fullName,
+        phoneNumber: normalizedAddress.phoneNumber,
+        line1: normalizedAddress.line1,
+        line2: normalizedAddress.line2 || undefined,
+        landmark: normalizedAddress.landmark || undefined,
+        city: normalizedAddress.city,
+        state: normalizedAddress.state,
+        country: normalizedAddress.country,
+        pincode: normalizedAddress.pincode,
         isDefault: addressForm.isDefault,
-      }).unwrap();
+      };
+      const response = editingAddressId
+        ? await updateAddress({
+            addressId: editingAddressId,
+            body: payload,
+          }).unwrap()
+        : await createAddress(payload).unwrap();
 
-      const createdAddress = parseAddressPayload(response);
-      setAddressForm(getEmptyAddressForm());
+      const savedAddress = parseAddressPayload(response);
+      resetAddressFormState();
       setIsAddressFormOpen(false);
       await refetchAddresses();
       showToast(
-        createdAddress
-          ? "Address saved in your account successfully."
+        savedAddress
+          ? editingAddressId
+            ? "Address updated successfully."
+            : "Address saved in your account successfully."
+          : editingAddressId
+          ? "Address updated successfully."
           : "Address saved successfully.",
         "success"
       );
     } catch (addressError: unknown) {
-      showToast(getApiErrorMessage(addressError, "Failed to save address."), "error");
+      showToast(
+        getApiErrorMessage(
+          addressError,
+          editingAddressId ? "Failed to update address." : "Failed to save address."
+        ),
+        "error"
+      );
     }
   };
 
@@ -549,6 +735,60 @@ const UserProfile = () => {
       );
     }
   };
+
+  const handleDeleteAddress = async () => {
+    const addressId = addressPendingDelete?.id;
+    if (!addressId) {
+      return;
+    }
+
+    try {
+      setDeletingAddressId(addressId);
+      await deleteAddress(addressId).unwrap();
+      if (editingAddressId === addressId) {
+        resetAddressFormState();
+        setIsAddressFormOpen(false);
+      }
+      setAddressPendingDelete(null);
+      await refetchAddresses();
+      showToast("Address deleted successfully.", "success");
+    } catch (addressError: unknown) {
+      showToast(
+        getApiErrorMessage(addressError, "Failed to delete address."),
+        "error"
+      );
+    } finally {
+      setDeletingAddressId(null);
+    }
+  };
+
+  const handleCancelDeleteAddress = () => {
+    if (isDeletingAddress) {
+      return;
+    }
+    setAddressPendingDelete(null);
+  };
+
+  const fullNameAddressError = getVisibleAddressFieldError(
+    "fullName",
+    addressForm.fullName
+  );
+  const phoneAddressError = getVisibleAddressFieldError(
+    "phoneNumber",
+    addressForm.phoneNumber
+  );
+  const line1AddressError = getVisibleAddressFieldError("line1", addressForm.line1);
+  const cityAddressError = getVisibleAddressFieldError("city", addressForm.city);
+  const stateAddressError = getVisibleAddressFieldError("state", addressForm.state);
+  const countryAddressError = getVisibleAddressFieldError(
+    "country",
+    addressForm.country
+  );
+  const pincodeAddressError = getVisibleAddressFieldError(
+    "pincode",
+    addressForm.pincode
+  );
+  const hasAddressValidationErrors = Object.values(addressFieldErrors).some(Boolean);
 
   if (isLoading) {
     return (
@@ -665,7 +905,11 @@ const UserProfile = () => {
                             )
                           }
                           maxLength={80}
-                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                            nameError
+                              ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-200"
+                              : "border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+                          }`}
                           placeholder="Enter your display name"
                         />
                         <button
@@ -693,8 +937,14 @@ const UserProfile = () => {
                               getPhoneNumberError(normalizePhoneNumber(editablePhone))
                             )
                           }
-                          maxLength={20}
-                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          maxLength={10}
+                          inputMode="numeric"
+                          pattern="[0-9]{10}"
+                          className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                            phoneError
+                              ? "border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-200"
+                              : "border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+                          }`}
                           placeholder="Enter your account phone number"
                         />
                       </div>
@@ -845,11 +1095,29 @@ const UserProfile = () => {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setIsAddressFormOpen((previous) => !previous)}
+                      onClick={() => {
+                        if (editingAddressId) {
+                          resetAddressFormState();
+                          setIsAddressFormOpen(false);
+                          return;
+                        }
+
+                        if (isAddressFormOpen) {
+                          setIsAddressFormOpen(false);
+                          return;
+                        }
+
+                        resetAddressFormState();
+                        setIsAddressFormOpen(true);
+                      }}
                       className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
                     >
                       <PlusCircle size={14} />
-                      {isAddressFormOpen ? "Hide Form" : "Add New Address"}
+                      {editingAddressId
+                        ? "Cancel Edit"
+                        : isAddressFormOpen
+                        ? "Hide Form"
+                        : "Add New Address"}
                     </button>
                   </div>
 
@@ -864,7 +1132,11 @@ const UserProfile = () => {
                       {addresses.map((address) => (
                         <div
                           key={address.id}
-                          className="rounded-md border border-gray-200 bg-gray-50 p-3"
+                          className={`rounded-md border p-3 ${
+                            editingAddressId === address.id
+                              ? "border-indigo-300 bg-indigo-50/40"
+                              : "border-gray-200 bg-gray-50"
+                          }`}
                         >
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="min-w-0">
@@ -897,16 +1169,48 @@ const UserProfile = () => {
                               </p>
                             </div>
 
-                            {!address.isDefault && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {!address.isDefault && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleSetDefaultAddress(address.id)}
+                                  disabled={
+                                    isSettingDefaultAddress ||
+                                    isDeletingAddress ||
+                                    isSubmittingAddress
+                                  }
+                                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Set Default
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => void handleSetDefaultAddress(address.id)}
-                                disabled={isSettingDefaultAddress}
-                                className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => openAddressEditor(address)}
+                                disabled={
+                                  isSettingDefaultAddress ||
+                                  isDeletingAddress ||
+                                  isSubmittingAddress
+                                }
+                                className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Set Default
+                                <Pencil size={12} />
+                                Edit
                               </button>
-                            )}
+                              <button
+                                type="button"
+                                onClick={() => openDeleteAddressConfirm(address)}
+                                disabled={
+                                  isSettingDefaultAddress ||
+                                  isDeletingAddress ||
+                                  isSubmittingAddress
+                                }
+                                className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <Trash2 size={12} />
+                                {deletingAddressId === address.id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -919,65 +1223,118 @@ const UserProfile = () => {
 
                   {isAddressFormOpen && (
                     <form
+                      ref={addressFormRef}
+                      tabIndex={-1}
                       onSubmit={handleCreateAddress}
                       className="mt-4 space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3"
                     >
+                      {editingAddressId && (
+                        <p className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700">
+                          Editing saved address. Update fields and save.
+                        </p>
+                      )}
+
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-700">
                           Address Type
                         </label>
-                        <select
+                        <Dropdown
+                          label="Address Type"
+                          options={[
+                            { value: "HOME", label: "Home" },
+                            { value: "OFFICE", label: "Office" },
+                            { value: "WAREHOUSE", label: "Warehouse" },
+                            { value: "OTHER", label: "Other" },
+                          ]}
                           value={addressForm.type}
-                          onChange={(event) =>
-                            handleAddressInputChange(
-                              "type",
-                              event.target.value as AddressType
-                            )
-                          }
-                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                        >
-                          <option value="HOME">Home</option>
-                          <option value="OFFICE">Office</option>
-                          <option value="WAREHOUSE">Warehouse</option>
-                          <option value="OTHER">Other</option>
-                        </select>
+                          onChange={(value) => {
+                            if (!value) return;
+                            handleAddressInputChange("type", value as AddressType);
+                          }}
+                          clearable={false}
+                          className="h-10 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        />
                       </div>
 
                       <div className="grid gap-2 sm:grid-cols-2">
-                        <input
-                          value={addressForm.fullName}
-                          onChange={(event) =>
-                            handleAddressInputChange("fullName", event.target.value)
-                          }
-                          placeholder="Full Name *"
-                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                          required
-                        />
-                        <input
-                          value={addressForm.phoneNumber}
-                          onChange={(event) =>
-                            handleAddressInputChange("phoneNumber", event.target.value)
-                          }
-                          placeholder="Phone Number *"
-                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                          required
-                        />
+                        <div>
+                          <input
+                            value={addressForm.fullName}
+                            onChange={(event) =>
+                              handleAddressInputChange("fullName", event.target.value)
+                            }
+                            onBlur={() => markAddressFieldTouched("fullName")}
+                            minLength={2}
+                            maxLength={120}
+                            placeholder="Full Name *"
+                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                              fullNameAddressError
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-300"
+                            }`}
+                            required
+                          />
+                          {fullNameAddressError && (
+                            <p className="mt-1 text-xs text-red-600">
+                              {fullNameAddressError}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <input
+                            type="tel"
+                            value={addressForm.phoneNumber}
+                            onChange={(event) =>
+                              handleAddressInputChange("phoneNumber", event.target.value)
+                            }
+                            onBlur={() => markAddressFieldTouched("phoneNumber")}
+                            inputMode="numeric"
+                            maxLength={10}
+                            pattern="[0-9]{10}"
+                            placeholder="Phone Number *"
+                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                              phoneAddressError
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-300"
+                            }`}
+                            required
+                          />
+                          {phoneAddressError && (
+                            <p className="mt-1 text-xs text-red-600">
+                              {phoneAddressError}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
-                      <input
-                        value={addressForm.line1}
-                        onChange={(event) =>
-                          handleAddressInputChange("line1", event.target.value)
-                        }
-                        placeholder="Address Line 1 *"
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                        required
-                      />
+                      <div>
+                        <input
+                          value={addressForm.line1}
+                          onChange={(event) =>
+                            handleAddressInputChange("line1", event.target.value)
+                          }
+                          onBlur={() => markAddressFieldTouched("line1")}
+                          minLength={5}
+                          maxLength={255}
+                          placeholder="Address Line 1 *"
+                          className={`w-full rounded-md border px-3 py-2 text-sm ${
+                            line1AddressError
+                              ? "border-red-500 bg-red-50"
+                              : "border-gray-300"
+                          }`}
+                          required
+                        />
+                        {line1AddressError && (
+                          <p className="mt-1 text-xs text-red-600">{line1AddressError}</p>
+                        )}
+                      </div>
+
                       <input
                         value={addressForm.line2}
                         onChange={(event) =>
                           handleAddressInputChange("line2", event.target.value)
                         }
+                        maxLength={255}
                         placeholder="Address Line 2 (optional)"
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                       />
@@ -986,47 +1343,107 @@ const UserProfile = () => {
                         onChange={(event) =>
                           handleAddressInputChange("landmark", event.target.value)
                         }
+                        maxLength={255}
                         placeholder="Landmark (optional)"
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                       />
 
                       <div className="grid gap-2 sm:grid-cols-2">
-                        <input
-                          value={addressForm.city}
-                          onChange={(event) =>
-                            handleAddressInputChange("city", event.target.value)
-                          }
-                          placeholder="City *"
-                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                          required
-                        />
-                        <input
-                          value={addressForm.state}
-                          onChange={(event) =>
-                            handleAddressInputChange("state", event.target.value)
-                          }
-                          placeholder="State *"
-                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                          required
-                        />
-                        <input
-                          value={addressForm.country}
-                          onChange={(event) =>
-                            handleAddressInputChange("country", event.target.value)
-                          }
-                          placeholder="Country *"
-                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                          required
-                        />
-                        <input
-                          value={addressForm.pincode}
-                          onChange={(event) =>
-                            handleAddressInputChange("pincode", event.target.value)
-                          }
-                          placeholder="Pincode *"
-                          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                          required
-                        />
+                        <div>
+                          <Dropdown
+                            label="Select State *"
+                            options={ADDRESS_STATE_OPTIONS.map((stateOption) => ({
+                              value: stateOption,
+                              label: stateOption,
+                            }))}
+                            value={addressForm.state || null}
+                            onChange={(value) => {
+                              markAddressFieldTouched("state");
+                              handleAddressInputChange("state", value || "");
+                            }}
+                            onBlur={() => markAddressFieldTouched("state")}
+                            clearable={false}
+                            className={`h-10 w-full rounded-md border px-3 py-2 text-sm ${
+                              stateAddressError
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-300"
+                            }`}
+                          />
+                          {stateAddressError && (
+                            <p className="mt-1 text-xs text-red-600">{stateAddressError}</p>
+                          )}
+                        </div>
+                        <div>
+                          <Dropdown
+                            label="Select City *"
+                            options={availableCities.map((cityOption) => ({
+                              value: cityOption,
+                              label: cityOption,
+                            }))}
+                            value={addressForm.city || null}
+                            onChange={(value) => {
+                              markAddressFieldTouched("city");
+                              handleAddressInputChange("city", value || "");
+                            }}
+                            onBlur={() => markAddressFieldTouched("city")}
+                            disabled={!addressForm.state}
+                            clearable={false}
+                            className={`h-10 w-full rounded-md border px-3 py-2 text-sm ${
+                              cityAddressError
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-300"
+                            }`}
+                          />
+                          {cityAddressError && (
+                            <p className="mt-1 text-xs text-red-600">{cityAddressError}</p>
+                          )}
+                        </div>
+                        <div>
+                          <Dropdown
+                            label="Country"
+                            options={[
+                              { value: INDIA_COUNTRY_NAME, label: INDIA_COUNTRY_NAME },
+                            ]}
+                            value={addressForm.country || INDIA_COUNTRY_NAME}
+                            onChange={() => undefined}
+                            onBlur={() => markAddressFieldTouched("country")}
+                            disabled
+                            clearable={false}
+                            className={`h-10 w-full rounded-md border px-3 py-2 text-sm ${
+                              countryAddressError
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-300"
+                            }`}
+                          />
+                          {countryAddressError && (
+                            <p className="mt-1 text-xs text-red-600">{countryAddressError}</p>
+                          )}
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            value={addressForm.pincode}
+                            onChange={(event) =>
+                              handleAddressInputChange("pincode", event.target.value)
+                            }
+                            onBlur={() => markAddressFieldTouched("pincode")}
+                            inputMode="numeric"
+                            maxLength={6}
+                            pattern="[0-9]{6}"
+                            placeholder="Pincode *"
+                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                              pincodeAddressError
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-300"
+                            }`}
+                            required
+                          />
+                          {pincodeAddressError && (
+                            <p className="mt-1 text-xs text-red-600">
+                              {pincodeAddressError}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                       <label className="inline-flex items-center gap-2 text-xs text-gray-700">
@@ -1042,11 +1459,29 @@ const UserProfile = () => {
 
                       <button
                         type="submit"
-                        disabled={isCreatingAddress}
+                        disabled={isSubmittingAddress || hasAddressValidationErrors}
                         className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
                       >
-                        {isCreatingAddress ? "Saving..." : "Save Address"}
+                        {isSubmittingAddress
+                          ? editingAddressId
+                            ? "Updating..."
+                            : "Saving..."
+                          : editingAddressId
+                          ? "Update Address"
+                          : "Save Address"}
                       </button>
+                      {editingAddressId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            resetAddressFormState();
+                            setIsAddressFormOpen(false);
+                          }}
+                          className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                        >
+                          Cancel Edit
+                        </button>
+                      )}
                     </form>
                   )}
                 </div>
@@ -1126,6 +1561,22 @@ const UserProfile = () => {
           </motion.div>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={Boolean(addressPendingDelete)}
+        title="Delete Saved Address?"
+        type="danger"
+        message={
+          addressPendingDelete
+            ? `Delete address for ${addressPendingDelete.fullName}?\nThis action cannot be undone.`
+            : "Delete this saved address? This action cannot be undone."
+        }
+        onConfirm={() => void handleDeleteAddress()}
+        onCancel={handleCancelDeleteAddress}
+        confirmLabel="Delete Address"
+        cancelLabel="Keep Address"
+        isConfirming={isDeletingAddress}
+        disableCancelWhileConfirming
+      />
     </MainLayout>
   );
 };

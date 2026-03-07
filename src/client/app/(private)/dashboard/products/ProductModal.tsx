@@ -35,6 +35,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
     })) || [];
 
   const form = useForm<ProductFormData>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       id: "",
       name: "",
@@ -51,6 +53,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
           lowStockThreshold: 10,
           barcode: "",
           price: 0,
+          defaultDealerPrice: null,
           sku: "",
           stock: 0,
           attributes: [],

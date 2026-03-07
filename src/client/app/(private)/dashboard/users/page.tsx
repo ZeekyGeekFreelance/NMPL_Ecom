@@ -20,9 +20,9 @@ import {
   Crown,
   Shield,
   BadgeCheck,
-  FileText,
-  ChevronDown,
   KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import useToast from "@/app/hooks/ui/useToast";
 import { useForm } from "react-hook-form";
@@ -37,6 +37,7 @@ import AdminActionGuard from "@/app/components/auth/AdminActionGuard";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
 import formatDate from "@/app/utils/formatDate";
 import { getRoleBadgeClass, resolveDisplayRole } from "@/app/lib/userRole";
+import { validatePasswordPolicy } from "@/app/lib/validators/common";
 
 type UserDirectoryFilter =
   | "ALL"
@@ -88,6 +89,16 @@ const UsersDashboard = () => {
   const [passwordTargetUser, setPasswordTargetUser] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordSubmitAttempted, setPasswordSubmitAttempted] = useState(false);
+  const [passwordFieldTouched, setPasswordFieldTouched] = useState<{
+    password: boolean;
+    confirmPassword: boolean;
+  }>({
+    password: false,
+    confirmPassword: false,
+  });
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showAdminConfirmPassword, setShowAdminConfirmPassword] = useState(false);
   const [billingActionUserId, setBillingActionUserId] = useState<
     string | number | null
   >(null);
@@ -100,8 +111,32 @@ const UsersDashboard = () => {
   const [isRoleConfirmOpen, setIsRoleConfirmOpen] = useState(false);
   const [pendingRoleChange, setPendingRoleChange] =
     useState<PendingRoleChange | null>(null);
+  const normalizedNewPassword = newPassword.trim();
+  const normalizedConfirmPassword = confirmNewPassword.trim();
+  const passwordPolicyResult = normalizedNewPassword
+    ? validatePasswordPolicy(normalizedNewPassword)
+    : "Password is required.";
+  const passwordPolicyError =
+    passwordPolicyResult === true ? null : passwordPolicyResult;
+  const confirmPasswordError = !normalizedConfirmPassword
+    ? "Confirm password is required."
+    : normalizedConfirmPassword !== normalizedNewPassword
+    ? "Confirm password does not match."
+    : null;
+  const showPasswordPolicyError =
+    passwordPolicyError &&
+    (passwordSubmitAttempted ||
+      passwordFieldTouched.password ||
+      normalizedNewPassword.length > 0);
+  const showConfirmPasswordError =
+    confirmPasswordError &&
+    (passwordSubmitAttempted ||
+      passwordFieldTouched.confirmPassword ||
+      normalizedConfirmPassword.length > 0);
 
   const form = useForm<UserFormData>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       id: "",
       name: "",
@@ -178,25 +213,6 @@ const UsersDashboard = () => {
       return getDirectoryAffiliation(user) === "DEALER";
     return true;
   });
-
-  const validateStrongPassword = (password: string): string | null => {
-    if (password.length < 8) {
-      return "Password must be at least 8 characters long";
-    }
-    if (!/[A-Z]/.test(password)) {
-      return "Password must contain at least one uppercase letter";
-    }
-    if (!/[a-z]/.test(password)) {
-      return "Password must contain at least one lowercase letter";
-    }
-    if (!/[0-9]/.test(password)) {
-      return "Password must contain at least one number";
-    }
-    if (!/[!@#$%^&*]/.test(password)) {
-      return "Password must contain at least one special character (!@#$%^&*)";
-    }
-    return null;
-  };
 
   const columns = [
     {
@@ -340,45 +356,37 @@ const UsersDashboard = () => {
         <div className="flex items-center gap-2">
           {resolveDisplayRole(row) === "ADMIN" && (
             <AdminActionGuard action="create_admin" showFallback={false}>
-              <div className="relative">
-                <FileText
-                  size={14}
-                  className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-amber-700"
-                />
-                <ChevronDown
-                  size={14}
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-amber-700"
-                />
-                <select
-                  value=""
-                  aria-label="Billing assignment"
-                  onChange={(event) => {
-                    const action = event.target.value;
-                    if (!action) {
-                      return;
-                    }
-
-                    setPendingBillingChange({
-                      id: String(row.id),
-                      isBillingSupervisor: action === "assign",
-                      accountRef:
-                        row?.accountReference || toAccountReference(row.id || ""),
-                    });
-                    setIsBillingConfirmOpen(true);
-                  }}
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingBillingChange({
+                    id: String(row.id),
+                    isBillingSupervisor: !row?.isBillingSupervisor,
+                    accountRef:
+                      row?.accountReference || toAccountReference(row.id || ""),
+                  });
+                  setIsBillingConfirmOpen(true);
+                }}
                 disabled={
                   isUpdatingBillingSupervisor && billingActionUserId === row.id
                 }
-                  className="h-8 appearance-none rounded-md border border-amber-200 bg-amber-50 pl-7 pr-6 text-xs font-semibold text-amber-800 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="" disabled>
-                    Billing
-                  </option>
-                  <option value={row?.isBillingSupervisor ? "remove" : "assign"}>
-                    {row?.isBillingSupervisor ? "Remove" : "Assign"}
-                  </option>
-                </select>
-              </div>
+                className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  row?.isBillingSupervisor
+                    ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                {isUpdatingBillingSupervisor && billingActionUserId === row.id ? (
+                  <>
+                    <Loader2 size={14} className="mr-1 animate-spin" />
+                    Updating...
+                  </>
+                ) : row?.isBillingSupervisor ? (
+                  "Remove Billing"
+                ) : (
+                  "Assign Billing"
+                )}
+              </button>
             </AdminActionGuard>
           )}
 
@@ -390,6 +398,13 @@ const UsersDashboard = () => {
                   setPasswordTargetUser(row);
                   setNewPassword("");
                   setConfirmNewPassword("");
+                  setPasswordSubmitAttempted(false);
+                  setPasswordFieldTouched({
+                    password: false,
+                    confirmPassword: false,
+                  });
+                  setShowAdminPassword(false);
+                  setShowAdminConfirmPassword(false);
                   setIsPasswordModalOpen(true);
                 }}
                 className="inline-flex h-8 items-center rounded-md border border-indigo-200 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
@@ -409,7 +424,14 @@ const UsersDashboard = () => {
               <button
                 type="button"
                 onClick={() => {
-                  form.reset(row);
+                  form.reset({
+                    id: row.id,
+                    name: row.name || "",
+                    email: row.email || "",
+                    role: row.role || "USER",
+                    emailVerified: Boolean(row.emailVerified),
+                  });
+                  void form.trigger();
                   setEditingOriginalRole(String(row.role || "").toUpperCase());
                   setEditingUser(row);
                   setIsModalOpen(true);
@@ -460,8 +482,20 @@ const UsersDashboard = () => {
 
   const executeUserUpdate = async (data: UserFormData) => {
     try {
-      const { id, ...payload } = data;
-      await updateUser({ id: String(id), data: payload }).unwrap();
+      const isEditingInternalAccount =
+        editingUser &&
+        ["ADMIN", "SUPERADMIN"].includes(resolveDisplayRole(editingUser));
+      const payload: Partial<UserFormData> = {
+        role: data.role,
+        emailVerified: data.emailVerified,
+      };
+
+      if (!isEditingInternalAccount) {
+        payload.name = data.name;
+        payload.email = data.email;
+      }
+
+      await updateUser({ id: String(data.id), data: payload }).unwrap();
       setIsModalOpen(false);
       setEditingOriginalRole(null);
       setEditingUser(null);
@@ -539,27 +573,33 @@ const UsersDashboard = () => {
       return;
     }
 
-    const normalizedPassword = newPassword.trim();
-    const policyError = validateStrongPassword(normalizedPassword);
-    if (policyError) {
-      showToast(policyError, "error");
+    setPasswordSubmitAttempted(true);
+    if (passwordPolicyError) {
+      showToast(passwordPolicyError, "error");
       return;
     }
 
-    if (normalizedPassword !== confirmNewPassword.trim()) {
-      showToast("Confirm password does not match", "error");
+    if (confirmPasswordError) {
+      showToast(confirmPasswordError, "error");
       return;
     }
 
     try {
       await updateAdminPassword({
         id: String(passwordTargetUser.id),
-        newPassword: normalizedPassword,
+        newPassword: normalizedNewPassword,
       }).unwrap();
       setIsPasswordModalOpen(false);
       setPasswordTargetUser(null);
       setNewPassword("");
       setConfirmNewPassword("");
+      setPasswordSubmitAttempted(false);
+      setPasswordFieldTouched({
+        password: false,
+        confirmPassword: false,
+      });
+      setShowAdminPassword(false);
+      setShowAdminConfirmPassword(false);
       showToast("Admin password updated and all active sessions logged out", "success");
     } catch (err: any) {
       const errorMessage =
@@ -727,6 +767,13 @@ const UsersDashboard = () => {
                 setPasswordTargetUser(null);
                 setNewPassword("");
                 setConfirmNewPassword("");
+                setPasswordSubmitAttempted(false);
+                setPasswordFieldTouched({
+                  password: false,
+                  confirmPassword: false,
+                });
+                setShowAdminPassword(false);
+                setShowAdminConfirmPassword(false);
               }}
             >
               <motion.div
@@ -747,6 +794,13 @@ const UsersDashboard = () => {
                       setPasswordTargetUser(null);
                       setNewPassword("");
                       setConfirmNewPassword("");
+                      setPasswordSubmitAttempted(false);
+                      setPasswordFieldTouched({
+                        password: false,
+                        confirmPassword: false,
+                      });
+                      setShowAdminPassword(false);
+                      setShowAdminConfirmPassword(false);
                     }}
                     className="text-gray-500 hover:text-gray-700"
                   >
@@ -764,25 +818,79 @@ const UsersDashboard = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       New Password
                     </label>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-                      placeholder="Enter new password"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showAdminPassword ? "text" : "password"}
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
+                        onBlur={() =>
+                          setPasswordFieldTouched((previous) => ({
+                            ...previous,
+                            password: true,
+                          }))
+                        }
+                        className={`w-full p-3 pr-10 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
+                          showPasswordPolicyError
+                            ? "border border-red-500 bg-red-50 focus:ring-red-200"
+                            : "border border-gray-300 focus:ring-blue-500"
+                        }`}
+                        placeholder="Enter new password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword((previous) => !previous)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        aria-label={showAdminPassword ? "Hide password" : "Show password"}
+                      >
+                        {showAdminPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    {showPasswordPolicyError ? (
+                      <p className="mt-1 text-xs text-red-600">{passwordPolicyError}</p>
+                    ) : null}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Confirm Password
                     </label>
-                    <input
-                      type="password"
-                      value={confirmNewPassword}
-                      onChange={(event) => setConfirmNewPassword(event.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-                      placeholder="Confirm new password"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showAdminConfirmPassword ? "text" : "password"}
+                        value={confirmNewPassword}
+                        onChange={(event) => setConfirmNewPassword(event.target.value)}
+                        onBlur={() =>
+                          setPasswordFieldTouched((previous) => ({
+                            ...previous,
+                            confirmPassword: true,
+                          }))
+                        }
+                        className={`w-full p-3 pr-10 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
+                          showConfirmPasswordError
+                            ? "border border-red-500 bg-red-50 focus:ring-red-200"
+                            : "border border-gray-300 focus:ring-blue-500"
+                        }`}
+                        placeholder="Confirm new password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowAdminConfirmPassword((previous) => !previous)
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        aria-label={
+                          showAdminConfirmPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        {showAdminConfirmPassword ? (
+                          <EyeOff size={18} />
+                        ) : (
+                          <Eye size={18} />
+                        )}
+                      </button>
+                    </div>
+                    {showConfirmPasswordError ? (
+                      <p className="mt-1 text-xs text-red-600">{confirmPasswordError}</p>
+                    ) : null}
                   </div>
                   <p className="text-xs text-gray-500">
                     Password policy: 8+ chars, uppercase, lowercase, number, special
@@ -792,7 +900,11 @@ const UsersDashboard = () => {
                     <button
                       type="button"
                       onClick={handleAdminPasswordSubmit}
-                      disabled={isUpdatingAdminPassword}
+                      disabled={
+                        isUpdatingAdminPassword ||
+                        Boolean(passwordPolicyError) ||
+                        Boolean(confirmPasswordError)
+                      }
                       className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {isUpdatingAdminPassword ? "Updating..." : "Update Password"}

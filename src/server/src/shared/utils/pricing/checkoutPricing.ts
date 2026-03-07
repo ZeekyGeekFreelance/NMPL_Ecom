@@ -3,6 +3,7 @@ import AppError from "@/shared/errors/AppError";
 import { getPlatformName } from "@/shared/utils/branding";
 import { ADDRESS_TYPE, DELIVERY_MODE } from "@prisma/client";
 import { config } from "@/config";
+import { canonicalizeAddressState } from "@/modules/address/address.location";
 
 type LineItem = {
   quantity: number;
@@ -126,12 +127,14 @@ export const getPickupLocationSnapshot = (): CheckoutAddressSnapshot => {
 
 export const resolveDeliveryQuote = async (params: {
   deliveryMode: unknown;
-  address?: Pick<CheckoutAddressSnapshot, "city" | "pincode"> | null;
+  address?: Pick<CheckoutAddressSnapshot, "city" | "state" | "pincode"> | null;
 }): Promise<DeliveryQuote> => {
   const mode = normalizeDeliveryMode(params.deliveryMode);
   const city = String(params.address?.city || "").trim();
+  const state = String(params.address?.state || "").trim();
   const normalizedCity = normalizeText(city);
   const normalizedPincode = String(params.address?.pincode || "").trim();
+  const canonicalState = canonicalizeAddressState(state);
 
   if (mode === DELIVERY_MODE.PICKUP) {
     return {
@@ -176,21 +179,56 @@ export const resolveDeliveryQuote = async (params: {
     },
   });
 
-  if (!deliveryRate || !deliveryRate.isServiceable) {
+  if (deliveryRate && !deliveryRate.isServiceable) {
     throw new AppError(
       400,
       "Delivery is unavailable for this pincode. Choose pickup or another address."
     );
   }
+  if (deliveryRate) {
+    return {
+      deliveryMode: DELIVERY_MODE.DELIVERY,
+      deliveryCharge: Number(Number(deliveryRate.charge || 0).toFixed(2)),
+      deliveryLabel: `Delivery (${deliveryRate.pincode})`,
+      serviceArea:
+        [deliveryRate.city, deliveryRate.state].filter(Boolean).join(", ") ||
+        deliveryRate.pincode,
+    };
+  }
 
-  return {
-    deliveryMode: DELIVERY_MODE.DELIVERY,
-    deliveryCharge: Number(Number(deliveryRate.charge || 0).toFixed(2)),
-    deliveryLabel: `Delivery (${deliveryRate.pincode})`,
-    serviceArea:
-      [deliveryRate.city, deliveryRate.state].filter(Boolean).join(", ") ||
-      deliveryRate.pincode,
-  };
+  if (canonicalState) {
+    const stateRate = await prisma.deliveryStateRate.findUnique({
+      where: {
+        state: canonicalState,
+      },
+      select: {
+        state: true,
+        charge: true,
+        isServiceable: true,
+      },
+    });
+
+    if (stateRate && !stateRate.isServiceable) {
+      throw new AppError(
+        400,
+        `Delivery is unavailable for ${stateRate.state}. Choose pickup or another address.`
+      );
+    }
+
+    if (stateRate) {
+      return {
+        deliveryMode: DELIVERY_MODE.DELIVERY,
+        deliveryCharge: Number(Number(stateRate.charge || 0).toFixed(2)),
+        deliveryLabel: `Delivery (${stateRate.state})`,
+        serviceArea: stateRate.state,
+      };
+    }
+  }
+
+  throw new AppError(
+    400,
+    "Delivery is unavailable for this pincode/state. Choose pickup or another address."
+  );
 };
 
 export const buildCheckoutPricing = (params: {

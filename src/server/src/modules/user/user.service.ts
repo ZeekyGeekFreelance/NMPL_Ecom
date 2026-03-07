@@ -52,11 +52,8 @@ export class UserService {
       throw new AppError(400, `${label} is required`);
     }
 
-    if (!/^[0-9()+\-\s]{7,20}$/.test(normalized)) {
-      throw new AppError(
-        400,
-        `${label} must be 7-20 characters and contain only valid digits/symbols`
-      );
+    if (!/^\d{10}$/.test(normalized)) {
+      throw new AppError(400, `${label} must be exactly 10 digits`);
     }
 
     return normalized;
@@ -446,6 +443,19 @@ export class UserService {
     if (!user) {
       throw new AppError(404, "User not found");
     }
+    const isTargetInternalAccount = this.isAdminRole(user.role);
+    if (
+      isTargetInternalAccount &&
+      (data.name !== undefined ||
+        data.email !== undefined ||
+        data.phone !== undefined ||
+        data.avatar !== undefined)
+    ) {
+      throw new AppError(
+        403,
+        "Internal account profile fields (name/email/phone/avatar) cannot be changed from Users dashboard."
+      );
+    }
 
     const payload: Partial<{
       name?: string;
@@ -474,7 +484,7 @@ export class UserService {
 
     if (data.role !== undefined) {
       const requestedRole = this.normalizeRole(data.role);
-      if (!["USER", "ADMIN", "SUPERADMIN"].includes(requestedRole)) {
+      if (!["USER", "DEALER", "ADMIN", "SUPERADMIN"].includes(requestedRole)) {
         throw new AppError(400, "Invalid role");
       }
 
@@ -488,7 +498,11 @@ export class UserService {
         );
       }
 
-      if (currentBoundary === "EXTERNAL" && requestedRole !== "USER") {
+      if (
+        currentBoundary === "EXTERNAL" &&
+        requestedRole !== "USER" &&
+        requestedRole !== "DEALER"
+      ) {
         throw new AppError(
           400,
           "External accounts cannot be promoted to ADMIN or SUPERADMIN"
@@ -499,8 +513,28 @@ export class UserService {
         throw new AppError(400, "Internal accounts can only be ADMIN or SUPERADMIN");
       }
 
-      if (this.isDealerAccount(user) && requestedRole !== "USER") {
-        throw new AppError(400, "Dealer accounts must stay in external role boundary");
+      if (!this.isDealerAccount(user) && requestedRole === "DEALER") {
+        throw new AppError(
+          400,
+          "Dealer role can only be granted through dealer approval workflow"
+        );
+      }
+
+      if (this.isDealerAccount(user)) {
+        const dealerStatus = this.normalizeRole(user.dealerProfile?.status);
+        const expectedExternalRole =
+          dealerStatus === "APPROVED" ||
+          dealerStatus === "LEGACY" ||
+          dealerStatus === "SUSPENDED"
+            ? "DEALER"
+            : "USER";
+
+        if (requestedRole !== expectedExternalRole) {
+          throw new AppError(
+            400,
+            "Use dealer approval/rejection workflow for customer/dealer transitions."
+          );
+        }
       }
 
       if (this.isSuperAdminRole(user.role) && requestedRole === "ADMIN") {
@@ -794,29 +828,79 @@ export class UserService {
       );
     }
 
+    const normalizedName = this.normalizeDisplayName(dealerData.name, "Name");
     const normalizedEmail = this.normalizeEmail(dealerData.email);
     const normalizedPhone = this.normalizePhone(
       dealerData.contactPhone,
       "Contact phone"
     );
+    const normalizedBusinessName = dealerData.businessName?.trim() || null;
     const existingUser = await this.userRepository.findUserByEmail(
       normalizedEmail
     );
+
     if (existingUser) {
-      throw new AppError(400, "User with this email already exists");
+      const hydratedExistingUser = await this.userRepository.findUserById(
+        existingUser.id
+      );
+      if (!hydratedExistingUser) {
+        throw new AppError(404, "Existing user not found");
+      }
+
+      if (this.isAdminRole(hydratedExistingUser.role)) {
+        throw new AppError(
+          400,
+          "Internal team accounts cannot be converted to dealer accounts"
+        );
+      }
+
+      await this.userRepository.updateUser(hydratedExistingUser.id, {
+        name: normalizedName,
+        phone: normalizedPhone,
+        role: ROLE.DEALER,
+      });
+      await this.userRepository.incrementUserTokenVersion(hydratedExistingUser.id);
+
+      const dealerProfile = await this.userRepository.upsertDealerProfile({
+        userId: hydratedExistingUser.id,
+        businessName:
+          normalizedBusinessName ?? hydratedExistingUser.dealerProfile?.businessName ?? null,
+        contactPhone: normalizedPhone,
+        status: "APPROVED",
+        approvedBy: actorUserId,
+      });
+
+      const upgradedDealer = await this.userRepository.findUserById(
+        hydratedExistingUser.id
+      );
+      if (!upgradedDealer) {
+        throw new AppError(500, "Dealer account upgraded but profile load failed");
+      }
+
+      await this.dealerNotificationService.sendDealerStatusUpdated({
+        recipientName: upgradedDealer.name,
+        recipientEmail: upgradedDealer.email,
+        businessName:
+          dealerProfile?.businessName ?? normalizedBusinessName ?? null,
+        accountReference: toAccountReference(upgradedDealer.id),
+        status: "APPROVED",
+        reviewedBy: this.resolveActorName(creator),
+      });
+
+      return this.withAccountReference(upgradedDealer);
     }
 
     const newDealerUser = await this.userRepository.createUser({
-      name: dealerData.name,
+      name: normalizedName,
       email: normalizedEmail,
       phone: normalizedPhone,
       password: dealerData.password,
-      role: "USER",
+      role: "DEALER",
     });
 
     await this.userRepository.upsertDealerProfile({
       userId: newDealerUser.id,
-      businessName: dealerData.businessName ?? null,
+      businessName: normalizedBusinessName,
       contactPhone: normalizedPhone,
       status: "APPROVED",
       approvedBy: actorUserId,
@@ -828,7 +912,7 @@ export class UserService {
       await this.dealerNotificationService.sendDealerAccountCreated({
         recipientName: dealerUser.name,
         recipientEmail: dealerUser.email,
-        businessName: dealerData.businessName ?? null,
+        businessName: normalizedBusinessName,
         accountReference: toAccountReference(dealerUser.id),
         temporaryPassword: dealerData.password,
       });
@@ -891,9 +975,17 @@ export class UserService {
       status,
       reviewedBy: this.resolveActorName(currentUser),
     });
+    const nextRoleForDealer =
+      status === "APPROVED" || status === "LEGACY" || status === "SUSPENDED"
+        ? ROLE.DEALER
+        : ROLE.USER;
 
     return {
-      ...this.withAccountReference(dealerUser),
+      ...this.withAccountReference({
+        ...dealerUser,
+        role: nextRoleForDealer,
+        dealerProfile,
+      }),
       dealerProfile,
     };
   }
@@ -919,8 +1011,11 @@ export class UserService {
       throw new AppError(404, "Dealer user not found");
     }
 
-    if (dealerUser.role !== "USER") {
-      throw new AppError(400, "Only USER role can be treated as dealer account");
+    if (this.isAdminRole(dealerUser.role)) {
+      throw new AppError(
+        400,
+        "Internal team accounts cannot be managed through dealer workflow"
+      );
     }
 
     const dealerProfile = await this.userRepository.findDealerProfileByUserId(
@@ -1029,6 +1124,30 @@ export class UserService {
       );
       if (validVariantCount !== variantIds.length) {
         throw new AppError(400, "One or more variant IDs are invalid");
+      }
+
+      const variantRetailSnapshot =
+        await this.userRepository.findVariantRetailSnapshot(variantIds);
+      const retailByVariantId = new Map(
+        variantRetailSnapshot.map((variant) => [variant.id, variant])
+      );
+      const overRetailPrices = normalizedPrices.filter((row) => {
+        const variant = retailByVariantId.get(row.variantId);
+        return (
+          variant !== undefined &&
+          Number(row.customPrice) > Number(variant.price)
+        );
+      });
+      if (overRetailPrices.length > 0) {
+        const firstInvalidVariant = retailByVariantId.get(
+          overRetailPrices[0].variantId
+        );
+        throw new AppError(
+          400,
+          `Custom dealer price cannot exceed retail price${
+            firstInvalidVariant?.sku ? ` (${firstInvalidVariant.sku})` : ""
+          }.`
+        );
       }
     }
 

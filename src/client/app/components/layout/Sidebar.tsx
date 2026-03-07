@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   Section,
   ChartArea,
+  Truck,
 } from "lucide-react";
 
 type SidebarNotificationKey =
@@ -23,6 +24,7 @@ type SidebarNotificationKey =
   | "inventory"
   | "attributes"
   | "categories"
+  | "deliveryFees"
   | "transactions"
   | "dealers"
   | "chats"
@@ -84,6 +86,13 @@ const Sidebar = ({ notifications = {} }: SidebarProps) => {
             name: "Categories",
             href: "/categories",
             icon: Boxes,
+            roles: ["ADMIN", "SUPERADMIN"],
+          },
+          {
+            id: "deliveryFees" as SidebarNotificationKey,
+            name: "Delivery Fees",
+            href: "/delivery-fees",
+            icon: Truck,
             roles: ["ADMIN", "SUPERADMIN"],
           },
           {

@@ -1,7 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Controller } from "react-hook-form";
-import { LucideIcon } from "lucide-react";
+import { Eye, EyeOff, LucideIcon } from "lucide-react";
+import {
+  normalizeHumanTextForField,
+  toTitleCaseWordsForTyping,
+} from "@/app/lib/textNormalization";
 interface InputProps {
   label?: string;
   control: any;
@@ -13,6 +18,9 @@ interface InputProps {
   className?: string;
   error?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
+  normalizeMode?: "auto" | "off" | "title";
+  normalizeFieldHint?: string;
 }
 
 const Input: React.FC<InputProps> = ({
@@ -26,37 +34,94 @@ const Input: React.FC<InputProps> = ({
   className = "",
   error,
   onChange,
+  onBlur,
+  normalizeMode = "auto",
+  normalizeFieldHint,
 }) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPasswordField = type === "password";
+  const resolvedType = isPasswordField && showPassword ? "text" : type;
+
   return (
-    <div className="relative w-full">
+    <div className="w-full">
       {label && <label className="text-gray-700 font-medium">{label}</label>}
 
       <Controller
         name={name}
         control={control}
         rules={validation}
-        render={({ field }) => (
-          <input
-            {...field}
-            type={type}
-            placeholder={placeholder}
-            className={`p-[14px] pl-3 pr-10 w-full border-b-2 border-gray-300 text-gray-800 placeholder:text-gray-600 mt-[6px] 
-              focus:outline-none focus:border-gray-700 ${className}`}
-            onChange={(e) => {
-              field.onChange(e);
-              if (onChange) onChange(e);
-            }}
-          />
-        )}
+        render={({ field, fieldState }) => {
+          const resolvedError = error || fieldState.error?.message;
+
+          return (
+            <>
+              <div className="relative mt-[6px]">
+                <input
+                  {...field}
+                  type={resolvedType}
+                  placeholder={placeholder}
+                  aria-invalid={Boolean(resolvedError)}
+                  className={`p-[14px] pl-3 pr-10 w-full border-b-2 text-gray-800 placeholder:text-gray-600 ${
+                    resolvedError
+                      ? "border-red-500 bg-red-50/40 focus:border-red-500"
+                      : "border-gray-300 focus:border-gray-700"
+                  } focus:outline-none ${className}`}
+                  onChange={(e) => {
+                    const supportsTextNormalization = type === "text" || type === "search";
+                    const fieldHint =
+                      normalizeFieldHint || name || label || placeholder || "";
+
+                    let nextValue = e.target.value;
+                    if (supportsTextNormalization && normalizeMode !== "off") {
+                      nextValue =
+                        normalizeMode === "title"
+                          ? toTitleCaseWordsForTyping(nextValue)
+                          : normalizeHumanTextForField(nextValue, fieldHint, {
+                              typing: true,
+                            });
+                    }
+
+                    if (nextValue !== e.target.value) {
+                      e.target.value = nextValue;
+                    }
+
+                    field.onChange(nextValue);
+                    if (onChange) onChange(e);
+                  }}
+                  onBlur={(e) => {
+                    field.onBlur();
+                    if (onBlur) onBlur(e);
+                  }}
+                />
+
+                {isPasswordField ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((previous) => !previous)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-800"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-[20px] w-[20px]" />
+                    ) : (
+                      <Eye className="h-[20px] w-[20px]" />
+                    )}
+                  </button>
+                ) : null}
+
+                {Icon && !isPasswordField && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Icon className="w-[22px] h-[22px] text-gray-800" />
+                  </div>
+                )}
+              </div>
+              {resolvedError ? (
+                <p className="text-red-500 text-sm mt-1">{resolvedError}</p>
+              ) : null}
+            </>
+          );
+        }}
       />
-
-      {Icon && (
-        <div className="absolute top-[63%] right-3 transform -translate-y-1/2">
-          <Icon className="w-[22px] h-[22px] text-gray-800" />
-        </div>
-      )}
-
-      {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
     </div>
   );
 };

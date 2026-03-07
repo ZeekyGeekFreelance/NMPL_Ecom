@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRequestRegistrationOtpMutation } from "@/app/store/apis/AuthApi";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import {
+  normalizeEmailValue,
+  normalizePhoneDigits,
+  validateEmailValue,
+  validateTenDigitPhone,
+} from "@/app/lib/validators/common";
 
 const DEFAULT_OTP_COOLDOWN_SECONDS = 60;
 
@@ -52,8 +58,8 @@ export const useRegistrationOtp = ({
   }, [cooldownSeconds]);
 
   const sendOtp = async (emailValue: string, phoneValue: string): Promise<boolean> => {
-    const email = emailValue.trim();
-    const phone = phoneValue.trim();
+    const email = normalizeEmailValue(emailValue);
+    const normalizedPhone = normalizePhoneDigits(phoneValue, 10);
 
     if (!email) {
       setFeedback({
@@ -63,7 +69,15 @@ export const useRegistrationOtp = ({
       return false;
     }
 
-    if (!phone) {
+    if (validateEmailValue(email) !== true) {
+      setFeedback({
+        type: "error",
+        message: "Enter a valid email address before requesting OTP.",
+      });
+      return false;
+    }
+
+    if (!normalizedPhone) {
       setFeedback({
         type: "error",
         message: "Enter your phone number first to continue registration.",
@@ -71,10 +85,18 @@ export const useRegistrationOtp = ({
       return false;
     }
 
+    if (validateTenDigitPhone(normalizedPhone) !== true) {
+      setFeedback({
+        type: "error",
+        message: "Phone number must be exactly 10 digits before requesting OTP.",
+      });
+      return false;
+    }
+
     try {
       const response = await requestRegistrationOtp({
         email,
-        phone,
+        phone: normalizedPhone,
         purpose,
         requestDealerAccess,
       }).unwrap();

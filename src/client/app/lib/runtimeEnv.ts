@@ -18,6 +18,28 @@ const normalizeApiBaseUrl = (value: string): string => {
   return `${trimmed}/api/v1`;
 };
 
+const resolveDevApiBaseUrl = (configuredApiBaseUrl: string, nodeEnv: string): string => {
+  if (nodeEnv !== "development" || typeof window === "undefined") {
+    return configuredApiBaseUrl;
+  }
+
+  try {
+    const resolvedUrl = new URL(configuredApiBaseUrl);
+    const browserHost = window.location.hostname.trim();
+
+    if (!browserHost || resolvedUrl.hostname === browserHost) {
+      return configuredApiBaseUrl;
+    }
+
+    // Keep protocol/port/path, but align host with the browser origin
+    // so auth cookies remain first-party for both localhost and LAN usage.
+    resolvedUrl.hostname = browserHost;
+    return normalizeApiBaseUrl(resolvedUrl.toString());
+  } catch {
+    return configuredApiBaseUrl;
+  }
+};
+
 const envSchema = z.object({
   NODE_ENV: z.enum(NODE_ENV_OPTIONS, {
     required_error: "[client-config] Missing required environment variable: NODE_ENV",
@@ -80,15 +102,19 @@ if (parsed.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(parsed.NEXT_PUBL
   );
 }
 
+const resolvedApiBaseUrl = resolveDevApiBaseUrl(
+  parsed.NEXT_PUBLIC_API_URL,
+  parsed.NODE_ENV
+);
+
 export const runtimeEnv = Object.freeze({
   nodeEnv: parsed.NODE_ENV,
   isProduction: parsed.NODE_ENV === "production",
   isDevelopment: parsed.NODE_ENV === "development",
   isTest: parsed.NODE_ENV === "test",
-  apiBaseUrl: parsed.NEXT_PUBLIC_API_URL,
+  apiBaseUrl: resolvedApiBaseUrl,
   platformName: parsed.NEXT_PUBLIC_PLATFORM_NAME,
   supportEmail: parsed.NEXT_PUBLIC_SUPPORT_EMAIL,
   enableNativeConfirm: parsed.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,
   dealerCatalogPollMs: parsed.NEXT_PUBLIC_DEALER_CATALOG_POLL_MS,
 });
-

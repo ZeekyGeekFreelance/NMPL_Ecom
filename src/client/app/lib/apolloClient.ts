@@ -81,15 +81,23 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
     }
   }
 });
-export const initializeApollo = (initialState = null) => {
+
+// Singleton — reused across renders on the client so the cache persists.
+// On the server a fresh instance is always created (no module-level state
+// between requests).
+let _clientInstance: ApolloClient<any> | null = null;
+
+const createApolloClient = (initialState: any = null) => {
   // BatchHttpLink merges concurrent queries (e.g. GET_PRODUCTS + GET_CATEGORIES
   // on the shop page) into a single HTTP POST, halving round trips.
-  // batchInterval: wait up to 20ms for more queries before flushing.
+  // batchInterval: wait up to 10ms for more queries before flushing.
+  //   20ms was too generous — single-query navigations paid 20ms for nothing.
+  //   10ms is enough to collect queries fired in the same render cycle.
   // batchMax: never bundle more than 5 queries in one request.
   const httpLink = new BatchHttpLink({
     uri: GRAPHQL_URL,
     credentials: "include",
-    batchInterval: 20,
+    batchInterval: 10,
     batchMax: 5,
     headers: { "x-public-catalog": "1" },
   });
@@ -116,7 +124,7 @@ export const initializeApollo = (initialState = null) => {
 
       // For 429 rate-limit responses use pure exponential backoff with full
       // jitter to avoid thundering herd: random value in [0, base * 2^attempt].
-      // This spreads retries across a wide window so clients don’t all retry
+      // This spreads retries across a wide window so clients don't all retry
       // at the same moment after a rate-limit event.
       if (statusCode === 429) {
         const base = 1000;
@@ -132,8 +140,10 @@ export const initializeApollo = (initialState = null) => {
     },
   });
 
-  // Create or reuse Apollo Client instance
-  const client = new ApolloClient({
+  return new ApolloClient({
+    // SSR mode prevents the client from being stored as a singleton so each
+    // server render gets a clean instance.
+    ssrMode: typeof window === "undefined",
     link: from([errorLink, retryLink, httpLink]),
     cache: new InMemoryCache({
       typePolicies: {
@@ -156,8 +166,26 @@ export const initializeApollo = (initialState = null) => {
       },
     }).restore(initialState || {}),
   });
+};
 
-  return client;
+export const initializeApollo = (initialState: any = null) => {
+  // Server: always create a fresh client — no shared state between requests.
+  if (typeof window === "undefined") {
+    return createApolloClient(initialState);
+  }
+
+  // Client: reuse the singleton so the in-memory cache survives navigation.
+  // Merge any server-side initialState into the existing cache on first mount.
+  if (!_clientInstance) {
+    _clientInstance = createApolloClient(initialState);
+  } else if (initialState) {
+    _clientInstance.cache.restore({
+      ..._clientInstance.cache.extract(),
+      ...initialState,
+    });
+  }
+
+  return _clientInstance;
 };
 
 export default initializeApollo(); // Default export for client-side usage

@@ -29,8 +29,8 @@ export class RegisterDto {
   @IsNotEmpty({
     message: "Phone number is required",
   })
-  @Matches(/^[0-9()+\-\s]{7,20}$/, {
-    message: "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
   })
   phone!: string;
 
@@ -75,6 +75,25 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{10}$/, {
+    message: "Contact phone must be exactly 10 digits",
+  })
+  contactPhone?: string;
+}
+
+export class ApplyDealerAccessDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({
+    message: "Business name cannot be empty",
+  })
+  businessName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{10}$/, {
+    message: "Contact phone must be exactly 10 digits",
+  })
   contactPhone?: string;
 }
 
@@ -89,9 +108,8 @@ export class RequestRegistrationOtpDto {
   @IsNotEmpty({
     message: "Phone number is required",
   })
-  @Matches(/^[0-9()+\-\s]{7,20}$/, {
-    message:
-      "Phone number must be 7-20 characters and contain only valid digits/symbols",
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
   })
   phone!: string;
 
@@ -112,6 +130,12 @@ export class SigninDto {
     message: "Password is required",
   })
   password!: string;
+
+  @IsOptional()
+  @IsIn(["USER_PORTAL", "DEALER_PORTAL"], {
+    message: "portal must be USER_PORTAL or DEALER_PORTAL",
+  })
+  portal?: "USER_PORTAL" | "DEALER_PORTAL";
 }
 
 export class VerifyEmailDto {

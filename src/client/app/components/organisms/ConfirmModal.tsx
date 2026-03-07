@@ -153,14 +153,14 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-xs z-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs sm:p-6">
           <motion.div
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={messageId}
-            className="bg-white p-6 rounded-lg shadow-xl w-96 border border-gray-200"
+            className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6"
             variants={modalVariants}
             initial="hidden"
             animate="visible"
@@ -180,9 +180,9 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end space-x-4 mt-6">
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 flex items-center font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center rounded-md bg-gray-200 px-4 py-2 font-medium text-gray-800 transition-colors hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 onClick={onCancel}
                 disabled={isConfirming && disableCancelWhileConfirming}
               >
@@ -191,7 +191,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
               </button>
               <button
                 ref={confirmButtonRef}
-                className={`px-4 py-2 text-white rounded-md flex items-center font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${confirmButton}`}
+                className={`flex w-full items-center justify-center rounded-md px-4 py-2 font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto ${confirmButton}`}
                 onClick={onConfirm}
                 disabled={isConfirming}
               >

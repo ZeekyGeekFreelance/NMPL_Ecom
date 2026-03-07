@@ -53,6 +53,12 @@ export class ProductRepository {
       category: {
         select: { id: true, name: true, slug: true, description: true },
       },
+      variants: {
+        select: {
+          id: true,
+          sku: true,
+        },
+      },
       createdAt: true,
       updatedAt: true,
     };

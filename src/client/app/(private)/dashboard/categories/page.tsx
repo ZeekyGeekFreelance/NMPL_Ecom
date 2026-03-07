@@ -30,6 +30,8 @@ const CategoriesDashboard = () => {
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
 
   const form = useForm<CategoryFormData>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: { name: "", description: "", images: [] },
   });
 

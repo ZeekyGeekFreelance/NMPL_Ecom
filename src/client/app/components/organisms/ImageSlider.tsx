@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type TouchEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/app/utils";
 
@@ -20,6 +20,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // Auto-play logic
   useEffect(() => {
@@ -40,6 +41,49 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
     setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
   };
 
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) {
+      return;
+    }
+
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    if (images.length <= 1) {
+      swipeStartRef.current = null;
+      return;
+    }
+
+    const swipeStart = swipeStartRef.current;
+    swipeStartRef.current = null;
+
+    if (!swipeStart) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
+
+    const deltaX = touch.clientX - swipeStart.x;
+    const deltaY = touch.clientY - swipeStart.y;
+    const swipeThreshold = 45;
+
+    if (Math.abs(deltaX) < swipeThreshold || Math.abs(deltaX) <= Math.abs(deltaY)) {
+      return;
+    }
+
+    if (deltaX > 0) {
+      prevSlide();
+      return;
+    }
+
+    nextSlide();
+  };
+
   // Return null or a placeholder if no images
   if (!images || images.length === 0) {
     return (
@@ -56,11 +100,13 @@ const ImageSlider: React.FC<ImageSliderProps> = ({
   return (
     <div
       className={cn(
-        "relative w-full h-96 overflow-hidden rounded-lg", // Default size for full view
+        "group relative w-full h-96 overflow-hidden rounded-lg", // Default size for full view
         className
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Image Slides */}
       <AnimatePresence initial={false}>

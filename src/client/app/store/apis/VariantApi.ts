@@ -10,6 +10,7 @@ interface Variant {
   };
   sku: string;
   price: number;
+  defaultDealerPrice?: number | null;
   stock: number;
   lowStockThreshold?: number;
   barcode?: string;

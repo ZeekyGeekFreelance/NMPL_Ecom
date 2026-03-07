@@ -16,7 +16,7 @@ router.get(
 router.get(
   "/user",
   protect,
-  authorizeRole("USER"),
+  authorizeRole("USER", "DEALER"),
   invoiceController.getUserInvoices
 );
 

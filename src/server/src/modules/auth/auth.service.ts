@@ -6,6 +6,7 @@ import buildRegistrationOtpTemplate from "@/shared/templates/registrationOtp";
 import sendSms from "@/shared/utils/sendSms";
 import { tokenUtils, passwordUtils } from "@/shared/utils/authUtils";
 import {
+  ApplyDealerAccessParams,
   AuthResponse,
   RegisterUserParams,
   RequestRegistrationOtpParams,
@@ -50,6 +51,20 @@ export class AuthService {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  private normalizePhone(phone: string, label = "Phone number"): string {
+    const normalized = String(phone ?? "").trim();
+
+    if (!normalized) {
+      throw new BadRequestError(`${label} is required.`);
+    }
+
+    if (!/^\d{10}$/.test(normalized)) {
+      throw new BadRequestError(`${label} must be exactly 10 digits.`);
+    }
+
+    return normalized;
   }
 
   private isBcryptHash(password: string): boolean {
@@ -117,16 +132,12 @@ export class AuthService {
     resendAvailableInSeconds: number;
   }> {
     const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = this.normalizePhone(phone);
     const existingUser = await this.authRepository.findUserByEmail(normalizedEmail);
     if (existingUser) {
       throw new BadRequestError(
         "This email is already registered. Please sign in instead."
       );
-    }
-
-    if (!normalizedPhone) {
-      throw new BadRequestError("Phone number is required to request OTP.");
     }
 
     let otpDetails: Awaited<ReturnType<typeof createRegistrationOtp>>;
@@ -229,7 +240,7 @@ export class AuthService {
     contactPhone,
   }: RegisterUserParams): Promise<AuthResponse> {
     const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPhone = String(phone ?? "").trim();
+    const normalizedPhone = this.normalizePhone(String(phone ?? ""));
     const existingUser = await this.authRepository.findUserByEmail(normalizedEmail);
 
     if (existingUser) {
@@ -237,10 +248,6 @@ export class AuthService {
         400,
         "This email is already registered, please log in instead."
       );
-    }
-
-    if (!normalizedPhone) {
-      throw new BadRequestError("Phone number is required.");
     }
 
     if (!emailOtpCode || !emailOtpCode.trim()) {
@@ -286,7 +293,9 @@ export class AuthService {
 
     const otpContext = otpVerification.context;
     const shouldRequestDealerAccess = otpContext.requestDealerAccess === true;
-    const normalizedDealerContactPhone = contactPhone?.trim() || normalizedPhone;
+    const normalizedDealerContactPhone = contactPhone
+      ? this.normalizePhone(contactPhone, "Contact phone")
+      : normalizedPhone;
 
     if (requestDealerAccess && !shouldRequestDealerAccess) {
       throw new BadRequestError(
@@ -388,7 +397,129 @@ export class AuthService {
     };
   }
 
-  async signin({ email, password }: SignInParams): Promise<{
+  async applyDealerAccessForCurrentUser({
+    userId,
+    businessName,
+    contactPhone,
+  }: ApplyDealerAccessParams): Promise<{
+    user: {
+      id: string;
+      accountReference: string;
+      name: string;
+      email: string;
+      phone: string | null;
+      role: ROLE;
+      effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
+      avatar: string | null;
+      isDealer?: boolean;
+      dealerStatus?: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED" | null;
+      dealerBusinessName?: string | null;
+      dealerContactPhone?: string | null;
+    };
+    wasResubmission: boolean;
+  }> {
+    const normalizedUserId = String(userId || "").trim();
+    if (!normalizedUserId) {
+      throw new AppError(401, "User not authenticated.");
+    }
+
+    const currentUser = await this.authRepository.findUserById(normalizedUserId);
+    if (!currentUser) {
+      throw new AppError(404, "User not found.");
+    }
+
+    if (currentUser.role !== ROLE.USER) {
+      throw new AppError(
+        403,
+        "Only USER accounts can request dealership access."
+      );
+    }
+
+    const existingDealerProfile = await this.authRepository.findDealerProfileByUserId(
+      currentUser.id
+    );
+
+    const existingStatus = existingDealerProfile?.status ?? null;
+    if (existingStatus === "APPROVED" || existingStatus === "LEGACY") {
+      throw new AppError(
+        400,
+        "Your account already has dealer access."
+      );
+    }
+
+    const normalizedBusinessName =
+      typeof businessName === "string" && businessName.trim()
+        ? businessName.trim()
+        : existingDealerProfile?.businessName ?? null;
+
+    const normalizedContactPhone = this.normalizePhone(
+      String(contactPhone ?? currentUser.phone ?? "").trim(),
+      "Contact phone"
+    );
+
+    const dealerProfile = await this.authRepository.upsertDealerProfile({
+      userId: currentUser.id,
+      businessName: normalizedBusinessName,
+      contactPhone: normalizedContactPhone,
+      status: "PENDING",
+      approvedBy: null,
+    });
+
+    const accountReference = toAccountReference(currentUser.id);
+    const wasResubmission =
+      existingStatus === "REJECTED" || existingStatus === "SUSPENDED";
+
+    await this.dealerNotificationService?.sendDealerApplicationSubmitted({
+      recipientName: currentUser.name,
+      recipientEmail: currentUser.email,
+      businessName: dealerProfile?.businessName ?? normalizedBusinessName,
+      accountReference,
+      wasResubmission,
+    });
+
+    const adminsEmail = resolveNotificationRecipients();
+    if (adminsEmail) {
+      await sendEmail({
+        to: adminsEmail,
+        subject: `Dealer access request: ${currentUser.name}`,
+        text: `${currentUser.name} (${currentUser.email}) requested dealer access.`,
+        html: `
+          <p><strong>Dealer access request received</strong></p>
+          <p>Name: ${currentUser.name}</p>
+          <p>Email: ${currentUser.email}</p>
+          <p>Business Name: ${(dealerProfile?.businessName ?? normalizedBusinessName) || "Not provided"}</p>
+          <p>Contact Phone: ${(dealerProfile?.contactPhone ?? normalizedContactPhone) || "Not provided"}</p>
+        `,
+      });
+    }
+
+    return {
+      user: {
+        id: currentUser.id,
+        accountReference,
+        name: currentUser.name,
+        email: currentUser.email,
+        phone: currentUser.phone,
+        role: currentUser.role,
+        effectiveRole: resolveEffectiveRole({
+          role: currentUser.role,
+          dealerStatus: dealerProfile?.status ?? "PENDING",
+        }),
+        avatar: currentUser.avatar,
+        isDealer: true,
+        dealerStatus: dealerProfile?.status ?? "PENDING",
+        dealerBusinessName: dealerProfile?.businessName ?? normalizedBusinessName,
+        dealerContactPhone: dealerProfile?.contactPhone ?? normalizedContactPhone,
+      },
+      wasResubmission,
+    };
+  }
+
+  async signin({
+    email,
+    password,
+    portal = "USER_PORTAL",
+  }: SignInParams): Promise<{
     user: {
       id: string;
       accountReference: string;
@@ -430,16 +561,50 @@ export class AuthService {
     const dealerProfile = await this.authRepository.findDealerProfileByUserId(
       user.id
     );
+    const effectiveRole = resolveEffectiveRole({
+      role: user.role,
+      dealerStatus: dealerProfile?.status,
+    });
+    const normalizedPortal = String(portal || "USER_PORTAL").toUpperCase();
 
-    if (dealerProfile) {
+    if (normalizedPortal === "USER_PORTAL" && effectiveRole === "DEALER") {
+      throw new AppError(
+        403,
+        "Email ID is registered for Dealer Account. Login as Dealer"
+      );
+    }
+
+    if (normalizedPortal === "DEALER_PORTAL" && effectiveRole !== "DEALER") {
+      if (dealerProfile?.status === "PENDING") {
+        throw new AppError(
+          403,
+          "Dealer access request is pending approval. Please wait for admin review."
+        );
+      }
+
+      if (dealerProfile?.status === "REJECTED") {
+        throw new AppError(
+          403,
+          "Dealer access request was rejected. Please contact admin support."
+        );
+      }
+
+      throw new AppError(
+        403,
+        "Email ID is not registered for Dealer Account. Login as User"
+      );
+    }
+
+    if (effectiveRole === "DEALER") {
+      if (!dealerProfile) {
+        throw new AppError(
+          403,
+          "Dealer profile is missing. Please contact admin support."
+        );
+      }
+
       const approvedStatuses = new Set(["APPROVED", "LEGACY"]);
       if (!approvedStatuses.has(dealerProfile.status)) {
-        if (dealerProfile.status === "PENDING") {
-          throw new AppError(
-            403,
-            "Dealer account is pending admin approval. Please wait for confirmation."
-          );
-        }
         if (dealerProfile.status === "SUSPENDED") {
           throw new AppError(
             403,
@@ -469,10 +634,7 @@ export class AuthService {
       user: {
         accountReference: toAccountReference(user.id),
         ...user,
-        effectiveRole: resolveEffectiveRole({
-          role: user.role,
-          dealerStatus: dealerProfile?.status,
-        }),
+        effectiveRole,
         isDealer: !!dealerProfile,
         dealerStatus: dealerProfile?.status ?? null,
         dealerBusinessName: dealerProfile?.businessName ?? null,
@@ -495,7 +657,7 @@ export class AuthService {
       throw new AppError(404, "User not found");
     }
 
-    if (user.role !== ROLE.USER) {
+    if (user.role === ROLE.ADMIN || user.role === ROLE.SUPERADMIN) {
       throw new AppError(
         403,
         "Admin/SuperAdmin passwords must be managed by SuperAdmin offline procedures."
@@ -612,15 +774,21 @@ export class AuthService {
       throw new AppError(401, "Session expired. Please log in again.");
     }
 
-    if (user.dealerProfile) {
+    const effectiveRole = resolveEffectiveRole({
+      role: user.role,
+      dealerStatus: user.dealerProfile?.status,
+    });
+
+    if (effectiveRole === "DEALER") {
+      if (!user.dealerProfile) {
+        throw new AppError(
+          403,
+          "Dealer profile is missing. Please contact admin support."
+        );
+      }
+
       const approvedStatuses = new Set(["APPROVED", "LEGACY"]);
       if (!approvedStatuses.has(user.dealerProfile.status)) {
-        if (user.dealerProfile.status === "PENDING") {
-          throw new AppError(
-            403,
-            "Dealer account is pending admin approval. Please wait for confirmation."
-          );
-        }
         if (user.dealerProfile.status === "SUSPENDED") {
           throw new AppError(
             403,
@@ -641,10 +809,7 @@ export class AuthService {
       email: user.email,
       phone: user.phone ?? null,
       role: user.role,
-      effectiveRole: resolveEffectiveRole({
-        role: user.role,
-        dealerStatus: user.dealerProfile?.status,
-      }),
+      effectiveRole,
       avatar: user.avatar,
       isDealer: !!user.dealerProfile,
       dealerStatus: user.dealerProfile?.status ?? null,

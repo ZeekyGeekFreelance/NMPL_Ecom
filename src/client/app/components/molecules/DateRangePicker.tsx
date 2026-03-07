@@ -21,6 +21,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useController } from "react-hook-form";
+import Dropdown from "@/app/components/molecules/Dropdown";
 
 interface DateRangePickerProps {
   label?: string;
@@ -81,6 +82,24 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     const currentYear = maxSelectableDate.getFullYear();
     return Array.from({ length: 8 }, (_, index) => currentYear - 7 + index);
   }, [maxSelectableDate]);
+
+  const monthOptions = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, monthIndex) => ({
+        value: String(monthIndex),
+        label: format(new Date(2000, monthIndex, 1), "MMMM"),
+      })),
+    []
+  );
+
+  const yearOptions = useMemo(
+    () =>
+      years.map((yearOption) => ({
+        value: String(yearOption),
+        label: String(yearOption),
+      })),
+    [years]
+  );
 
   const isFutureMonth = (date: Date) =>
     isAfter(startOfMonth(date), startOfMonth(maxSelectableDate));
@@ -275,28 +294,30 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 </button>
 
                 <div className="flex items-center gap-2">
-                  <select
-                    value={currentMonth.getMonth()}
-                    onChange={(event) => handleMonthSelect(Number(event.target.value))}
-                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  >
-                    {Array.from({ length: 12 }, (_, monthIndex) => (
-                      <option key={monthIndex} value={monthIndex}>
-                        {format(new Date(2000, monthIndex, 1), "MMMM")}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={currentMonth.getFullYear()}
-                    onChange={(event) => handleYearSelect(Number(event.target.value))}
-                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  >
-                    {years.map((yearOption) => (
-                      <option key={yearOption} value={yearOption}>
-                        {yearOption}
-                      </option>
-                    ))}
-                  </select>
+                  <Dropdown
+                    label="Month"
+                    options={monthOptions}
+                    value={String(currentMonth.getMonth())}
+                    onChange={(value) => {
+                      if (value !== null) {
+                        handleMonthSelect(Number(value));
+                      }
+                    }}
+                    clearable={false}
+                    className="h-8 w-[132px] rounded-md border-gray-200 bg-white px-2 text-xs text-gray-700"
+                  />
+                  <Dropdown
+                    label="Year"
+                    options={yearOptions}
+                    value={String(currentMonth.getFullYear())}
+                    onChange={(value) => {
+                      if (value !== null) {
+                        handleYearSelect(Number(value));
+                      }
+                    }}
+                    clearable={false}
+                    className="h-8 w-[96px] rounded-md border-gray-200 bg-white px-2 text-xs text-gray-700"
+                  />
                 </div>
 
                 <button

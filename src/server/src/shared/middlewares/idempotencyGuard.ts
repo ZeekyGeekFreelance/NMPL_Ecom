@@ -7,6 +7,8 @@ const IDEMPOTENCY_TTL_SECONDS = 120;
 const IDEMPOTENCY_EXCLUDED_PATHS = [
   "/auth/refresh-token",
   "/analytics/interactions",
+  "/graphql",
+  "/api/v1/graphql",
 ];
 
 const isMutationRequest = (method: string) =>
@@ -163,4 +165,3 @@ export const idempotencyGuard = async (
 };
 
 export default idempotencyGuard;
-

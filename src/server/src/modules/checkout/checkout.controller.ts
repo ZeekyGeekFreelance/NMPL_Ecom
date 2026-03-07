@@ -17,14 +17,14 @@ export class CheckoutController {
 
   getCheckoutSummary = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const userRole = req.user?.role;
+    const userRole = req.user?.effectiveRole || req.user?.role;
 
     if (!userId) {
       throw new AppError(400, "User not found");
     }
 
-    if (userRole !== "USER") {
-      throw new AppError(403, "Only customer accounts can checkout");
+    if (userRole !== "USER" && userRole !== "DEALER") {
+      throw new AppError(403, "Only customer/dealer accounts can checkout");
     }
 
     const summary = await this.checkoutService.getCheckoutSummary(userId, {
@@ -40,14 +40,14 @@ export class CheckoutController {
 
   initiateCheckout = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const userRole = req.user?.role;
+    const userRole = req.user?.effectiveRole || req.user?.role;
 
     if (!userId) {
       throw new AppError(400, "User not found");
     }
 
-    if (userRole !== "USER") {
-      throw new AppError(403, "Only customer accounts can place orders");
+    if (userRole !== "USER" && userRole !== "DEALER") {
+      throw new AppError(403, "Only customer/dealer accounts can place orders");
     }
 
     const cart = await this.cartService.getOrCreateCart(userId);

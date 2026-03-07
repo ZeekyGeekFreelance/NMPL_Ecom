@@ -3,6 +3,9 @@ import { getCurrentRequestMetricStore } from "@/shared/observability/requestMetr
 import { config } from "@/config";
 import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
+import redisClient from "@/infra/cache/redis";
+import { cacheKey } from "@/shared/utils/cacheKey";
+import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
 
 export interface Context {
   prisma: PrismaClient;
@@ -29,6 +32,8 @@ type ProductCard = {
   thumbnail: string | null;
   minPrice: number;
   maxPrice: number;
+  dealerMinPrice: number | null;
+  dealerMaxPrice: number | null;
   category: {
     id: string;
     slug: string;
@@ -46,6 +51,9 @@ type ProductConnection = {
 type ListingAggregate = {
   minPrice: number;
   maxPrice: number;
+  dealerMinPrice: number | null;
+  dealerMaxPrice: number | null;
+  hasDealerPricing: boolean;
   thumbnail: string | null;
 };
 
@@ -54,34 +62,129 @@ const MAX_PAGE_SIZE = 50;
 const DEFAULT_NESTED_PAGE_SIZE = 25;
 const MAX_NESTED_PAGE_SIZE = 50;
 
-const CATALOG_CACHE_TTL_MS = 120_000;
-const CATALOG_CACHE_MAX_ENTRIES = 400;
+// ── Redis-backed catalog cache ────────────────────────────────────────────────
+// Shared across all processes/workers so invalidation on create/update/delete
+// is immediately visible everywhere.  Falls back to the in-memory shim when
+// REDIS_ENABLED=false (dev without Redis).
 
-const CATEGORY_CACHE_TTL_MS = 300_000; // 5 min — categories change rarely
-const CATEGORY_CACHE_MAX_ENTRIES = 50;
+const CATALOG_CACHE_PREFIX = "catalog-listing";
+const CATEGORY_CACHE_PREFIX = "catalog-category";
 
-const catalogListingCache = new Map<
-  string,
-  {
-    expiresAt: number;
-    value: ProductConnection;
+/**
+ * Build a fully-qualified Redis key for a catalog listing query.
+ * The raw key is hashed inside `cacheKey()` if it contains special chars.
+ */
+const buildRedisCatalogKey = (rawKey: string): string =>
+  cacheKey(CATALOG_CACHE_PREFIX, rawKey);
+
+const buildRedisCategoryKey = (rawKey: string): string =>
+  cacheKey(CATEGORY_CACHE_PREFIX, rawKey);
+
+const getCachedListingConnection = async (
+  rawKey: string
+): Promise<ProductConnection | null> => {
+  try {
+    const json = await redisClient.get(buildRedisCatalogKey(rawKey));
+    if (!json) return null;
+    return JSON.parse(json) as ProductConnection;
+  } catch {
+    // Redis unavailable — treat as a cache miss, never block the request.
+    return null;
   }
->();
-
-const categoryCache = new Map<
-  string,
-  {
-    expiresAt: number;
-    value: any[];
-  }
->();
-
-export const clearCatalogListingCache = () => {
-  catalogListingCache.clear();
 };
 
-export const clearCategoryCache = () => {
-  categoryCache.clear();
+const setCachedListingConnection = async (
+  rawKey: string,
+  value: ProductConnection
+): Promise<void> => {
+  try {
+    await redisClient.setex(
+      buildRedisCatalogKey(rawKey),
+      config.cache.catalogTtlSeconds,
+      JSON.stringify(value)
+    );
+  } catch {
+    // Best-effort — a write failure just means the next request re-queries.
+  }
+};
+
+const getCachedCategories = async (
+  rawKey: string
+): Promise<any[] | null> => {
+  try {
+    const json = await redisClient.get(buildRedisCategoryKey(rawKey));
+    if (!json) return null;
+    return JSON.parse(json) as any[];
+  } catch {
+    return null;
+  }
+};
+
+const setCachedCategories = async (
+  rawKey: string,
+  value: any[]
+): Promise<void> => {
+  try {
+    await redisClient.setex(
+      buildRedisCategoryKey(rawKey),
+      config.cache.categoryTtlSeconds,
+      JSON.stringify(value)
+    );
+  } catch {
+    // Best-effort.
+  }
+};
+
+/**
+ * Delete all catalog listing cache entries from Redis.
+ * Uses a SCAN-based approach so it works on Redis Cluster and avoids
+ * blocking the server with a KEYS call.
+ */
+export const clearCatalogListingCache = async (): Promise<void> => {
+  try {
+    const pattern = buildRedisCatalogKey("*");
+    // The shim doesn't support scan — it implements del() which is enough for
+    // the unit tests.  On a real Redis we use the safe SCAN + DEL pattern.
+    if (typeof (redisClient as any).scan === "function") {
+      let cursor = "0";
+      do {
+        const [nextCursor, keys]: [string, string[]] = await (
+          redisClient as any
+        ).scan(cursor, "MATCH", pattern, "COUNT", 200);
+        cursor = nextCursor;
+        if (keys.length > 0) {
+          await redisClient.del(...keys);
+        }
+      } while (cursor !== "0");
+    } else {
+      // InMemoryRedisShim path: construct and delete the pattern key directly.
+      await redisClient.del(pattern);
+    }
+  } catch {
+    // Non-fatal — worst case stale entries expire naturally.
+  }
+};
+
+export const clearCategoryCache = async (): Promise<void> => {
+  try {
+    const pattern = buildRedisCategoryKey("*");
+    if (typeof (redisClient as any).scan === "function") {
+      let cursor = "0";
+      do {
+        const [nextCursor, keys]: [string, string[]] = await (
+          redisClient as any
+        ).scan(cursor, "MATCH", pattern, "COUNT", 200);
+        cursor = nextCursor;
+        if (keys.length > 0) {
+          await redisClient.del(...keys);
+        }
+      } while (cursor !== "0");
+    } else {
+      await redisClient.del(pattern);
+    }
+  } catch {
+    // Non-fatal.
+  }
 };
 
 const parsePagination = (
@@ -135,43 +238,14 @@ const buildCatalogCacheKey = (options: {
   first: number;
   skip: number;
   filters: ProductFilters;
+  viewerKey: string;
 }): string =>
   `catalog:${options.scope}:${stableStringify({
+    viewer: options.viewerKey,
     first: options.first,
     skip: options.skip,
     filters: options.filters,
   })}`;
-
-const getCachedListingConnection = (cacheKey: string): ProductConnection | null => {
-  const cached = catalogListingCache.get(cacheKey);
-  if (!cached) {
-    return null;
-  }
-
-  if (cached.expiresAt <= Date.now()) {
-    catalogListingCache.delete(cacheKey);
-    return null;
-  }
-
-  return cached.value;
-};
-
-const setCachedListingConnection = (
-  cacheKey: string,
-  value: ProductConnection
-): void => {
-  if (catalogListingCache.size >= CATALOG_CACHE_MAX_ENTRIES) {
-    const oldestKey = catalogListingCache.keys().next().value;
-    if (oldestKey) {
-      catalogListingCache.delete(oldestKey);
-    }
-  }
-
-  catalogListingCache.set(cacheKey, {
-    expiresAt: Date.now() + CATALOG_CACHE_TTL_MS,
-    value,
-  });
-};
 
 const buildProductWhere = (filters: ProductFilters) => {
   const where: any = {};
@@ -240,7 +314,8 @@ const buildProductWhere = (filters: ProductFilters) => {
 
 const fetchListingAggregateByProductId = async (
   context: Context,
-  productIds: string[]
+  productIds: string[],
+  viewerUserId?: string
 ): Promise<Map<string, ListingAggregate>> => {
   if (productIds.length === 0) {
     return new Map();
@@ -249,6 +324,7 @@ const fetchListingAggregateByProductId = async (
   const variantRows = await context.prisma.productVariant.findMany({
     where: { productId: { in: productIds } },
     select: {
+      id: true,
       productId: true,
       price: true,
       images: true,
@@ -256,12 +332,20 @@ const fetchListingAggregateByProductId = async (
     },
     orderBy: [{ productId: "asc" }, { createdAt: "asc" }],
   });
+  const dealerPriceMap = await getDealerPriceMap(
+    context.prisma,
+    viewerUserId,
+    variantRows.map((variant) => variant.id)
+  );
 
   const aggregatesByProductId = new Map<string, ListingAggregate>();
   for (const productId of productIds) {
     aggregatesByProductId.set(productId, {
       minPrice: 0,
       maxPrice: 0,
+      dealerMinPrice: null,
+      dealerMaxPrice: null,
+      hasDealerPricing: false,
       thumbnail: null,
     });
   }
@@ -272,12 +356,27 @@ const fetchListingAggregateByProductId = async (
       continue;
     }
 
-    const price = Number(variant.price ?? 0);
-    if (aggregate.minPrice === 0 || price < aggregate.minPrice) {
-      aggregate.minPrice = price;
+    const basePrice = Number(variant.price ?? 0);
+    const dealerPrice = dealerPriceMap.get(variant.id);
+    const effectivePrice =
+      typeof dealerPrice === "number" ? dealerPrice : basePrice;
+
+    if (aggregate.minPrice === 0 || basePrice < aggregate.minPrice) {
+      aggregate.minPrice = basePrice;
     }
-    if (price > aggregate.maxPrice) {
-      aggregate.maxPrice = price;
+    if (basePrice > aggregate.maxPrice) {
+      aggregate.maxPrice = basePrice;
+    }
+
+    if (aggregate.dealerMinPrice === null || effectivePrice < aggregate.dealerMinPrice) {
+      aggregate.dealerMinPrice = effectivePrice;
+    }
+    if (aggregate.dealerMaxPrice === null || effectivePrice > aggregate.dealerMaxPrice) {
+      aggregate.dealerMaxPrice = effectivePrice;
+    }
+
+    if (typeof dealerPrice === "number") {
+      aggregate.hasDealerPricing = true;
     }
 
     if (!aggregate.thumbnail && Array.isArray(variant.images) && variant.images.length > 0) {
@@ -286,6 +385,24 @@ const fetchListingAggregateByProductId = async (
   }
 
   return aggregatesByProductId;
+};
+
+/**
+ * Returns true if `fieldName` is present in the top-level selection set of
+ * `info`.  Used to skip expensive COUNT(*) queries when the client doesn't
+ * request totalCount.
+ */
+const isFieldSelected = (info: any, fieldName: string): boolean => {
+  try {
+    const selections: any[] =
+      info?.fieldNodes?.[0]?.selectionSet?.selections ?? [];
+    return selections.some(
+      (sel: any) => sel.kind === "Field" && sel.name?.value === fieldName
+    );
+  } catch {
+    // If info is unavailable (e.g. called outside a resolver), default safe.
+    return true;
+  }
 };
 
 const resolveProductConnection = async (
@@ -310,6 +427,7 @@ const resolveProductConnection = async (
     first: pagination.first,
     skip: pagination.skip,
     filters: options.cacheFilters,
+    viewerKey: context.req.user?.id || "anonymous",
   });
 
   const requestStore = getCurrentRequestMetricStore();
@@ -317,21 +435,24 @@ const resolveProductConnection = async (
   const startedAt = Date.now();
   let cacheHit = false;
 
-  const cached = getCachedListingConnection(cacheKey);
+  const cached = await getCachedListingConnection(cacheKey);
   if (cached) {
     cacheHit = true;
   }
 
-  const result =
+  const result: ProductConnection =
     cached ||
     (await (async () => {
       const totalCount = options.needsTotalCount
         ? await context.prisma.product.count({ where: options.where })
         : null;
 
+      // Fetch one extra row so we can detect whether a next page exists
+      // without a separate COUNT query.  The extra row is never exposed to
+      // the client.
       const products = await context.prisma.product.findMany({
         where: options.where,
-        take: pagination.first,
+        take: pagination.first + 1,
         skip: pagination.skip,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
@@ -349,12 +470,17 @@ const resolveProductConnection = async (
         },
       });
 
+      // The sentinel row proves there is a next page; drop it before mapping.
+      const hasNextPage = products.length > pagination.first;
+      const pageProducts = hasNextPage ? products.slice(0, pagination.first) : products;
+
       const aggregateByProductId = await fetchListingAggregateByProductId(
         context,
-        products.map((product) => product.id)
+        pageProducts.map((product) => product.id),
+        context.req.user?.id
       );
 
-      const mappedProducts: ProductCard[] = products
+      const mappedProducts: ProductCard[] = pageProducts
         .filter((product) => {
           // Exclude products with no variants — they have no price to display
           // and would render as broken cards on the frontend.
@@ -370,17 +496,23 @@ const resolveProductConnection = async (
             thumbnail: aggregate.thumbnail || null,
             minPrice: aggregate.minPrice,
             maxPrice: aggregate.maxPrice,
+            dealerMinPrice: aggregate.hasDealerPricing
+              ? aggregate.dealerMinPrice
+              : null,
+            dealerMaxPrice: aggregate.hasDealerPricing
+              ? aggregate.dealerMaxPrice
+              : null,
             category: product.category || null,
           };
         });
 
       const payload: ProductConnection = {
         products: mappedProducts,
-        hasMore: mappedProducts.length === pagination.first,
+        hasMore: hasNextPage,
         totalCount,
       };
 
-      setCachedListingConnection(cacheKey, payload);
+      await setCachedListingConnection(cacheKey, payload);
       return payload;
     })());
 
@@ -419,7 +551,8 @@ export const productResolvers = {
         skip?: number;
         filters?: ProductFilters;
       },
-      context: Context
+      context: Context,
+      info: any
     ) => {
       const where = buildProductWhere(filters);
       return resolveProductConnection(context, {
@@ -428,7 +561,9 @@ export const productResolvers = {
         cacheFilters: filters,
         first,
         skip,
-        needsTotalCount: true,
+        // Only fire COUNT(*) when the client actually selects totalCount.
+        // GET_HOME_PAGE_DATA never selects it — saves 4 DB round-trips on SSR.
+        needsTotalCount: isFieldSelected(info, "totalCount"),
       });
     },
     product: async (_: unknown, { slug }: { slug: string }, context: Context) => {
@@ -489,16 +624,28 @@ export const productResolvers = {
       if (!product) {
         throw new AppError(404, "Product not found");
       }
+      const dealerPriceMap = await getDealerPriceMap(
+        context.prisma,
+        context.req.user?.id,
+        product.variants.map((variant) => variant.id)
+      );
+
+      const pricedVariants = product.variants.map((variant) => ({
+        ...variant,
+        retailPrice: variant.price,
+        price: dealerPriceMap.get(variant.id) ?? variant.price,
+      }));
 
       const thumbnail =
-        product.variants.find((variant) => variant.images[0])?.images[0] || null;
+        pricedVariants.find((variant) => variant.images[0])?.images[0] || null;
       const price =
-        product.variants.length > 0
-          ? Math.min(...product.variants.map((variant) => Number(variant.price)))
+        pricedVariants.length > 0
+          ? Math.min(...pricedVariants.map((variant) => Number(variant.price)))
           : 0;
 
       return {
         ...product,
+        variants: pricedVariants,
         thumbnail,
         price,
       };
@@ -567,9 +714,9 @@ export const productResolvers = {
       });
 
       const cacheKey = `categories:${pagination.first}:${pagination.skip}`;
-      const cached = categoryCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) {
-        return cached.value;
+      const cached = await getCachedCategories(cacheKey);
+      if (cached) {
+        return cached;
       }
 
       const rows = await context.prisma.category.findMany({
@@ -584,11 +731,7 @@ export const productResolvers = {
         },
       });
 
-      if (categoryCache.size >= CATEGORY_CACHE_MAX_ENTRIES) {
-        const oldestKey = categoryCache.keys().next().value;
-        if (oldestKey) categoryCache.delete(oldestKey);
-      }
-      categoryCache.set(cacheKey, { expiresAt: Date.now() + CATEGORY_CACHE_TTL_MS, value: rows });
+      await setCachedCategories(cacheKey, rows);
 
       return rows;
     },

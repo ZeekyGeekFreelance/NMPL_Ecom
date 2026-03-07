@@ -256,7 +256,7 @@ export default function generateInvoicePdf(
         normalizedDeliveryMode === "PICKUP" ? "Store" : "Receiver"
       );
 
-      drawSectionTitle(doc, "Items", fonts);
+      drawSectionTitle(doc, "Items :", fonts);
       drawItemsTable(doc, invoice.items, fonts, formatCurrency);
 
       doc.moveDown(0.8);
@@ -277,7 +277,7 @@ export default function generateInvoicePdf(
       );
       doc.moveDown(0.3);
       doc.font(fonts.bold).fontSize(12);
-      doc.text(`Final Total: ${formatCurrency(invoice.totalAmount)}`, 50, doc.y, {
+      doc.text(`Total: ${formatCurrency(invoice.totalAmount)}`, 50, doc.y, {
         align: "right",
       });
 

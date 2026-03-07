@@ -54,7 +54,10 @@ export class InvoiceService {
       return;
     }
 
-    if (requester.role === "USER" && requester.id === ownerUserId) {
+    if (
+      (requester.role === "USER" || requester.role === "DEALER") &&
+      requester.id === ownerUserId
+    ) {
       return;
     }
 
@@ -229,6 +232,7 @@ export class InvoiceService {
       PROCESSING: ORDER_LIFECYCLE_STATUS.CONFIRMED,
       SHIPPED: ORDER_LIFECYCLE_STATUS.CONFIRMED,
       IN_TRANSIT: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      PAID: ORDER_LIFECYCLE_STATUS.CONFIRMED,
       DELIVERED: ORDER_LIFECYCLE_STATUS.DELIVERED,
       REJECTED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
       CANCELED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
@@ -239,10 +243,14 @@ export class InvoiceService {
     const normalizedStatus =
       normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
 
-    if (normalizedStatus !== ORDER_LIFECYCLE_STATUS.DELIVERED) {
+    const isInvoiceEligible =
+      normalizedStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED ||
+      normalizedStatus === ORDER_LIFECYCLE_STATUS.DELIVERED;
+
+    if (!isInvoiceEligible) {
       throw new AppError(
         409,
-        "Invoice is available only after the order is marked delivered."
+        "Invoice is available only after payment is confirmed."
       );
     }
 

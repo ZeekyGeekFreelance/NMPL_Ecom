@@ -15,6 +15,11 @@ import { AUTH_API_BASE_URL } from "@/app/lib/constants/config";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
 import { runtimeEnv } from "@/app/lib/runtimeEnv";
+import { resolveDisplayRole } from "@/app/lib/userRole";
+import {
+  normalizeEmailValue,
+  validateEmailValue,
+} from "@/app/lib/validators/common";
 
 interface InputForm {
   email: string;
@@ -31,8 +36,11 @@ const SignIn = () => {
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    setValue,
+    formState: { errors, isValid },
   } = useForm<InputForm>({
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       email: "",
       password: "",
@@ -41,16 +49,23 @@ const SignIn = () => {
 
   const onSubmit = async (formData: InputForm) => {
     try {
-      const response = await signIn(formData).unwrap();
+      const response = await signIn({
+        ...formData,
+        email: normalizeEmailValue(formData.email),
+        portal: "USER_PORTAL",
+      }).unwrap();
       const requestedNextPath = searchParams.get("next");
       const nextPath =
         requestedNextPath && requestedNextPath.startsWith("/")
           ? requestedNextPath
           : null;
+      const role = resolveDisplayRole(response.user);
       const destination =
-        response.user?.role === "ADMIN" || response.user?.role === "SUPERADMIN"
+        role === "ADMIN" || role === "SUPERADMIN"
           ? "/dashboard"
-          : nextPath || "/";
+          : role === "DEALER"
+            ? nextPath || "/orders"
+            : nextPath || "/";
       router.push(destination);
     } catch {
       // Mutation error state is already handled by RTK Query.
@@ -102,10 +117,19 @@ const SignIn = () => {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <Input
                 name="email"
-                type="text"
+                type="email"
                 placeholder="Email"
                 control={control}
-                validation={{ required: "Email is required" }}
+                validation={{
+                  required: "Email is required",
+                  validate: (value: string) => validateEmailValue(value),
+                }}
+                onChange={(event) => {
+                  setValue("email", normalizeEmailValue(event.target.value), {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                }}
                 error={errors.email?.message}
                 className="py-2.5 text-sm"
               />
@@ -134,8 +158,9 @@ const SignIn = () => {
 
               <button
                 type="submit"
+                disabled={isLoading || !isValid}
                 className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
-                  isLoading ? "cursor-not-allowed bg-gray-400" : ""
+                  isLoading || !isValid ? "cursor-not-allowed bg-gray-400" : ""
                 }`}
               >
                 {isLoading ? (

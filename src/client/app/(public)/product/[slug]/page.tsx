@@ -17,6 +17,21 @@ const getDefaultVariant = (variants: Product["variants"]) =>
 
 const isBrandAttribute = (name: string) => name.trim().toLowerCase() === "brand";
 
+const buildVariantSelectionMap = (variant: Product["variants"][0] | null) => {
+  if (!variant) {
+    return {};
+  }
+
+  return variant.attributes.reduce<Record<string, string>>((acc, attr) => {
+    if (isBrandAttribute(attr.attribute.name)) {
+      return acc;
+    }
+
+    acc[attr.attribute.name] = attr.value.value;
+    return acc;
+  }, {});
+};
+
 const ProductDetailsPage = () => {
   const { slug } = useParams();
   const resolvedSlug =
@@ -53,10 +68,32 @@ const ProductDetailsPage = () => {
       return;
     }
 
-    // Always reset to a clean state when product changes.
+    // Always initialize with a valid default variant and its attribute selections.
     setSelectedVariant(firstVariant);
-    setSelectedAttributes({});
+    setSelectedAttributes(buildVariantSelectionMap(firstVariant));
   }, [data?.product?.id]);
+
+  useEffect(() => {
+    const variants = data?.product?.variants || [];
+    if (!variants.length) {
+      return;
+    }
+
+    const stillExists = selectedVariant
+      ? variants.some((variant) => variant.id === selectedVariant.id)
+      : false;
+    if (stillExists) {
+      return;
+    }
+
+    const fallbackVariant = getDefaultVariant(variants);
+    if (!fallbackVariant) {
+      return;
+    }
+
+    setSelectedVariant(fallbackVariant);
+    setSelectedAttributes(buildVariantSelectionMap(fallbackVariant));
+  }, [data?.product?.variants, selectedVariant]);
 
   if (!resolvedSlug || loading) return <ProductDetailSkeletonLoader />;
 
@@ -85,63 +122,53 @@ const ProductDetailsPage = () => {
   }
 
   const attributeGroups = product.variants.reduce((acc, variant) => {
-    const hasSelections = Object.values(selectedAttributes).some(
-      (value) => value !== ""
-    );
-    const matchesSelections = hasSelections
-      ? Object.entries(selectedAttributes).every(
-          ([attrName, attrValue]) =>
-            !attrName ||
-            !attrValue ||
-            variant.attributes.some(
-              (attr) =>
-                attr.attribute.name === attrName &&
-                attr.value.value === attrValue
-            )
-        )
-      : true;
-    if (matchesSelections) {
-      variant.attributes.forEach(({ attribute, value }) => {
-        if (isBrandAttribute(attribute.name)) {
-          return;
-        }
+    variant.attributes.forEach(({ attribute, value }) => {
+      if (isBrandAttribute(attribute.name)) {
+        return;
+      }
 
-        if (!acc[attribute.name]) {
-          acc[attribute.name] = { values: new Set<string>() };
-        }
-        acc[attribute.name].values.add(value.value);
-      });
-    }
+      if (!acc[attribute.name]) {
+        acc[attribute.name] = { values: new Set<string>() };
+      }
+      acc[attribute.name].values.add(value.value);
+    });
     return acc;
   }, {} as Record<string, { values: Set<string> }>);
 
-  const resetSelections = () => {
-    const firstVariant = getDefaultVariant(product.variants);
-    if (!firstVariant) {
-      setSelectedAttributes({});
-      setSelectedVariant(null);
+  const handleVariantChange = (attributeName: string, value: string) => {
+    const baselineSelectionMap = {
+      ...buildVariantSelectionMap(
+        selectedVariant || getDefaultVariant(product.variants)
+      ),
+      ...selectedAttributes,
+    };
+    const nextSelections = {
+      ...baselineSelectionMap,
+      [attributeName]: value,
+    };
+
+    const exactInStockMatch = product.variants.find((variant) => {
+      if (variant.stock <= 0) {
+        return false;
+      }
+
+      return Object.entries(nextSelections).every(
+        ([attributeKey, attributeValue]) =>
+          variant.attributes.some(
+            (attribute) =>
+              attribute.attribute.name === attributeKey &&
+              attribute.value.value === attributeValue
+          )
+      );
+    });
+
+    if (!exactInStockMatch) {
+      // Keep current selection intact instead of auto-switching another attribute.
       return;
     }
 
-    setSelectedAttributes({});
-    setSelectedVariant(firstVariant);
-  };
-
-  const handleVariantChange = (attributeName: string, value: string) => {
-    const newSelections = { ...selectedAttributes, [attributeName]: value };
-    setSelectedAttributes(newSelections);
-    const variant = product.variants.find((v) =>
-      Object.entries(newSelections).every(
-        ([attrName, attrValue]) =>
-          !attrName ||
-          !attrValue ||
-          v.attributes.some(
-            (attr) =>
-            attr.attribute.name === attrName && attr.value.value === attrValue
-          )
-      )
-    );
-    setSelectedVariant(variant || getDefaultVariant(product.variants));
+    setSelectedAttributes(nextSelections);
+    setSelectedVariant(exactInStockMatch);
   };
 
   const selectedVariantImages =
@@ -186,7 +213,6 @@ const ProductDetailsPage = () => {
                 onVariantChange={handleVariantChange}
                 attributeGroups={attributeGroups}
                 selectedAttributes={selectedAttributes}
-                resetSelections={resetSelections}
               />
             </div>
           </div>
@@ -197,5 +223,3 @@ const ProductDetailsPage = () => {
 };
 
 export default ProductDetailsPage;
-
-

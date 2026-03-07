@@ -7,14 +7,17 @@ services:
     env_file:
       - ./client/.env
     environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://${HOST_MACHINE_IP:-10.222.2.40}:5000/api/v1
       INTERNAL_API_URL: http://server:5000/api/v1
+      NEXT_PUBLIC_PLATFORM_NAME: NMPL
+      NEXT_PUBLIC_SUPPORT_EMAIL: support@example.com
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "3000:3000"
     depends_on:
-      server:
-        condition: service_healthy
+      - server
     volumes:
       - ./client:/app
       - /app/node_modules
@@ -25,36 +28,42 @@ services:
     env_file:
       - ./server/.env
     environment:
+      NODE_ENV: development
       DOCKER_MODE: "true"
       PORT: "5000"
-      PUBLIC_API_BASE_URL: http://localhost:5000
-      CLIENT_URL_DEV: http://localhost:3000
-      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001,http://localhost:5173
+      PUBLIC_API_BASE_URL: http://${HOST_MACHINE_IP:-10.222.2.40}:5000
+      CLIENT_URL_DEV: http://${HOST_MACHINE_IP:-10.222.2.40}:3000
+      ALLOWED_ORIGINS: http://localhost:3000,http://${HOST_MACHINE_IP:-10.222.2.40}:3000
+      COOKIE_DOMAIN: ""
+      DATABASE_URL: postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable&connection_limit=20&pool_timeout=20
       REDIS_ENABLED: "true"
       REDIS_URL: redis://redis:6379
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "5000:5000"
     depends_on:
-      redis:
-        condition: service_healthy
+      - db
+      - redis
     volumes:
       - ./server:/app
       - /app/node_modules
-    command: sh -c "npx prisma migrate deploy && npm run dev"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
-      interval: 10s
-      timeout: 15s
-      retries: 15
-      start_period: 60s
+    command: npm run dev -- --legacy-watch
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: jhaecom
+      POSTGRES_PASSWORD: jhaecom27
+      POSTGRES_DB: b2c_ecommerce
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+
+volumes:
+  pgdata:

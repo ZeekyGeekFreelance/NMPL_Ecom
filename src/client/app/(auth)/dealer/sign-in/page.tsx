@@ -8,6 +8,11 @@ import MainLayout from "@/app/components/templates/MainLayout";
 import { Loader2 } from "lucide-react";
 import { useSignInMutation } from "@/app/store/apis/AuthApi";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
+import { resolveDisplayRole } from "@/app/lib/userRole";
+import {
+  normalizeEmailValue,
+  validateEmailValue,
+} from "@/app/lib/validators/common";
 
 interface InputForm {
   email: string;
@@ -24,8 +29,11 @@ const DealerSignIn = () => {
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    setValue,
+    formState: { errors, isValid },
   } = useForm<InputForm>({
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       email: "",
       password: "",
@@ -34,16 +42,23 @@ const DealerSignIn = () => {
 
   const onSubmit = async (formData: InputForm) => {
     try {
-      const response = await signIn(formData).unwrap();
+      const response = await signIn({
+        ...formData,
+        email: normalizeEmailValue(formData.email),
+        portal: "DEALER_PORTAL",
+      }).unwrap();
       const requestedNextPath = searchParams.get("next");
       const nextPath =
         requestedNextPath && requestedNextPath.startsWith("/")
           ? requestedNextPath
           : null;
+      const role = resolveDisplayRole(response.user);
       const destination =
-        response.user?.role === "ADMIN" || response.user?.role === "SUPERADMIN"
+        role === "ADMIN" || role === "SUPERADMIN"
           ? "/dashboard"
-          : nextPath || "/";
+          : role === "DEALER"
+            ? nextPath || "/orders"
+            : nextPath || "/";
       router.push(destination);
     } catch {
       // Error handled from mutation state.
@@ -71,10 +86,19 @@ const DealerSignIn = () => {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <Input
                 name="email"
-                type="text"
+                type="email"
                 placeholder="Dealer email"
                 control={control}
-                validation={{ required: "Email is required" }}
+                validation={{
+                  required: "Email is required",
+                  validate: (value: string) => validateEmailValue(value),
+                }}
+                onChange={(event) => {
+                  setValue("email", normalizeEmailValue(event.target.value), {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                }}
                 error={errors.email?.message}
                 className="py-2.5 text-sm"
               />
@@ -103,8 +127,9 @@ const DealerSignIn = () => {
 
               <button
                 type="submit"
+                disabled={isLoading || !isValid}
                 className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
-                  isLoading ? "cursor-not-allowed bg-gray-400" : ""
+                  isLoading || !isValid ? "cursor-not-allowed bg-gray-400" : ""
                 }`}
               >
                 {isLoading ? (

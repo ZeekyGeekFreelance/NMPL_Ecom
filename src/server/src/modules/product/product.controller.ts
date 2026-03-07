@@ -107,6 +107,35 @@ export class ProductController {
           throw new AppError(400, `Invalid JSON format in Variant #${index + 1}.`);
         }
 
+        const parsedPrice = parseFloat(variant.price);
+        const parsedDefaultDealerPrice =
+          variant.defaultDealerPrice === undefined ||
+          variant.defaultDealerPrice === null ||
+          variant.defaultDealerPrice === ""
+            ? null
+            : Number(variant.defaultDealerPrice);
+
+        if (
+          parsedDefaultDealerPrice !== null &&
+          (Number.isNaN(parsedDefaultDealerPrice) || parsedDefaultDealerPrice < 0)
+        ) {
+          throw new AppError(
+            400,
+            `Variant #${index + 1} dealer base price must be numeric and >= 0.`
+          );
+        }
+
+        if (
+          parsedDefaultDealerPrice !== null &&
+          !Number.isNaN(parsedPrice) &&
+          parsedDefaultDealerPrice > parsedPrice
+        ) {
+          throw new AppError(
+            400,
+            `Variant #${index + 1} dealer base price cannot exceed retail price.`
+          );
+        }
+
         // Map image URLs based on imageIndexes
         const imageUrls = imageIndexes
           .map((idx: number) => {
@@ -119,7 +148,8 @@ export class ProductController {
 
         return {
           ...variant,
-          price: parseFloat(variant.price),
+          price: parsedPrice,
+          defaultDealerPrice: parsedDefaultDealerPrice,
           stock: parseInt(variant.stock, 10),
           lowStockThreshold: parseInt(variant.lowStockThreshold || "10", 10),
           attributes,
@@ -207,6 +237,17 @@ export class ProductController {
                 variant.lowStockThreshold === ""
                   ? 10
                   : Number.parseInt(String(variant.lowStockThreshold), 10);
+              const hasDefaultDealerPriceField = Object.prototype.hasOwnProperty.call(
+                variant,
+                "defaultDealerPrice"
+              );
+              const parsedDefaultDealerPrice = hasDefaultDealerPriceField
+                ? variant.defaultDealerPrice === undefined ||
+                  variant.defaultDealerPrice === null ||
+                  variant.defaultDealerPrice === ""
+                  ? null
+                  : Number(variant.defaultDealerPrice)
+                : undefined;
 
               if (Number.isNaN(parsedPrice) || parsedPrice <= 0) {
                 throw new AppError(
@@ -229,6 +270,29 @@ export class ProductController {
                 throw new AppError(
                   400,
                   `${variantLabel} must have a valid non-negative low stock threshold.`
+                );
+              }
+
+              if (
+                parsedDefaultDealerPrice !== undefined &&
+                parsedDefaultDealerPrice !== null &&
+                (Number.isNaN(parsedDefaultDealerPrice) ||
+                  parsedDefaultDealerPrice < 0)
+              ) {
+                throw new AppError(
+                  400,
+                  `${variantLabel} dealer base price must be numeric and >= 0.`
+                );
+              }
+
+              if (
+                parsedDefaultDealerPrice !== undefined &&
+                parsedDefaultDealerPrice !== null &&
+                parsedDefaultDealerPrice > parsedPrice
+              ) {
+                throw new AppError(
+                  400,
+                  `${variantLabel} dealer base price cannot exceed retail price.`
                 );
               }
 
@@ -467,6 +531,9 @@ export class ProductController {
               return {
                 ...variant,
                 price: parsedPrice,
+                ...(parsedDefaultDealerPrice !== undefined && {
+                  defaultDealerPrice: parsedDefaultDealerPrice,
+                }),
                 stock: parsedStock,
                 lowStockThreshold: parsedLowStockThreshold,
                 images: imageUrls,

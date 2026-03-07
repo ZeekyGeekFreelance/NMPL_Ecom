@@ -30,24 +30,58 @@ function resolveServerGraphQLUrl(): string {
 
 const SERVER_GRAPHQL_URL = resolveServerGraphQLUrl();
 
-// 8-second hard timeout for SSR fetches.  If the backend doesn't respond
-// within this window the section falls back to [] and the client self-heals.
-const SSR_FETCH_TIMEOUT_MS = 8_000;
+// 15-second hard timeout per SSR attempt.
+// Neon (serverless Postgres) can take 1–3 s to resume from suspension, so
+// the original 8 s window was too tight on cold DB starts.
+const SSR_FETCH_TIMEOUT_MS = 15_000;
 
-function fetchWithTimeout(
+// How many times to retry the SSR fetch before giving up and falling back
+// to an empty payload (client will self-heal on mount).
+const SSR_MAX_RETRIES = 2;
+
+async function fetchWithTimeout(
   url: RequestInfo | URL,
   options?: RequestInit
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SSR_FETCH_TIMEOUT_MS);
+  let lastError: unknown;
 
-  return fetch(url, {
-    ...options,
-    // No-store: always fetch fresh data during SSR.
-    // Swap to `next: { revalidate: 60 }` here if you want ISR.
-    cache: "no-store",
-    signal: controller.signal,
-  }).finally(() => clearTimeout(timer));
+  for (let attempt = 0; attempt <= SSR_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SSR_FETCH_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        // No-store: always fetch fresh data during SSR.
+        // Swap to `next: { revalidate: 60 }` if you want ISR.
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return response;
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = err;
+
+      // Only retry on network/abort errors (e.g. Neon cold-start timeout).
+      // Don't retry on 4xx/5xx — those are application errors.
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      const isNetwork =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes("fetch") ||
+          err.message.toLowerCase().includes("network"));
+
+      if ((!isAbort && !isNetwork) || attempt === SSR_MAX_RETRIES) {
+        throw err;
+      }
+
+      // Brief pause between retries (200 ms is enough for Neon to start
+      // accepting connections after the wake-up TCP round-trip succeeds).
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  throw lastError;
 }
 
 /**

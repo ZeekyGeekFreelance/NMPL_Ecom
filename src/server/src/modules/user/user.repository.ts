@@ -190,6 +190,18 @@ export class UserRepository {
     });
   }
 
+  async incrementUserTokenVersion(userId: string) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        tokenVersion: { increment: 1 },
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
+
   async deleteUser(id: string) {
     return await prisma.user.delete({ where: { id } });
   }
@@ -210,6 +222,25 @@ export class UserRepository {
         id: {
           in: variantIds,
         },
+      },
+    });
+  }
+
+  async findVariantRetailSnapshot(variantIds: string[]) {
+    if (!variantIds.length) {
+      return [];
+    }
+
+    return prisma.productVariant.findMany({
+      where: {
+        id: {
+          in: variantIds,
+        },
+      },
+      select: {
+        id: true,
+        sku: true,
+        price: true,
       },
     });
   }
@@ -332,7 +363,7 @@ export class UserRepository {
 
   async getDealers(status?: DealerStatus) {
     const statusFilter = status
-      ? Prisma.sql`WHERE dp."status" = ${status}`
+      ? Prisma.sql`WHERE dp."status" = ${status}::"DEALER_STATUS"`
       : Prisma.empty;
 
     try {
@@ -395,27 +426,64 @@ export class UserRepository {
   ): Promise<DealerProfile | null> {
     const now = new Date();
     const approvedAt = status === "APPROVED" ? now : null;
+    const nextRole =
+      status === "APPROVED" || status === "LEGACY" || status === "SUSPENDED"
+        ? ROLE.DEALER
+        : ROLE.USER;
 
     try {
-      await prisma.$executeRaw(
+      const rows = await prisma.$queryRaw<DealerProfile[]>(
         Prisma.sql`
-          UPDATE "DealerProfile"
-          SET
-            "status"     = ${status}::"DEALER_STATUS",
-            "approvedAt" = ${approvedAt},
-            "approvedBy" = ${(status === "APPROVED" || status === "LEGACY") ? approvedBy ?? null : null},
-            "updatedAt"  = ${now}
-          WHERE "userId" = ${userId}
+          WITH updated_profile AS (
+            UPDATE "DealerProfile"
+            SET
+              "status"     = ${status}::"DEALER_STATUS",
+              "approvedAt" = ${approvedAt},
+              "approvedBy" = ${(status === "APPROVED" || status === "LEGACY") ? approvedBy ?? null : null},
+              "updatedAt"  = ${now}
+            WHERE "userId" = ${userId}
+            RETURNING
+              "id",
+              "userId",
+              "businessName",
+              "contactPhone",
+              "status",
+              "approvedAt",
+              "approvedBy",
+              "createdAt",
+              "updatedAt"
+          ),
+          updated_user AS (
+            UPDATE "User"
+            SET
+              "role" = ${nextRole}::"ROLE",
+              "tokenVersion" = "User"."tokenVersion" + 1,
+              "updatedAt" = ${now}
+            WHERE "id" = ${userId}
+              AND EXISTS (SELECT 1 FROM updated_profile)
+            RETURNING "id"
+          )
+          SELECT
+            up."id",
+            up."userId",
+            up."businessName",
+            up."contactPhone",
+            up."status",
+            up."approvedAt",
+            up."approvedBy",
+            up."createdAt",
+            up."updatedAt"
+          FROM updated_profile up
         `
       );
+
+      return rows[0] ?? null;
     } catch (error) {
       if (this.isDealerTableMissing(error)) {
         this.throwDealerMigrationError();
       }
       throw error;
     }
-
-    return this.findDealerProfileByUserId(userId);
   }
 
   async setDealerPrices(dealerId: string, prices: DealerPriceInput[]) {

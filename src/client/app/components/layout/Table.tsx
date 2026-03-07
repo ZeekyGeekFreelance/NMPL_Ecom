@@ -351,15 +351,22 @@ const Table: React.FC<TableProps> = ({
     });
   };
 
-  const handleSelectAll = () => {
-    if (selectedRows.size === rankedAndSortedData.length) {
-      setSelectedRows(new Set());
-    } else {
-      const allRowIds = rankedAndSortedData
+  const allVisibleRowIds = useMemo(
+    () =>
+      rankedAndSortedData
         .map((row, index) => String(row.id || row._id || index))
-        .filter((rowId): rowId is string => typeof rowId === "string" && rowId.length > 0);
-      setSelectedRows(new Set(allRowIds));
-    }
+        .filter(
+          (rowId): rowId is string => typeof rowId === "string" && rowId.length > 0
+        ),
+    [rankedAndSortedData]
+  );
+
+  const handleSelectAll = () => {
+    setSelectedRows(new Set(allVisibleRowIds));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedRows(new Set());
   };
 
   const handleToggleColumn = (columnKey: string) => {
@@ -431,6 +438,7 @@ const Table: React.FC<TableProps> = ({
           selectedRows={selectedRows}
           onSelectRow={handleSelectRow}
           onSelectAll={handleSelectAll}
+          onClearSelection={handleClearSelection}
         />
       </div>
       {showPaginationDetails && totalPages !== undefined && (

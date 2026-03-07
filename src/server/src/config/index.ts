@@ -412,7 +412,7 @@ const appConfig = {
       devDefault: "1mb",
     }) as string,
     memoryUnhealthyThresholdMb: parsePositiveInt("MEMORY_UNHEALTHY_THRESHOLD_MB", {
-      devDefault: 512,
+      devDefault: 1024,
     }) as number,
   },
   urls: {
@@ -614,6 +614,12 @@ const appConfig = {
   },
   cache: {
     reportsTtlSeconds: parsePositiveInt("REPORTS_CACHE_TTL_SECONDS", {
+      devDefault: 300,
+    }) as number,
+    catalogTtlSeconds: parsePositiveInt("CATALOG_CACHE_TTL_SECONDS", {
+      devDefault: 120,
+    }) as number,
+    categoryTtlSeconds: parsePositiveInt("CATEGORY_CACHE_TTL_SECONDS", {
       devDefault: 300,
     }) as number,
   },
