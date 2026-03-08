@@ -68,15 +68,15 @@ const Footer = () => {
       <div className="border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="flex items-center gap-3 rounded-lg bg-slate-900/80 px-4 py-3">
-            <ShieldCheck size={18} className="text-teal-400" />
+            <ShieldCheck size={18} style={{ color: 'var(--color-secondary)' }} />
             <span className="text-sm">Order confirmation required</span>
           </div>
           <div className="flex items-center gap-3 rounded-lg bg-slate-900/80 px-4 py-3">
-            <Wallet size={18} className="text-teal-400" />
+            <Wallet size={18} style={{ color: 'var(--color-secondary)' }} />
             <span className="text-sm">No online payment capture</span>
           </div>
           <div className="flex items-center gap-3 rounded-lg bg-slate-900/80 px-4 py-3">
-            <Truck size={18} className="text-teal-400" />
+            <Truck size={18} style={{ color: 'var(--color-secondary)' }} />
             <span className="text-sm">Manual dispatch confirmation</span>
           </div>
         </div>
@@ -166,7 +166,7 @@ const Footer = () => {
 
           <div className="mt-6 rounded-lg border border-slate-800 bg-slate-900/80 p-4">
             <div className="flex items-center gap-2 text-slate-300">
-              <Headset size={16} className="text-teal-400" />
+              <Headset size={16} style={{ color: 'var(--color-secondary)' }} />
               <span className="text-sm font-medium">Need help?</span>
             </div>
             <p className="mt-2 text-xs text-slate-400">
@@ -174,7 +174,8 @@ const Footer = () => {
             </p>
             <Link
               href={supportHref}
-              className="mt-3 inline-block text-sm text-teal-300 hover:text-teal-200"
+              className="mt-3 inline-block text-sm font-medium"
+              style={{ color: 'var(--color-secondary)' }}
             >
               {isAdminOrSuperAdmin ? "Open dashboard chats" : "Contact support"}
             </Link>

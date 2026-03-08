@@ -322,11 +322,7 @@ const DealerRegister = () => {
             <button
               type="submit"
               disabled={(isLoading || isApplying) || !isValid}
-              className={`btn-primary w-full ${
-                (isLoading || isApplying) || !isValid
-                  ? "cursor-not-allowed bg-gray-400"
-                  : ""
-              }`}
+              className="btn-primary w-full"
             >
               {isLoading || isApplying ? (
                 <Loader2 className="animate-spin mx-auto" size={20} />
@@ -340,14 +336,19 @@ const DealerRegister = () => {
 
           <div className="text-center text-sm text-gray-600 mt-4">
             Already approved?{" "}
-            <Link href="/dealer/sign-in" className="text-indigo-600 hover:underline">
+            <Link
+              href="/dealer/sign-in"
+              className="hover:underline"
+              style={{ color: "var(--color-primary)" }}
+            >
               Dealer sign in
             </Link>
           </div>
           <div className="text-center text-sm text-gray-600 mt-2">
             <Link
               href={isAuthenticated ? "/profile" : "/sign-in"}
-              className="text-indigo-600 hover:underline"
+              className="hover:underline"
+              style={{ color: "var(--color-primary)" }}
             >
               {isAuthenticated ? "Back to profile" : "Back to sign in"}
             </Link>

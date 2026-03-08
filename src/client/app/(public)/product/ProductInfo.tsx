@@ -453,8 +453,9 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
             className={`h-12 w-full rounded-md px-4 text-sm font-semibold uppercase tracking-[0.08em] transition ${
               isLoading || !canUseCart
                 ? "cursor-not-allowed bg-slate-300 text-slate-500"
-                : "bg-indigo-600 text-white hover:bg-indigo-700"
+                : "text-white"
             }`}
+            style={(!isLoading && canUseCart) ? { backgroundColor: 'var(--color-primary)' } : {}}
           >
             {isLoading
               ? "Adding..."
@@ -485,7 +486,8 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
             <span className="font-medium">Are you a dealer?</span>{" "}
             <Link
               href="/dealer/register"
-              className="font-medium text-indigo-600 hover:text-indigo-700"
+              className="font-medium"
+              style={{ color: 'var(--color-secondary)' }}
             >
               Request dealer sign-up
             </Link>

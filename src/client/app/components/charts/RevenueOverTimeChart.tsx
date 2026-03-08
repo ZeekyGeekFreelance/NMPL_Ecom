@@ -30,7 +30,7 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
     {
       name: "Revenue",
       data: revenue,
-      color: "#6366F1",
+      color: "#1d3461",
     },
   ];
 

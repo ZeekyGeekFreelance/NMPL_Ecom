@@ -88,8 +88,6 @@ const CategoryBox = ({
         href={ctaLink}
         className={`
           inline-flex items-center justify-center w-full
-          bg-gradient-to-r from-indigo-500 to-purple-600 
-          hover:from-indigo-600 hover:to-purple-700
           text-white font-medium rounded-md
           transition-all duration-300 transform hover:scale-[1.02]
           shadow-sm hover:shadow-md group-hover:shadow-lg
@@ -99,6 +97,7 @@ const CategoryBox = ({
               : "text-sm sm:text-base py-2 px-3 lg:py-2.5 lg:px-4"
           }
         `}
+        style={{ backgroundColor: 'var(--color-primary)' }}
       >
         <span className="mr-1">{ctaText}</span>
         <ArrowRight

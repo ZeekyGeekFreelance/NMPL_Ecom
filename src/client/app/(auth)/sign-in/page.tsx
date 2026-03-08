@@ -87,20 +87,20 @@ const SignIn = () => {
             <div className="text-center text-sm mb-4 space-y-1">
               <div className="text-gray-600">
                 Dealer account?
-                <Link href="/dealer/sign-in" className="ml-1 text-indigo-600 hover:underline">
+                <Link href="/dealer/sign-in" className="ml-1 font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>
                   Sign in as Dealer
                 </Link>
               </div>
               <div className="text-gray-600">
                 New dealer request?
-                <Link href="/dealer/register" className="ml-1 text-indigo-600 hover:underline">
+                <Link href="/dealer/register" className="ml-1 font-medium hover:underline" style={{ color: 'var(--color-secondary)' }}>
                   Register as Dealer
                 </Link>
               </div>
             </div>
 
             {showDevCredentials && (
-              <div className="mb-4 rounded-md border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900">
+              <div className="mb-4 rounded-md p-3 text-xs" style={{ border: '1px solid var(--color-primary-muted)', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
                 <p className="font-semibold">Test login hints</p>
                 <p>Super Admin: superadmin@example.com / password123</p>
                 <p>Admin: admin@example.com / password123</p>
@@ -151,7 +151,7 @@ const SignIn = () => {
               />
 
               <div className="-mt-1 text-left">
-                <Link href="/password-reset" className="text-xs text-indigo-600 hover:underline">
+                <Link href="/password-reset" className="text-xs hover:underline" style={{ color: 'var(--color-primary)' }}>
                   Forgot Password?
                 </Link>
               </div>
@@ -159,9 +159,7 @@ const SignIn = () => {
               <button
                 type="submit"
                 disabled={isLoading || !isValid}
-                className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
-                  isLoading || !isValid ? "cursor-not-allowed bg-gray-400" : ""
-                }`}
+                className="btn-primary w-full"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin mx-auto" size={20} />
@@ -173,7 +171,7 @@ const SignIn = () => {
 
             <div className="text-center text-sm text-gray-600 mt-4">
               Don&apos;t have an account?{" "}
-              <Link href="/sign-up" className="text-indigo-600 hover:underline">
+              <Link href="/sign-up" className="font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>
                 Sign up
               </Link>
             </div>
@@ -224,4 +222,3 @@ const SignIn = () => {
 };
 
 export default SignIn;
-

@@ -92,7 +92,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           ${
             disabled
               ? "cursor-not-allowed opacity-60"
-              : "cursor-pointer hover:border-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/20"
+              : "cursor-pointer hover:border-gray-400 focus-visible:outline-none focus-visible:ring-2"
           } ${className || ""}`}
         onClick={() => {
           if (!disabled) {
@@ -152,11 +152,8 @@ const Dropdown: React.FC<DropdownProps> = ({
                     disabled={option.disabled}
                     className={`w-full px-3 py-2 text-left text-sm transition-colors duration-150
                       hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50
-                      ${
-                        value === option.value
-                          ? "bg-indigo-50 text-indigo-700"
-                          : "text-gray-700"
-                      }`}
+                      ${value === option.value ? "text-white" : "text-gray-700"}`}
+                    style={value === option.value ? { backgroundColor: 'var(--color-primary)' } : {}}
                     onClick={() => handleSelect(option.value)}
                   >
                     {option.label}

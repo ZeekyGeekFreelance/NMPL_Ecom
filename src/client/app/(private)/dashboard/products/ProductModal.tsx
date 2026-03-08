@@ -115,11 +115,11 @@ const ProductModal: React.FC<ProductModalProps> = ({
       contentClassName="max-w-6xl h-[calc(100dvh-2rem)] overflow-hidden p-0"
     >
       <div className="flex h-full min-h-0 flex-col">
-        <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
-          <h2 className="pr-12 text-lg font-semibold text-gray-900">
+        <div className="shrink-0 border-b border-[var(--color-border)] px-6 pb-4 pt-6">
+          <h2 className="pr-12 text-lg font-semibold text-[var(--color-text)]">
             {initialData ? "Edit Product" : "Create Product"}
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-[var(--color-text-muted)]">
             Configure product details, variants, pricing, and metadata.
           </p>
         </div>

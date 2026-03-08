@@ -7,45 +7,45 @@ import { ArrowRight, Headset, ShieldCheck, Truck, Wallet } from "lucide-react";
 const HIGHLIGHTS = [
   {
     icon: ShieldCheck,
-    title: "Confirmation-first orders",
+    title: "Confirmation-First Ordering",
     description:
-      "Every order requires explicit confirmation before it is finalized.",
+      "Every order is verified before dispatch. No payment is captured until your order is approved.",
   },
   {
     icon: Wallet,
-    title: "No online charge right now",
+    title: "Secure B2B Pricing",
     description:
-      "Payments are not captured online during checkout in the current setup.",
+      "Approved dealers receive exclusive pricing. Transparent costs with no surprise charges.",
   },
   {
     icon: Truck,
-    title: "Dispatch updates",
+    title: "Tracked Dispatch",
     description:
-      "Once confirmed, shipment updates are tracked from your orders section.",
+      "Real-time shipment updates from confirmation to delivery, accessible from your orders page.",
   },
   {
     icon: Headset,
-    title: "Live support access",
+    title: "Direct Support",
     description:
-      "Use support to resolve order, account, or delivery concerns quickly.",
+      "Dedicated support for order verification, account issues, and dealer inquiries.",
   },
 ];
 
 const COLLECTIONS = [
   {
-    title: "New Arrivals",
+    title: "New Additions",
     href: "/shop?isNew=true",
-    subtitle: "Just added to the catalog",
+    subtitle: "Freshly added to the industrial catalog",
   },
   {
-    title: "Featured Picks",
+    title: "Featured Products",
     href: "/shop?isFeatured=true",
-    subtitle: "Curated products worth checking",
+    subtitle: "Precision-selected for performance",
   },
   {
-    title: "Best Sellers",
+    title: "High-Volume Lines",
     href: "/shop?isBestSeller=true",
-    subtitle: "Popular products customers repeat",
+    subtitle: "Most reordered by manufacturing units",
   },
 ];
 
@@ -61,7 +61,7 @@ const StoreHighlights = () => {
             transition={{ duration: 0.35, delay: index * 0.08 }}
             className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-5 shadow-sm"
           >
-            <div className="inline-flex rounded-lg bg-teal-50 p-2 text-teal-700">
+            <div className="inline-flex rounded-lg p-2" style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
               <item.icon size={18} />
             </div>
             <h3 className="mt-3 text-sm sm:text-base font-semibold text-slate-900">
@@ -83,14 +83,15 @@ const StoreHighlights = () => {
             transition={{ duration: 0.35, delay: 0.2 + index * 0.08 }}
             className="rounded-2xl bg-slate-900 text-white p-5"
           >
-            <p className="text-xs uppercase tracking-wide text-teal-300">
+            <p className="text-xs uppercase tracking-wide font-semibold" style={{ color: 'var(--color-secondary)' }}>
               Collection
             </p>
             <h4 className="mt-1 text-lg sm:text-xl font-semibold">{collection.title}</h4>
             <p className="mt-2 type-body-sm text-slate-300">{collection.subtitle}</p>
             <Link
               href={collection.href}
-              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-300 hover:text-teal-200"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-medium"
+              style={{ color: 'var(--color-secondary)' }}
             >
               Explore
               <ArrowRight size={14} />

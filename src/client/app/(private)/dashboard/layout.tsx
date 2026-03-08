@@ -277,7 +277,10 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="flex-1 min-h-0 p-4 sm:p-6 overflow-y-auto overflow-x-hidden">
+        <main
+          data-dashboard-scroll-container="true"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6"
+        >
           {children}
         </main>
       </div>

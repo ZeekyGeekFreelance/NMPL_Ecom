@@ -160,13 +160,24 @@ const InventoryDashboard = () => {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="type-h3 text-gray-900">Inventory Dashboard</h1>
           <p className="text-sm text-gray-500">
             Manage variant stock and restock history
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedVariant(null);
+            setIsHistoryModalOpen(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <History size={16} />
+          Last Stock History
+        </button>
       </div>
 
       <Table
@@ -200,12 +211,11 @@ const InventoryDashboard = () => {
           setSelectedVariant(null);
         }}
         variantId={selectedVariant?.id}
+        variantSku={selectedVariant?.sku}
       />
     </div>
   );
 };
 
 export default withAuth(InventoryDashboard);
-
-
 

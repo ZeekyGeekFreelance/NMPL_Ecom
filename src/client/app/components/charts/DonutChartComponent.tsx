@@ -13,7 +13,7 @@ const DonutChartComponent: React.FC<Props> = ({
   title,
   data,
   labels,
-  colorScheme = ["#3b82f6", "#10b981", "#ef4444", "#f59e0b"],
+  colorScheme = ["#1d3461", "#b84c0d", "#15803d", "#b91c1c"],
 }) => {
   const options: ApexCharts.ApexOptions = {
     chart: {
@@ -37,7 +37,7 @@ const DonutChartComponent: React.FC<Props> = ({
     legend: {
       position: "bottom",
       labels: {
-        colors: "#9ca3af",
+        colors: "#6b7280",
       },
     },
     tooltip: {
@@ -51,7 +51,7 @@ const DonutChartComponent: React.FC<Props> = ({
   return (
     <div className="p-4 rounded-2xl shadow-sm w-full bg-white">
       <div className="flex justify-between items-center mb-2">
-        <h2 className="text-black text-lg font-semibold">{title}</h2>
+        <h2 className="text-[var(--color-text)] text-lg font-semibold">{title}</h2>
       </div>
       <Chart options={options} series={series} type="donut" height={250} />
     </div>

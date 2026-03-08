@@ -70,12 +70,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         {/* Product Flags */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           {product.isNew && (
-            <span className="bg-green-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+            <span className="text-white text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-success)' }}>
               NEW
             </span>
           )}
           {product.isFeatured && (
-            <span className="bg-purple-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+            <span className="text-white text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-secondary)' }}>
               FEATURED
             </span>
           )}
@@ -144,8 +144,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         {/* Quick Actions */}
         <div className="mt-auto pt-2 sm:pt-3 border-t border-gray-100">
           <button
-            className="w-full bg-indigo-600 text-white py-2 sm:py-2.5 lg:py-3 rounded-sm
-              font-medium text-xs sm:text-sm"
+            className="w-full text-white py-2 sm:py-2.5 lg:py-3 rounded-sm font-medium text-xs sm:text-sm"
+            style={{ backgroundColor: 'var(--color-primary)' }}
             onClick={(e) => {
               e.stopPropagation();
               handleClick();

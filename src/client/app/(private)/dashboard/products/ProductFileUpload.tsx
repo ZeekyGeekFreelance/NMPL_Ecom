@@ -115,12 +115,12 @@ const ProductFileUpload = ({
       <div
         className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-all duration-300 ${
           dragActive
-            ? "border-blue-500 bg-blue-50"
+            ? "border-[var(--color-primary)] bg-[var(--color-primary-light)]"
             : uploadStatus === "success"
-            ? "border-green-500 bg-green-50"
+            ? "border-[var(--color-success)] bg-[var(--color-success-bg)]"
             : uploadStatus === "error"
-            ? "border-red-500 bg-red-50"
-            : "border-gray-300 hover:border-blue-400 bg-gray-50 hover:bg-blue-50"
+            ? "border-[var(--color-error)] bg-[var(--color-error-bg)]"
+            : "border-[var(--color-border-dark)] hover:border-[var(--color-primary-muted)] bg-[var(--color-surface-alt)] hover:bg-[var(--color-primary-light)]"
         }`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -139,8 +139,8 @@ const ProductFileUpload = ({
         {uploadStatus === "idle" ? (
           <>
             <div className="flex flex-col items-center space-y-2 mb-4">
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Upload className="h-6 w-6 text-blue-600" />
+              <div className="p-3 bg-[var(--color-primary-light)] rounded-full">
+                <Upload className="h-6 w-6 text-primary" />
               </div>
               <p className="text-sm font-medium text-gray-700">
                 {fileName
@@ -154,7 +154,7 @@ const ProductFileUpload = ({
             <button
               onClick={handleButtonClick}
               disabled={isLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              className="btn-primary h-10 rounded-md px-4 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
               {isLoading ? (
                 <>
@@ -171,20 +171,20 @@ const ProductFileUpload = ({
           </>
         ) : uploadStatus === "success" ? (
           <div className="flex flex-col items-center space-y-2">
-            <CheckCircle className="h-8 w-8 text-green-500" />
-            <p className="text-sm font-medium text-green-700">
+            <CheckCircle className="h-8 w-8 text-success" />
+            <p className="text-sm font-medium text-[var(--color-success-hover)]">
               Upload successful!
             </p>
             <p className="text-xs text-gray-500">{fileName}</p>
           </div>
         ) : (
           <div className="flex flex-col items-center space-y-2">
-            <XCircle className="h-8 w-8 text-red-500" />
-            <p className="text-sm font-medium text-red-700">Upload failed</p>
+            <XCircle className="h-8 w-8 text-[var(--color-error)]" />
+            <p className="text-sm font-medium text-[var(--color-error-hover)]">Upload failed</p>
             <p className="text-xs text-gray-500">{fileName}</p>
             <button
               onClick={resetState}
-              className="px-3 py-1 bg-white text-red-600 border border-red-600 rounded-md hover:bg-red-50 text-sm"
+              className="px-3 py-1 bg-white text-[var(--color-error)] border border-[var(--color-error)] rounded-md hover:bg-[var(--color-error-bg)] text-sm"
             >
               Try Again
             </button>

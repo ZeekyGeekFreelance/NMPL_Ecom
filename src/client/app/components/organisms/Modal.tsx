@@ -19,7 +19,7 @@ const Modal: React.FC<ModalProps> = ({
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const baseContentLayoutClassName =
-    "max-h-[calc(100dvh-2rem)] w-full min-h-0";
+    "h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-full min-h-0";
   const resolvedContentLayoutClassName =
     contentClassName.trim().length > 0
       ? contentClassName
@@ -31,14 +31,24 @@ const Modal: React.FC<ModalProps> = ({
     }
 
     const body = document.body;
+    const dashboardScrollContainer = document.querySelector(
+      '[data-dashboard-scroll-container="true"]'
+    ) as HTMLElement | null;
     const previousOverflow = body.style.overflow;
     const previousTouchAction = body.style.touchAction;
+    const previousDashboardOverflow = dashboardScrollContainer?.style.overflow;
+    const previousDashboardTouchAction =
+      dashboardScrollContainer?.style.touchAction;
     const currentCount = Number(body.dataset.modalOpenCount || "0");
     const nextCount = currentCount + 1;
 
     body.dataset.modalOpenCount = String(nextCount);
     body.style.overflow = "hidden";
     body.style.touchAction = "none";
+    if (dashboardScrollContainer) {
+      dashboardScrollContainer.style.overflow = "hidden";
+      dashboardScrollContainer.style.touchAction = "none";
+    }
 
     return () => {
       const latestCount = Number(body.dataset.modalOpenCount || "1");
@@ -48,6 +58,11 @@ const Modal: React.FC<ModalProps> = ({
         delete body.dataset.modalOpenCount;
         body.style.overflow = previousOverflow;
         body.style.touchAction = previousTouchAction;
+        if (dashboardScrollContainer) {
+          dashboardScrollContainer.style.overflow = previousDashboardOverflow || "";
+          dashboardScrollContainer.style.touchAction =
+            previousDashboardTouchAction || "";
+        }
         return;
       }
 
@@ -106,7 +121,7 @@ const Modal: React.FC<ModalProps> = ({
         >
           <motion.div
             ref={modalRef}
-            className={`relative flex min-h-0 flex-col rounded-xl border border-gray-200 bg-white shadow-xl ${baseContentLayoutClassName} ${resolvedContentLayoutClassName}`}
+            className={`relative flex min-h-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl ${baseContentLayoutClassName} ${resolvedContentLayoutClassName}`}
             variants={modalVariants}
             initial="hidden"
             animate="visible"
@@ -115,7 +130,7 @@ const Modal: React.FC<ModalProps> = ({
             {/* Close button with hover animation */}
             <motion.button
               onClick={onClose}
-              className="absolute right-4 top-4 z-20 rounded-full bg-gray-100 p-2 text-gray-600 transition-all duration-200 group hover:bg-gray-200 hover:text-gray-900"
+              className="absolute right-4 top-4 z-20 rounded-full bg-[var(--color-surface-alt)] p-2 text-[var(--color-text-muted)] transition-all duration-200 group hover:bg-[var(--color-primary-light)] hover:text-[var(--color-primary)]"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
             >

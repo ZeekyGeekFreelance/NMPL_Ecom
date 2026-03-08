@@ -118,7 +118,10 @@ const CategorySearchDropdown: React.FC<CategorySearchDropdownProps> = ({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm text-left text-gray-800 hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm text-left text-gray-800 focus:outline-none focus:ring-2 transition-all"
+        style={{ ['--tw-ring-color' as any]: 'var(--color-primary-muted)' }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary-muted)')}
+        onBlur={(e) => (e.currentTarget.style.borderColor = '')}
       >
         <span className="truncate">{selectedLabel}</span>
         <ChevronDown size={16} className={`shrink-0 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -147,9 +150,10 @@ const CategorySearchDropdown: React.FC<CategorySearchDropdownProps> = ({
               <button
                 type="button"
                 onClick={() => handleSelect("", "All Categories")}
-                className={`w-full px-3.5 py-2.5 text-left text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors ${
-                  !value ? "font-semibold text-indigo-700 bg-indigo-50" : "text-gray-700"
+                className={`w-full px-3.5 py-2.5 text-left text-sm transition-colors ${
+                  !value ? "font-semibold text-white" : "text-gray-700 hover:bg-gray-100"
                 }`}
+                style={!value ? { backgroundColor: 'var(--color-primary)' } : {}}
               >
                 All Categories
               </button>
@@ -159,9 +163,10 @@ const CategorySearchDropdown: React.FC<CategorySearchDropdownProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSelect(cat.id, cat.name)}
-                  className={`w-full px-3.5 py-2.5 text-left text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors ${
-                    value === cat.id ? "font-semibold text-indigo-700 bg-indigo-50" : "text-gray-700"
+                  className={`w-full px-3.5 py-2.5 text-left text-sm transition-colors ${
+                    value === cat.id ? "font-semibold text-white" : "text-gray-700 hover:bg-gray-100"
                   }`}
+                  style={value === cat.id ? { backgroundColor: 'var(--color-primary)' } : {}}
                 >
                   {cat.name}
                 </button>
@@ -319,7 +324,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
           } shrink-0`}
         >
           <div className="flex items-center gap-3">
-            <SlidersHorizontal size={20} className="text-indigo-600" />
+            <SlidersHorizontal size={20} style={{ color: 'var(--color-primary)' }} />
             <h2 className="font-bold text-gray-900 text-lg">Filter By</h2>
           </div>
           <div className="flex items-center gap-3">
@@ -363,7 +368,8 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
                 <input
                   type="text"
                   placeholder="Search products..."
-                  className="w-full border border-gray-200 rounded-xl p-3.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-gray-50 focus:bg-white"
+                  className="w-full border border-gray-200 rounded-xl p-3.5 text-sm focus:ring-2 transition-all duration-200 bg-gray-50 focus:bg-white"
+                  style={{ ['--tw-ring-color' as any]: 'var(--color-primary-muted)' }}
                   {...field}
                   onChange={(e) => {
                     field.onChange(e);
@@ -423,7 +429,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
                   <input
                     type="number"
                     placeholder="Min"
-                    className="border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-gray-50 focus:bg-white w-1/2"
+                    className="border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 transition-all duration-200 bg-gray-50 focus:bg-white w-1/2"
                     value={field.value || ""}
                     onChange={(e) =>
                       field.onChange(
@@ -440,7 +446,7 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
                   <input
                     type="number"
                     placeholder="Max"
-                    className="border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 bg-gray-50 focus:bg-white w-1/2"
+                    className="border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 transition-all duration-200 bg-gray-50 focus:bg-white w-1/2"
                     value={field.value || ""}
                     onChange={(e) =>
                       field.onChange(
@@ -487,7 +493,8 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
         >
           <button
             type="submit"
-            className="w-full bg-indigo-600 text-white py-3.5 rounded-xl hover:bg-indigo-700 transition-all duration-300 font-semibold shadow-sm hover:shadow-md"
+            className="w-full text-white py-3.5 rounded-xl transition-all duration-300 font-semibold shadow-sm hover:shadow-md"
+            style={{ backgroundColor: 'var(--color-primary)' }}
           >
             Apply Filters
           </button>

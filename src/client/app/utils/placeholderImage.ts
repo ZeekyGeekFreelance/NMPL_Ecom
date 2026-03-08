@@ -10,16 +10,16 @@ export const generatePlaceholderImage = (
     .join("")
     .slice(0, 2);
 
-  // Random background colors
+  // Random background colors aligned to the app palette
   const colors = [
-    "#6366f1", // Indigo
-    "#10b981", // Emerald
-    "#3b82f6", // Blue
-    "#f59e0b", // Amber
-    "#ef4444", // Red
-    "#8b5cf6", // Violet
-    "#06b6d4", // Cyan
-    "#84cc16", // Lime
+    "#1d3461", // Primary
+    "#152847", // Primary hover
+    "#b84c0d", // Secondary
+    "#15803d", // Success
+    "#b45309", // Warning
+    "#b91c1c", // Error
+    "#1f2937", // Dark mid
+    "#4b5563", // Text muted
   ];
 
   const randomColor = colors[Math.floor(Math.random() * colors.length)];

@@ -42,7 +42,7 @@ const Lists = ({
         title="Sales by Product"
         data={salesByProduct.data}
         categories={salesByProduct.categories}
-        color="#4CAF50"
+        color="#15803d"
       />
     </div>
   );

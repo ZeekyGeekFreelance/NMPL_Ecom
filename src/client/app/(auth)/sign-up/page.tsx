@@ -193,9 +193,13 @@ const Signup = () => {
                   type="button"
                   onClick={handleSendOtp}
                   disabled={!canRequestOtp}
-                  className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
+                  className={`btn-base w-full border font-medium ${
                     !canRequestOtp ? "cursor-not-allowed opacity-70" : ""
                   }`}
+                  style={!canRequestOtp
+                    ? { borderColor: 'var(--color-border-dark)', color: 'var(--color-text-muted)' }
+                    : { borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }
+                  }
                 >
                   {isSendingOtp
                     ? "Sending OTP..."
@@ -243,9 +247,7 @@ const Signup = () => {
               <button
                 type="submit"
                 disabled={isLoading || !isValid}
-                className={`btn-primary w-full ${
-                  isLoading || !isValid ? "cursor-not-allowed bg-gray-400" : ""
-                }`}
+                className="btn-primary w-full"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin mx-auto" size={20} />
@@ -257,7 +259,7 @@ const Signup = () => {
 
             <div className="text-center text-sm text-gray-600 mt-4">
               Already have an account?{" "}
-              <Link href="/sign-in" className="text-indigo-600 hover:underline">
+              <Link href="/sign-in" className="font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>
                 Sign in
               </Link>
             </div>

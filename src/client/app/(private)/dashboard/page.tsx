@@ -149,7 +149,7 @@ const Dashboard = () => {
         title="Revenue Trends"
         data={data?.revenueAnalytics?.monthlyTrends?.revenue || []}
         categories={data?.revenueAnalytics?.monthlyTrends?.labels || []}
-        color="#22c55e"
+        color="#1d3461"
         percentageChange={data?.revenueAnalytics?.changes?.revenue}
       />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -163,7 +163,7 @@ const Dashboard = () => {
           title="Sales by Product"
           data={salesByProduct.data}
           categories={salesByProduct.categories}
-          color="#4CAF50"
+          color="#b84c0d"
         />
       </div>
     </motion.div>

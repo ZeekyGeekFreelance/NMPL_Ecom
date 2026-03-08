@@ -4,6 +4,7 @@ import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import formatDate from "@/app/utils/formatDate";
 import { ShoppingBag } from "lucide-react";
 import { toOrderReference } from "@/app/lib/utils/accountReference";
+import { getPaginatedSerialNumber } from "@/app/lib/utils/pagination";
 
 const quotationEventLabel: Record<string, string> = {
   ORIGINAL_ORDER: "Original Order",
@@ -141,7 +142,7 @@ const OrderInformation = ({ order, className = "" }) => {
                   className="hover:bg-gray-50 transition-colors duration-150"
                 >
                   <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {index + 1}
+                    {getPaginatedSerialNumber(index)}
                   </td>
                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                     {item.variant?.product?.name || "Unknown Product"}

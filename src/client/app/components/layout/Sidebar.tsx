@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Layers,
+  SlidersHorizontal,
   Users,
   Boxes,
   ChartCandlestick,
@@ -78,7 +79,7 @@ const Sidebar = ({ notifications = {} }: SidebarProps) => {
             id: "attributes" as SidebarNotificationKey,
             name: "Attributes",
             href: "/attributes",
-            icon: Layers,
+            icon: SlidersHorizontal,
             roles: ["ADMIN", "SUPERADMIN"],
           },
           {
@@ -196,33 +197,38 @@ const Sidebar = ({ notifications = {} }: SidebarProps) => {
         href={fullHref}
         prefetch={false}
         className={`group flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border transition-all duration-200 ${
+          hasNotification && !active
+            ? "border-transparent"
+            : "border-transparent"
+        } ${
           active
-            ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+            ? "text-white"
             : hasNotification
-            ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
-            : "border-transparent text-gray-700 hover:border-gray-200 hover:bg-gray-50"
+            ? "text-gray-800 hover:bg-gray-50"
+            : "text-gray-700 hover:border-gray-200 hover:bg-gray-50"
         }`}
+        style={active ? { backgroundColor: 'var(--color-primary)', borderColor: 'transparent' } : {}}
       >
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative">
             <Icon
               className={`h-5 w-5 ${
                 active
-                  ? "text-indigo-700"
+                  ? "text-white"
                   : hasNotification
-                  ? "text-rose-700"
+                  ? "text-gray-700"
                   : "text-gray-500 group-hover:text-gray-700"
               }`}
             />
             {hasNotification && (
-              <span className="absolute -right-1.5 -top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+              <span className="absolute -right-1.5 -top-1.5 inline-flex h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: 'var(--color-error)' }} />
             )}
           </div>
           <span className="truncate text-sm font-medium">{name}</span>
         </div>
 
         {hasNotification && (
-          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-semibold text-white">
+          <span className="inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold text-white" style={{ backgroundColor: 'var(--color-error)' }}>
             {notificationCount > 99 ? "99+" : notificationCount}
           </span>
         )}

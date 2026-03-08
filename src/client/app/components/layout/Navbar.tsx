@@ -185,7 +185,7 @@ const Navbar = () => {
             href={brandHref}
             className="flex items-center gap-2 text-gray-900 font-semibold text-base sm:text-lg"
           >
-            <span className="rounded-lg bg-teal-700 text-white p-1.5">
+            <span className="rounded-lg text-white p-1.5" style={{ backgroundColor: 'var(--color-primary)' }}>
               <Store size={18} />
             </span>
             <span>{PLATFORM_NAME}</span>
@@ -198,7 +198,7 @@ const Navbar = () => {
           <div className="flex items-center space-x-1 sm:space-x-2">
             <button
               onClick={() => setMobileSearchOpen((prev) => !prev)}
-              className="lg:hidden p-2 text-gray-700 hover:text-teal-700 transition-colors"
+              className="lg:hidden p-2 text-gray-700 transition-colors" style={{ ['--tw-text-opacity' as any]: 1 }}
               aria-label="Search"
             >
               <Search size={20} />
@@ -207,12 +207,12 @@ const Navbar = () => {
             {shouldShowCart && (
               <Link
                 href="/cart"
-                className="relative p-2 text-gray-700 hover:text-teal-700 transition-colors"
+                className="relative p-2 text-gray-700 transition-colors"
                 aria-label="Shopping cart"
               >
                 <ShoppingCart className="text-[20px] sm:text-[22px]" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-teal-700 text-white text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  <span className="absolute -top-1 -right-1 text-white text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1" style={{ backgroundColor: 'var(--color-secondary)' }}>
                     {cartCount > 99 ? "99+" : cartCount}
                   </span>
                 )}
@@ -269,13 +269,14 @@ const Navbar = () => {
                 <div className="hidden sm:flex items-center gap-2">
                   <Link
                     href="/sign-in"
-                    className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-teal-700 transition-colors"
+                    className="px-3 py-2 text-sm font-medium text-gray-700 transition-colors"
                   >
                     Sign in
                   </Link>
                   <Link
                     href="/sign-up"
-                    className="px-3 py-2 text-sm font-medium bg-teal-700 text-white rounded-md hover:bg-teal-800 transition-colors"
+                    className="px-3 py-2 text-sm font-medium text-white rounded-md transition-colors"
+                    style={{ backgroundColor: 'var(--color-primary)' }}
                   >
                     Sign up
                   </Link>
@@ -285,7 +286,7 @@ const Navbar = () => {
 
             <button
               onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="md:hidden p-2 text-gray-700 hover:text-teal-700 transition-colors"
+              className="md:hidden p-2 text-gray-700 transition-colors"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -308,10 +309,11 @@ const Navbar = () => {
                   <Link
                     href={link.href}
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      isRouteActive(link.href)
-                        ? "bg-teal-50 text-teal-700"
-                        : "text-gray-700 hover:text-teal-700 hover:bg-gray-50"
+                    isRouteActive(link.href)
+                    ? "text-white"
+                    : "text-gray-700 hover:bg-gray-50"
                     }`}
+                      style={isRouteActive(link.href) ? { backgroundColor: 'var(--color-primary)' } : {}}
                   >
                     {link.label}
                   </Link>
@@ -320,7 +322,7 @@ const Navbar = () => {
                     <div className="relative" ref={categoriesRef}>
                       <button
                         onClick={() => setCategoriesOpen((prev) => !prev)}
-                        className="px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:text-teal-700 hover:bg-gray-50 inline-flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
                       >
                         Categories
                         <ChevronDown size={15} />
@@ -334,7 +336,7 @@ const Navbar = () => {
                                 key={category.id}
                                 href={`/shop?categoryId=${category.id}`}
                                 onClick={() => setCategoriesOpen(false)}
-                                className="text-sm px-2 py-1.5 rounded-md text-gray-700 hover:bg-teal-50 hover:text-teal-700"
+                                className="text-sm px-2 py-1.5 rounded-md text-gray-700 hover:bg-gray-50"
                               >
                                 {category.name}
                               </Link>
@@ -343,7 +345,7 @@ const Navbar = () => {
                           <Link
                             href="/shop"
                             onClick={() => setCategoriesOpen(false)}
-                            className="mt-3 block text-center rounded-md bg-teal-700 text-white py-2 text-sm hover:bg-teal-800"
+                            className="mt-3 block text-center rounded-md text-white py-2 text-sm" style={{ backgroundColor: 'var(--color-primary)' }}
                           >
                             View All Categories
                           </Link>
@@ -359,7 +361,7 @@ const Navbar = () => {
             <div className="flex items-center gap-2">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-teal-800 bg-teal-100 hover:bg-teal-200"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-white" style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 <LayoutDashboard size={14} />
                 Admin Dashboard
@@ -381,9 +383,10 @@ const Navbar = () => {
                       href={link.href}
                       className={`block px-3 py-2.5 rounded-md text-sm ${
                         isRouteActive(link.href)
-                          ? "bg-teal-50 text-teal-700 font-medium"
+                          ? "font-medium text-white"
                           : "text-gray-800 hover:bg-gray-100"
                       }`}
+                      style={isRouteActive(link.href) ? { backgroundColor: 'var(--color-primary)' } : {}}
                       onClick={() => {
                         setMobileMenuOpen(false);
                         setMobileCategoriesOpen(false);
@@ -415,7 +418,7 @@ const Navbar = () => {
                               <Link
                                 key={category.id}
                                 href={`/shop?categoryId=${category.id}`}
-                                className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-50 hover:bg-teal-50 hover:text-teal-700"
+                                className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-50 hover:bg-gray-100"
                                 onClick={() => {
                                   setMobileMenuOpen(false);
                                   setMobileCategoriesOpen(false);

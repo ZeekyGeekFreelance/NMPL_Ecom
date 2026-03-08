@@ -367,7 +367,7 @@ const ProductsDashboard = () => {
             type="button"
             onClick={() => void handleOpenEditProduct(row)}
             disabled={isFetchingEditProduct}
-            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 disabled:cursor-not-allowed disabled:text-blue-300"
+            className="flex items-center gap-1 text-primary hover:text-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:text-[var(--color-primary-muted)]"
           >
             <Edit size={16} />
             {isFetchingEditProduct ? "Loading..." : "Edit"}
@@ -399,7 +399,7 @@ const ProductsDashboard = () => {
           <button
             type="button"
             onClick={() => setIsFileUploadOpen(!isFileUploadOpen)}
-            className="flex items-center rounded-md bg-[#5d8a02] px-4 py-2 text-white"
+            className="btn-base h-10 rounded-md bg-success px-4 text-white hover:bg-[var(--color-success-hover)]"
           >
             <Upload className="mr-2 h-4 w-4" />
             Excel Sheet
@@ -410,7 +410,7 @@ const ProductsDashboard = () => {
               setEditingProduct(null);
               setIsModalOpen(true);
             }}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+            className="btn-primary h-10 rounded-md px-4"
           >
             Create Product
           </button>

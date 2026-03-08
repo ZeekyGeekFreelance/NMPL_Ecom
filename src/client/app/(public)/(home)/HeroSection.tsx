@@ -1,10 +1,5 @@
 "use client";
 
-import SliderImg1 from "@/app/assets/images/laptop-slider.jpg";
-import SliderImg2 from "@/app/assets/images/furniture-slider.jpeg";
-import SliderImg3 from "@/app/assets/images/shirt-slider.jpg";
-import SliderImg4 from "@/app/assets/images/shoes-slider.jpeg";
-
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, type TouchEvent } from "react";
@@ -13,8 +8,8 @@ import {
   ChevronRight,
   Play,
   Pause,
-  ShoppingBag,
-  Star,
+  ArrowRight,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -22,38 +17,39 @@ interface HeroSectionProps {
   isPreview?: boolean;
 }
 
+// Royalty-free images via Unsplash (free to use under Unsplash License)
 const sliderData = [
   {
-    image: SliderImg1,
-    title: "Discover Amazing Deals",
-    subtitle: "Up to 70% off on selected items",
-    ctaText: "Shop Now",
+    image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1600&q=80&fit=crop",
+    title: "Precision-Engineered for Garment Manufacturing",
+    subtitle: "Industrial-grade sewing needles built for high-volume production lines",
+    ctaText: "Browse Catalog",
     ctaLink: "/shop",
-    badge: "New Arrivals",
+    badge: "B2B Platform",
   },
   {
-    image: SliderImg2,
-    title: "Premium Quality Products",
-    subtitle: "Handpicked items for your lifestyle",
-    ctaText: "Explore",
-    ctaLink: "/shop",
-    badge: "Featured",
+    image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=1600&q=80&fit=crop",
+    title: "Supplying the Backbone of Global Apparel",
+    subtitle: "Consistent quality, reliable supply chain, confirmation-first ordering",
+    ctaText: "Request Dealer Access",
+    ctaLink: "/dealer/register",
+    badge: "Dealer Network",
   },
   {
-    image: SliderImg3,
-    title: "Fast & Free Shipping",
-    subtitle: "On orders over ₹50",
-    ctaText: "Learn More",
-    ctaLink: "/shop",
-    badge: "Limited Time",
+    image: "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=1600&q=80&fit=crop",
+    title: "Manufacturing Reliability You Can Count On",
+    subtitle: "Every order verified before dispatch — zero payment until confirmation",
+    ctaText: "How It Works",
+    ctaLink: "/about-us",
+    badge: "Verified Process",
   },
   {
-    image: SliderImg4,
-    title: "Trending Now",
-    subtitle: "Upgrade your style today",
-    ctaText: "Discover",
+    image: "https://images.unsplash.com/photo-1605217613423-0aca4253c04e?w=1600&q=80&fit=crop",
+    title: "From Needle to Finished Garment",
+    subtitle: "Serving manufacturers, exporters and garment units across India",
+    ctaText: "View All Products",
     ctaLink: "/shop",
-    badge: "Hot Picks",
+    badge: "NMPL",
   },
 ];
 
@@ -186,6 +182,7 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
                 priority={currentImageIndex === 0}
                 className="object-cover"
                 sizes="100vw"
+                unoptimized
               />
 
               {/* Gradient */}
@@ -195,11 +192,9 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
               <div className="absolute inset-0 flex items-center">
                 <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                   <div className="max-w-2xl text-white">
-                    <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-6 border border-white/30">
-                      <Star size={16} className="text-yellow-400" />
-                      <span className="text-sm font-medium">
-                        {currentSlide.badge}
-                      </span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-6 text-xs font-semibold uppercase tracking-wider text-white" style={{ backgroundColor: 'var(--color-secondary)' }}>
+                      <Shield size={13} />
+                      <span>{currentSlide.badge}</span>
                     </div>
 
                     <h1 className="type-h1 font-bold mb-4 text-white" style={{ fontSize: 'clamp(1.75rem, 5vw, 3.5rem)' }}>
@@ -212,10 +207,11 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
 
                     <Link
                       href={currentSlide.ctaLink}
-                      className="inline-flex items-center gap-3 bg-white text-gray-900 px-8 py-4 rounded-full font-semibold hover:bg-gray-100 transition-transform duration-300 hover:scale-105 shadow-lg"
+                      className="inline-flex items-center gap-3 text-white px-7 py-3.5 rounded-md font-semibold transition-all duration-300 hover:scale-105 shadow-lg text-sm uppercase tracking-wide"
+                      style={{ backgroundColor: 'var(--color-secondary)' }}
                     >
-                      <ShoppingBag size={18} />
                       {currentSlide.ctaText}
+                      <ArrowRight size={16} />
                     </Link>
                   </div>
                 </div>

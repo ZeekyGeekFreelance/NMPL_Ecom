@@ -21,6 +21,7 @@ import useToast from "@/app/hooks/ui/useToast";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import { Eye, EyeOff, Loader2, Search, Trash2, X } from "lucide-react";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
+import { getPaginatedSerialNumber } from "@/app/lib/utils/pagination";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import {
   normalizeEmailValue,
@@ -120,14 +121,24 @@ const DealersDashboard = () => {
     }
 
     const body = document.body;
+    const dashboardScrollContainer = document.querySelector(
+      '[data-dashboard-scroll-container="true"]'
+    ) as HTMLElement | null;
     const previousOverflow = body.style.overflow;
     const previousTouchAction = body.style.touchAction;
+    const previousDashboardOverflow = dashboardScrollContainer?.style.overflow;
+    const previousDashboardTouchAction =
+      dashboardScrollContainer?.style.touchAction;
     const currentCount = Number(body.dataset.modalOpenCount || "0");
     const nextCount = currentCount + 1;
 
     body.dataset.modalOpenCount = String(nextCount);
     body.style.overflow = "hidden";
     body.style.touchAction = "none";
+    if (dashboardScrollContainer) {
+      dashboardScrollContainer.style.overflow = "hidden";
+      dashboardScrollContainer.style.touchAction = "none";
+    }
 
     return () => {
       const latestCount = Number(body.dataset.modalOpenCount || "1");
@@ -137,6 +148,11 @@ const DealersDashboard = () => {
         delete body.dataset.modalOpenCount;
         body.style.overflow = previousOverflow;
         body.style.touchAction = previousTouchAction;
+        if (dashboardScrollContainer) {
+          dashboardScrollContainer.style.overflow = previousDashboardOverflow || "";
+          dashboardScrollContainer.style.touchAction =
+            previousDashboardTouchAction || "";
+        }
         return;
       }
 
@@ -707,7 +723,9 @@ const DealersDashboard = () => {
               ) : (
                 visibleDealers.map((dealer, index) => (
                   <tr key={dealer.id} className="border-b border-gray-100 last:border-b-0">
-                    <td className="px-4 py-3 text-gray-700">{index + 1}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {getPaginatedSerialNumber(index)}
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900">{dealer.name}</p>
                       <p className="text-gray-600">{dealer.email}</p>
@@ -948,7 +966,7 @@ const DealersDashboard = () => {
           >
             <div
               onClick={(event) => event.stopPropagation()}
-              className="flex min-h-0 w-full max-w-6xl flex-col rounded-xl bg-white p-6 max-h-[calc(100dvh-2rem)]"
+              className="flex h-[calc(100dvh-2rem)] min-h-0 w-full max-w-6xl flex-col rounded-xl bg-white p-6 max-h-[calc(100dvh-2rem)]"
             >
               <div className="sticky top-0 z-20 bg-white pb-4 border-b border-gray-200">
                 <h2 className="type-h4 text-gray-900">Dealer Price Mapping</h2>
@@ -1094,7 +1112,7 @@ const DealersDashboard = () => {
                                 className="border-b border-gray-100 last:border-b-0"
                               >
                                 <td className="px-3 py-2 text-gray-700">
-                                  {index + 1}
+                                  {getPaginatedSerialNumber(index)}
                                 </td>
                                 <td className="px-3 py-2 text-gray-800">
                                   {variant.product?.name || "Product"}

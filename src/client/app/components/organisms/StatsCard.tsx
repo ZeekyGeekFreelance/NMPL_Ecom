@@ -22,7 +22,7 @@ const StatsCard = ({ title, value, percentage, caption, icon }: StatsCardProps) 
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-800">{title}</h3>
         {icon && (
-          <div className="rounded-full bg-indigo-100 p-2 text-indigo-600">{icon}</div>
+          <div className="rounded-full p-2" style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>{icon}</div>
         )}
       </div>
 

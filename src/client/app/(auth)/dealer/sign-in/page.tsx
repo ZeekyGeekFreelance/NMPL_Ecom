@@ -120,7 +120,11 @@ const DealerSignIn = () => {
               />
 
               <div className="-mt-1 text-left">
-                <Link href="/password-reset" className="text-xs text-indigo-600 hover:underline">
+                <Link
+                  href="/password-reset"
+                  className="text-xs hover:underline"
+                  style={{ color: "var(--color-primary)" }}
+                >
                   Forgot Password?
                 </Link>
               </div>
@@ -128,9 +132,7 @@ const DealerSignIn = () => {
               <button
                 type="submit"
                 disabled={isLoading || !isValid}
-                className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
-                  isLoading || !isValid ? "cursor-not-allowed bg-gray-400" : ""
-                }`}
+                className="btn-primary w-full"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin mx-auto" size={20} />
@@ -142,12 +144,20 @@ const DealerSignIn = () => {
 
             <div className="text-center text-sm text-gray-600 mt-4">
               Not approved yet?{" "}
-              <Link href="/dealer/register" className="text-indigo-600 hover:underline">
+              <Link
+                href="/dealer/register"
+                className="hover:underline"
+                style={{ color: "var(--color-primary)" }}
+              >
                 Request dealer access
               </Link>
             </div>
             <div className="text-center text-sm text-gray-600 mt-2">
-              <Link href="/sign-in" className="text-indigo-600 hover:underline">
+              <Link
+                href="/sign-in"
+                className="hover:underline"
+                style={{ color: "var(--color-primary)" }}
+              >
                 Back to customer/admin sign in
               </Link>
             </div>
