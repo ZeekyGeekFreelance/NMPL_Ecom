@@ -72,7 +72,6 @@ export class AuthService {
   }
 
   private async verifyPassword({
-    userId,
     inputPassword,
     storedPassword,
   }: {
@@ -80,19 +79,13 @@ export class AuthService {
     inputPassword: string;
     storedPassword: string;
   }): Promise<boolean> {
-    if (this.isBcryptHash(storedPassword)) {
-      return passwordUtils.comparePassword(inputPassword, storedPassword);
+    // Only bcrypt hashes are accepted. Plain-text password comparison
+    // was removed as a security hardening measure (timing attack vector).
+    // Run the db:migrate:passwords script to hash any legacy plain-text passwords.
+    if (!this.isBcryptHash(storedPassword)) {
+      return false;
     }
-
-    if (storedPassword === inputPassword) {
-      // Upgrade legacy plain-text passwords after first successful login.
-      await this.authRepository.updateUserPassword(userId, inputPassword, {
-        invalidateSessions: false,
-      });
-      return true;
-    }
-
-    return false;
+    return passwordUtils.comparePassword(inputPassword, storedPassword);
   }
 
   private async issuePasswordResetLink(user: {
@@ -567,6 +560,16 @@ export class AuthService {
     });
     const normalizedPortal = String(portal || "USER_PORTAL").toUpperCase();
 
+    // Block SUSPENDED accounts from all portals immediately — before portal routing.
+    // A role=USER + status=SUSPENDED edge case (e.g. manual DB patch) would otherwise
+    // resolve effectiveRole="USER" and slip through the USER_PORTAL guard below.
+    if (dealerProfile?.status === "SUSPENDED") {
+      throw new AppError(
+        403,
+        "Your dealer account has been suspended. Please contact admin support."
+      );
+    }
+
     if (normalizedPortal === "USER_PORTAL" && effectiveRole === "DEALER") {
       throw new AppError(
         403,
@@ -605,12 +608,6 @@ export class AuthService {
 
       const approvedStatuses = new Set(["APPROVED", "LEGACY"]);
       if (!approvedStatuses.has(dealerProfile.status)) {
-        if (dealerProfile.status === "SUSPENDED") {
-          throw new AppError(
-            403,
-            "Dealer account is suspended. Please contact admin support."
-          );
-        }
         throw new AppError(
           403,
           "Dealer access is currently restricted. Please contact admin support."

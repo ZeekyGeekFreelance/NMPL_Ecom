@@ -6,6 +6,9 @@ import { Request, Response } from "express";
 import redisClient from "@/infra/cache/redis";
 import { cacheKey } from "@/shared/utils/cacheKey";
 import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
+// Re-export from the canonical shared module — keeps any existing imports
+// pointing at resolver.ts working, and avoids duplicating the implementation.
+export { clearCatalogListingCache, clearCategoryCache } from "@/shared/utils/catalogCache";
 
 export interface Context {
   prisma: PrismaClient;
@@ -61,6 +64,12 @@ const DEFAULT_PAGE_SIZE = 12;
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_NESTED_PAGE_SIZE = 25;
 const MAX_NESTED_PAGE_SIZE = 50;
+// Categories are leaf metadata rows — much cheaper to load than products.
+// Allow clients to fetch up to 200 per page so the shop filter dropdown can
+// be populated in 7 requests for a 1 330-category catalogue, and the home
+// page category bar can show a meaningful sample in a single request.
+const DEFAULT_CATEGORY_PAGE_SIZE = 50;
+const MAX_CATEGORY_PAGE_SIZE = 200;
 
 // ── Redis-backed catalog cache ────────────────────────────────────────────────
 // Shared across all processes/workers so invalidation on create/update/delete
@@ -135,58 +144,6 @@ const setCachedCategories = async (
   }
 };
 
-/**
- * Delete all catalog listing cache entries from Redis.
- * Uses a SCAN-based approach so it works on Redis Cluster and avoids
- * blocking the server with a KEYS call.
- */
-export const clearCatalogListingCache = async (): Promise<void> => {
-  try {
-    const pattern = buildRedisCatalogKey("*");
-    // The shim doesn't support scan — it implements del() which is enough for
-    // the unit tests.  On a real Redis we use the safe SCAN + DEL pattern.
-    if (typeof (redisClient as any).scan === "function") {
-      let cursor = "0";
-      do {
-        const [nextCursor, keys]: [string, string[]] = await (
-          redisClient as any
-        ).scan(cursor, "MATCH", pattern, "COUNT", 200);
-        cursor = nextCursor;
-        if (keys.length > 0) {
-          await redisClient.del(...keys);
-        }
-      } while (cursor !== "0");
-    } else {
-      // InMemoryRedisShim path: construct and delete the pattern key directly.
-      await redisClient.del(pattern);
-    }
-  } catch {
-    // Non-fatal — worst case stale entries expire naturally.
-  }
-};
-
-export const clearCategoryCache = async (): Promise<void> => {
-  try {
-    const pattern = buildRedisCategoryKey("*");
-    if (typeof (redisClient as any).scan === "function") {
-      let cursor = "0";
-      do {
-        const [nextCursor, keys]: [string, string[]] = await (
-          redisClient as any
-        ).scan(cursor, "MATCH", pattern, "COUNT", 200);
-        cursor = nextCursor;
-        if (keys.length > 0) {
-          await redisClient.del(...keys);
-        }
-      } while (cursor !== "0");
-    } else {
-      await redisClient.del(pattern);
-    }
-  } catch {
-    // Non-fatal.
-  }
-};
-
 const parsePagination = (
   first: number | null | undefined,
   skip: number | null | undefined,
@@ -231,6 +188,23 @@ const stableStringify = (value: unknown): string => {
     .map((key) => `${JSON.stringify(key)}:${stableStringify(objectValue[key])}`);
 
   return `{${serializedPairs.join(",")}}`;
+};
+
+/**
+ * Bucket viewers into one of three tiers for cache key purposes:
+ *   "retail"          — anonymous or authenticated non-dealer users (all see retail prices)
+ *   "dealer:{userId}" — dealers each have custom pricing, so must be isolated
+ *
+ * This collapses the anonymous + retail-user population into a single shared
+ * cache entry per query, eliminating O(Users × Queries) key cardinality.
+ * Dealer cardinality is unavoidable because pricing is per-dealer.
+ */
+const resolveViewerCacheKey = (req: Request): string => {
+  const user = req.user;
+  if (!user?.id) return "retail";
+  const role = String(user.effectiveRole || user.role || "").toUpperCase();
+  if (role === "DEALER") return `dealer:${user.id}`;
+  return "retail";
 };
 
 const buildCatalogCacheKey = (options: {
@@ -427,7 +401,7 @@ const resolveProductConnection = async (
     first: pagination.first,
     skip: pagination.skip,
     filters: options.cacheFilters,
-    viewerKey: context.req.user?.id || "anonymous",
+    viewerKey: resolveViewerCacheKey(context.req),
   });
 
   const requestStore = getCurrentRequestMetricStore();
@@ -704,25 +678,36 @@ export const productResolvers = {
     },
     categories: async (
       _: unknown,
-      { first, skip }: { first?: number; skip?: number },
+      { first, skip, search }: { first?: number; skip?: number; search?: string },
       context: Context
     ) => {
       const pagination = parsePagination(first, skip, {
-        defaultFirst: DEFAULT_PAGE_SIZE,
-        maxFirst: MAX_PAGE_SIZE,
+        defaultFirst: DEFAULT_CATEGORY_PAGE_SIZE,
+        maxFirst: MAX_CATEGORY_PAGE_SIZE,
         label: "categories",
       });
 
-      const cacheKey = `categories:${pagination.first}:${pagination.skip}`;
-      const cached = await getCachedCategories(cacheKey);
-      if (cached) {
-        return cached;
+      const trimmedSearch = search?.trim() || "";
+      // Search queries bypass cache — they are rare (admin / filter UX) and
+      // highly variable, so caching would just thrash with no benefit.
+      const isCacheable = !trimmedSearch;
+      const rawCacheKey = `categories:${pagination.first}:${pagination.skip}`;
+      if (isCacheable) {
+        const cached = await getCachedCategories(rawCacheKey);
+        if (cached) {
+          return cached;
+        }
       }
 
+      const where = trimmedSearch
+        ? { name: { contains: trimmedSearch, mode: "insensitive" as const } }
+        : {};
+
       const rows = await context.prisma.category.findMany({
+        where,
         take: pagination.first,
         skip: pagination.skip,
-        orderBy: { createdAt: "desc" },
+        orderBy: { name: "asc" }, // stable alpha order is more useful than insert order
         select: {
           id: true,
           slug: true,
@@ -731,7 +716,9 @@ export const productResolvers = {
         },
       });
 
-      await setCachedCategories(cacheKey, rows);
+      if (isCacheable) {
+        await setCachedCategories(rawCacheKey, rows);
+      }
 
       return rows;
     },

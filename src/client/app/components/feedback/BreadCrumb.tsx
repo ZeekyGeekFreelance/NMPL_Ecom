@@ -48,7 +48,7 @@ const BreadCrumb: React.FC = () => {
 
   return (
     <nav aria-label="Breadcrumb" className="mb-4">
-      <ol className="flex flex-wrap items-center text-sm text-gray-500 space-x-1 sm:space-x-2">
+      <ol className="flex flex-wrap items-center text-xs sm:text-sm text-gray-500 space-x-1 sm:space-x-2">
         <li>
           <Link
             href="/"

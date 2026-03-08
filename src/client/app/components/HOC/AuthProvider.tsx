@@ -122,7 +122,14 @@ export default function AuthProvider({
   const applyLocalSignedOutState = useCallback(() => {
     dispatch(apiSlice.util.resetApiState());
     dispatch(logout());
-    clearPendingAuthIntent();
+    // Only wipe a pending add-to-cart intent when a user was actually logged in
+    // (explicit sign-out or session expiry). During the initial bootstrap auth
+    // check the user was never authenticated, so currentUserRef.current is
+    // undefined — clearing here would destroy an intent the guest just set
+    // seconds before being redirected to the sign-in page.
+    if (currentUserRef.current) {
+      clearPendingAuthIntent();
+    }
   }, [dispatch]);
 
   useEffect(() => {

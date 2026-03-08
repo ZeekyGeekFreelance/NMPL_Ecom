@@ -9,7 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@apollo/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Package, Filter, Loader2 } from "lucide-react";
-import { GET_PRODUCTS, GET_CATEGORIES } from "@/app/gql/Product";
+import { GET_PRODUCTS } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 import ProductCard from "../product/ProductCard";
 import MainLayout from "@/app/components/templates/MainLayout";
@@ -161,11 +161,6 @@ const ShopPage: React.FC = () => {
     ]
   );
 
-  const serverFilterSignature = useMemo(
-    () => JSON.stringify(serverFilters),
-    [serverFilters]
-  );
-
   const activeFilterCount = useMemo(
     () =>
       Object.values(serverFilters).filter(
@@ -173,11 +168,6 @@ const ShopPage: React.FC = () => {
       ).length,
     [serverFilters]
   );
-
-  const { data: categoriesData } = useQuery(GET_CATEGORIES, {
-    variables: { first: 50 },
-  });
-  const categories = categoriesData?.categories || [];
 
   const {
     loading,
@@ -384,7 +374,6 @@ const ShopPage: React.FC = () => {
                 initialFilters={initialFilters}
                 currentSortBy={currentSortBy}
                 onFilterChange={updateFilters}
-                categories={categories}
               />
             </div>
 
@@ -461,7 +450,7 @@ const ShopPage: React.FC = () => {
                   <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
                     <Package size={32} className="text-red-500" />
                   </div>
-                  <h3 className="mb-2 text-xl font-semibold text-gray-900">
+                  <h3 className="mb-2 type-h4 text-gray-900">
                     Error loading products
                   </h3>
                   <p className="mb-6 text-gray-600">
@@ -481,7 +470,7 @@ const ShopPage: React.FC = () => {
                   <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
                     <Package size={32} className="text-gray-400" />
                   </div>
-                  <h3 className="mb-2 text-xl font-semibold text-gray-900">
+                  <h3 className="mb-2 type-h4 text-gray-900">
                     No products found
                   </h3>
                   <p className="mb-6 text-gray-600">
@@ -575,7 +564,6 @@ const ShopPage: React.FC = () => {
                   initialFilters={initialFilters}
                   currentSortBy={currentSortBy}
                   onFilterChange={updateFilters}
-                  categories={categories}
                   isMobile
                   onCloseMobile={() => setSidebarOpen(false)}
                 />

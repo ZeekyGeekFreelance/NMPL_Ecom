@@ -162,7 +162,7 @@ const InventoryDashboard = () => {
     <div className="p-4 sm:p-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Inventory Dashboard</h1>
+          <h1 className="type-h3 text-gray-900">Inventory Dashboard</h1>
           <p className="text-sm text-gray-500">
             Manage variant stock and restock history
           </p>

@@ -27,7 +27,7 @@ const PageHeader = ({
           <ArrowLeft size={16} className="mr-1" />
           <span className="text-sm">Back to transactions</span>
         </button>
-        <h1 className="text-2xl font-bold">Transaction Details</h1>
+        <h1 className="type-h3 text-gray-900">Transaction Details</h1>
         <p className="text-sm text-gray-500">
           View detailed information about this transaction
         </p>

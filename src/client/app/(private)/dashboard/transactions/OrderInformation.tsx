@@ -52,7 +52,7 @@ const OrderInformation = ({ order, className = "" }) => {
       >
         <div className="flex items-center mb-4">
           <ShoppingBag className="mr-2 text-blue-600" size={20} />
-          <h2 className="text-lg font-semibold">Order Information</h2>
+          <h2 className="text-base sm:text-lg font-semibold">Order Information</h2>
         </div>
         <p className="text-sm text-gray-500">Order information is not available.</p>
       </div>
@@ -70,7 +70,7 @@ const OrderInformation = ({ order, className = "" }) => {
     >
       <div className="flex items-center mb-4">
         <ShoppingBag className="mr-2 text-blue-600" size={20} />
-        <h2 className="text-lg font-semibold">Order Information</h2>
+        <h2 className="text-base sm:text-lg font-semibold">Order Information</h2>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6">
         <div>
@@ -109,7 +109,7 @@ const OrderInformation = ({ order, className = "" }) => {
 
       {/* Order Items */}
       <div className="mt-6">
-        <h3 className="text-md font-semibold mb-3">Order Items</h3>
+        <h3 className="text-sm sm:text-base font-semibold mb-3">Order Items</h3>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -176,7 +176,7 @@ const OrderInformation = ({ order, className = "" }) => {
       </div>
 
       <div className="mt-6">
-        <h3 className="text-md font-semibold mb-3">Quotation History</h3>
+        <h3 className="text-sm sm:text-base font-semibold mb-3">Quotation History</h3>
         {quotationLogs.length === 0 ? (
           <p className="text-sm text-gray-500">
             No quotation revisions recorded yet.

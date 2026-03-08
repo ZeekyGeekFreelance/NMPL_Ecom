@@ -10,6 +10,7 @@ import {
   authRateLimiter,
   otpRateLimiter,
   passwordResetLimiter,
+  refreshTokenLimiter,
   registrationLimiter,
 } from "@/shared/middlewares/rateLimiter";
 import { validateDto } from "@/shared/middlewares/validateDto";
@@ -343,7 +344,7 @@ router.post("/sign-in", authRateLimiter, validateDto(SigninDto), authController.
  *       200:
  *         description: Successfully refreshed the token.
  */
-router.post("/refresh-token", authController.refreshToken);
+router.post("/refresh-token", refreshTokenLimiter, authController.refreshToken);
 
 /**
  * @swagger

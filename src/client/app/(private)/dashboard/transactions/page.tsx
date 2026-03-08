@@ -99,6 +99,12 @@ const TransactionsDashboard = () => {
     router.push(`/dashboard/transactions/${toTransactionReference(id)}`);
   };
 
+  const handleQuickQuote = (id: string) => {
+    router.push(
+      `/dashboard/transactions/${toTransactionReference(id)}?quickAction=quote`
+    );
+  };
+
   const canEditQuotation = (status: string) => {
     const normalizedStatus = normalizeOrderStatus(status);
     return (
@@ -268,7 +274,7 @@ const TransactionsDashboard = () => {
           {canEditQuotation(row.status) ? (
             <button
               type="button"
-              onClick={() => handleViewDetails(row.id)}
+              onClick={() => handleQuickQuote(row.id)}
               className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-indigo-50"
             >
               <PenLine size={16} />
@@ -323,8 +329,8 @@ const TransactionsDashboard = () => {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold">Transaction List</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="type-h4 text-gray-900">Transaction List</h1>
+        <p className="type-body-sm text-gray-500">
           Manage and view your transactions
         </p>
       </div>
@@ -379,25 +385,32 @@ const TransactionsDashboard = () => {
       />
 
       {/* Update Status Modal */}
-      <Modal open={isStatusModalOpen} onClose={cancelStatusUpdate}>
-        <div className="flex max-h-[82vh] flex-col">
-          <h2 className="text-lg font-semibold mb-4 pr-10">
-            Update Transaction Status
-          </h2>
-          <div className="space-y-4 overflow-y-auto pr-1 pb-40">
+      <Modal
+        open={isStatusModalOpen}
+        onClose={cancelStatusUpdate}
+        contentClassName="max-w-3xl overflow-hidden p-0"
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
+            <h2 className="pr-12 text-lg font-semibold text-gray-900">
+              Update Transaction Status
+            </h2>
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700">
                 Transaction ID
               </label>
               <input
                 type="text"
                 value={toTransactionReference(selectedTransaction?.id || "")}
-                className="w-full p-2 border border-gray-300 rounded-md bg-gray-50"
+                className="w-full rounded-md border border-gray-300 bg-gray-50 p-2"
                 disabled
               />
             </div>
-            <div className="pb-2 relative z-30">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="relative z-30 pb-2">
+              <label className="mb-1 block text-sm font-medium text-gray-700">
                 Status
               </label>
               <Dropdown
@@ -406,24 +419,27 @@ const TransactionsDashboard = () => {
                 onChange={(value) =>
                   setNewStatus((value as OrderLifecycleStatus) || "")
                 }
-                className="w-full min-h-[42px]"
+                className="min-h-[42px] w-full"
               />
             </div>
           </div>
-          <div className="mt-6 sticky bottom-0 bg-gradient-to-br from-white to-gray-50 border-t border-gray-200 pt-4 flex justify-end space-x-2">
-            <button
-              onClick={cancelStatusUpdate}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmStatusUpdate}
-              disabled={!canUpdateStatus}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-            >
-              Update Status
-            </button>
+
+          <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-4">
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={cancelStatusUpdate}
+                className="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmStatusUpdate}
+                disabled={!canUpdateStatus}
+                className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+              >
+                Update Status
+              </button>
+            </div>
           </div>
         </div>
       </Modal>

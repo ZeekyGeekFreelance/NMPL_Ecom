@@ -20,7 +20,6 @@ export interface UserFormData {
   name: string;
   email: string;
   role: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
-  emailVerified: boolean;
 }
 
 interface UserFormProps {
@@ -254,34 +253,6 @@ const UserForm: React.FC<UserFormProps> = ({
         {errors.role && (
           <p className="text-red-500 text-sm mt-1">{errors.role.message}</p>
         )}
-      </div>
-
-      {/* Email Verified */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Email Verified
-        </label>
-        <Controller
-          name="emailVerified"
-          control={control}
-          render={({ field }) => (
-            <Dropdown
-              label="Select value"
-              options={[
-                { label: "Yes", value: "true" },
-                { label: "No", value: "false" },
-              ]}
-              value={field.value ? "true" : "false"}
-              onChange={(value) => {
-                if (!value) return;
-                field.onChange(value === "true");
-                field.onBlur();
-              }}
-              clearable={false}
-              className="w-full rounded-lg border border-gray-300 text-gray-800 focus-visible:ring-blue-500/20"
-            />
-          )}
-        />
       </div>
 
       {/* Submit */}

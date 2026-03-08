@@ -26,13 +26,21 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
   const { user, isLoading: isAuthLoading } = useAuth();
   const refreshedUserIdRef = useRef<string | null>(null);
 
-  // Seed the Apollo cache with SSR data before the first render so that
-  // useQuery("cache-first") finds it immediately and never fires a network
-  // request on hydration.  We do this synchronously during render — before
-  // any useEffect — so the cache is populated before Apollo evaluates the
-  // query policy.
+  // Seed the Apollo cache with SSR data (or empty data) before the first render
+  // so that useQuery("cache-first") finds an entry immediately and never fires
+  // a cold-cache network request on hydration.
+  //
+  // Previously this guard was `initialProducts.length > 0`, which meant sections
+  // with no flagged products in the DB would skip seeding, leave the cache cold,
+  // trigger a network request, and surface "Failed to fetch" error banners.
+  // Seeding with empty data is always safe: the cache entry is replaced by the
+  // first successful auth-refetch or poll that returns real products.
+  //
+  // seededRef.current is only set to true on success so a writeQuery failure
+  // (e.g. type policy not yet satisfied on first SSR render pass) is retried
+  // on the next render rather than silently abandoned.
   const seededRef = useRef(false);
-  if (!seededRef.current && initialProducts.length > 0) {
+  if (!seededRef.current) {
     try {
       apolloClient.writeQuery({
         query: GET_PRODUCTS,
@@ -46,39 +54,43 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
           },
         },
       });
+      seededRef.current = true;
     } catch {
-      // writeQuery can fail if the type policy isn't satisfied yet — safe to
-      // ignore here because the useState fallback below still covers the render.
+      // writeQuery can fail if the type policy isn't satisfied yet on the
+      // first SSR render pass — safe to ignore, will be retried next render.
     }
-    seededRef.current = true;
   }
 
-  // Stable display state.  Initialised from SSR props and only ever updated
-  // with real data — never regresses to empty on a background refresh failure.
+  // Stable display state — initialised from SSR props and only ever promoted
+  // forward with real data; never regresses to empty on a background failure.
   const [products, setProducts] = useState<Product[]>(initialProducts);
 
-  const hasSSRData = initialProducts.length > 0;
+  // Track whether we ever successfully loaded products for this section.
+  // Used to decide whether a subsequent network error is worth surfacing:
+  // if the section was always empty (no flagged products in the DB), a
+  // downstream error panel is misleading — show an empty section instead.
+  const hasEverLoadedRef = useRef(initialProducts.length > 0);
 
   const { data, error, networkStatus, refetch } = useQuery(GET_PRODUCTS, {
     variables: { first: 12, skip: 0, filters },
-    // cache-first: the seeded cache entry above will be served immediately,
-    // no network request on mount.  Subsequent reads (e.g. after pollInterval
-    // fires or the user navigates back) also hit the cache first.
+    // cache-first: the seeded cache entry above is served immediately on mount
+    // (no network request). Subsequent reads (poll, navigate-back) also hit
+    // cache first. A real network request only fires on refetch() or poll.
     fetchPolicy: "cache-first",
     nextFetchPolicy: "cache-first",
-    // Only report errors for the queries that actually go to the network.
+    // Partial data surfaced alongside errors for resilience.
     errorPolicy: "all",
     // Dealer catalog polling (approved dealers only — returns 0 for everyone
     // else so no unnecessary requests are made).
     pollInterval,
+    // Don't re-render for intermediate network states (loading, refetch, poll
+    // in-progress). Only re-render when a result (data or error) is final.
     notifyOnNetworkStatusChange: false,
-    // If SSR gave us nothing and polling is off, still attempt one network
-    // fetch so the section can self-populate without a page reload.
     skip: false,
   });
 
-  // Home sections are initially seeded from SSR. If auth resolves after hydration,
-  // refresh once per user so dealer-specific prices replace anonymous catalog data.
+  // After auth resolves, refetch once per user so dealer-specific prices
+  // replace the anonymous catalog data that was seeded from SSR.
   useEffect(() => {
     if (isAuthLoading || !user?.id) {
       return;
@@ -97,29 +109,39 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
     const fresh = data?.products?.products;
     if (Array.isArray(fresh) && fresh.length > 0) {
       setProducts(fresh);
+      hasEverLoadedRef.current = true;
     }
   }, [data]);
 
-  // An Apollo error is only surfaced to the user when:
-  //   1. We have genuinely no data (SSR and client both returned nothing), AND
-  //   2. The network actually reached the server (not just a cache miss).
-  // If we already have products from SSR props or a previous successful fetch,
-  // the error is silently swallowed — the user continues to see the last good
-  // data while the background retry runs.
-  const isRealNetworkError =
-    networkStatus === NetworkStatus.error ||
-    networkStatus === NetworkStatus.refetch;
+  // A network error is only surfaced as a visible error banner when:
+  //   1. The query has actually FAILED (networkStatus === error, value 8).
+  //      NetworkStatus.refetch (4) means a refetch is in-progress — it is NOT
+  //      an error and should not be treated as one.
+  //   2. We genuinely have no data to show (both SSR and every subsequent
+  //      fetch returned nothing).
+  //   3. We had previously-loaded products that are now gone — i.e. this is a
+  //      regression, not simply "no products exist with this flag".
+  //
+  // Rationale for condition 3: sections backed by empty DB flags (e.g. no
+  // products marked isFeatured) should show an empty state, not a scary red
+  // error banner. The banner is reserved for cases where we KNOW the data
+  // existed and is now unreachable.
+  const isRealNetworkError = networkStatus === NetworkStatus.error;
 
   const displayError =
-    error && products.length === 0 && isRealNetworkError ? error : undefined;
+    error && products.length === 0 && isRealNetworkError && hasEverLoadedRef.current
+      ? error
+      : undefined;
 
-  // Show a skeleton while the very first network fetch is in-flight AND we
-  // have no SSR data to show (edge case: SSR failed AND cache is cold).
+  // Show a skeleton only during the very first in-flight network fetch AND
+  // only when we have no SSR data and have never loaded anything before.
+  // This covers the edge case where SSR failed AND the cache is cold.
   const isInitialLoad =
-    networkStatus === NetworkStatus.loading && products.length === 0 && !hasSSRData;
+    networkStatus === NetworkStatus.loading &&
+    products.length === 0 &&
+    !hasEverLoadedRef.current;
 
   if (isInitialLoad) {
-    // Thin inline skeleton — no separate component dependency.
     return (
       <section className="py-8 sm:py-12 lg:py-16">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">

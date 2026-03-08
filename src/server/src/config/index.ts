@@ -474,9 +474,16 @@ const appConfig = {
       optional: true,
       productionRequired: false,
     }),
-    stripeCurrency: parseString("STRIPE_CURRENCY", {
-      devDefault: "inr",
-    }) as string,
+    stripeCurrency: parseEnv(
+      "STRIPE_CURRENCY",
+      // ISO 4217 three-letter lowercase currency code — validated at startup so a
+      // misconfigured value surfaces immediately rather than at the first payment.
+      z.string()
+        .trim()
+        .toLowerCase()
+        .regex(/^[a-z]{3}$/, "Must be a valid 3-letter ISO 4217 currency code (e.g. inr, usd, eur)"),
+      { devDefault: "inr" }
+    ) as string,
     enableMockPayment: parseBoolean("ENABLE_MOCK_PAYMENT", {
       devDefault: true,
     }) as boolean,

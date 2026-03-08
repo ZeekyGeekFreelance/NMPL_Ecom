@@ -51,7 +51,7 @@ const TransactionOverview = ({ transaction }) => {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6 transition-all duration-200 hover:shadow-md">
       <div className="flex justify-between items-start flex-wrap gap-4">
         <div>
-          <h2 className="text-lg font-semibold mb-4">Transaction Overview</h2>
+          <h2 className="text-base sm:text-lg font-semibold mb-4">Transaction Overview</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
             <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
               <p className="text-sm text-gray-500">Transaction ID</p>

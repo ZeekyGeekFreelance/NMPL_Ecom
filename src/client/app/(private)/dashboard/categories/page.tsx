@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   useGetAllCategoriesQuery,
   useCreateCategoryMutation,
@@ -18,7 +18,12 @@ import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const CategoriesDashboard = () => {
   const { showToast } = useToast();
-  const { data, isLoading, error, refetch } = useGetAllCategoriesQuery({});
+  const [page, setPage] = useState(1);
+  const resultsPerPage = 16;
+  const { data, isLoading, error, refetch } = useGetAllCategoriesQuery({
+    page,
+    limit: resultsPerPage,
+  });
   const [createCategory, { isLoading: isCreating }] =
     useCreateCategoryMutation();
   const [deleteCategory, { isLoading: isDeleting }] =
@@ -28,6 +33,13 @@ const CategoriesDashboard = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!data?.currentPage || data.currentPage === page) {
+      return;
+    }
+    setPage(data.currentPage);
+  }, [data?.currentPage, page]);
 
   const form = useForm<CategoryFormData>({
     mode: "onBlur",
@@ -128,7 +140,7 @@ const CategoriesDashboard = () => {
       >
         <div className="flex items-center space-x-3">
           <Tag size={24} className="text-indigo-500" />
-          <h1 className="text-2xl font-bold text-gray-800">
+          <h1 className="type-h3 text-gray-800">
             Categories Dashboard
           </h1>
         </div>
@@ -166,6 +178,11 @@ const CategoriesDashboard = () => {
           isLoading={isLoading}
           className="bg-white rounded-xl shadow-md border border-gray-100"
           onRefresh={refetch}
+          totalPages={data?.totalPages}
+          totalResults={data?.totalResults}
+          resultsPerPage={data?.resultsPerPage}
+          currentPage={data?.currentPage}
+          onPageChange={setPage}
         />
       )}
 
@@ -173,16 +190,23 @@ const CategoriesDashboard = () => {
       <Modal
         open={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+        contentClassName="max-w-3xl overflow-hidden p-0"
       >
-        <h2 className="text-xl font-bold text-gray-800 mb-6">
-          Create Category
-        </h2>
-        <CategoryForm
-          form={form}
-          onSubmit={onSubmit}
-          isLoading={isCreating}
-          submitLabel="Create"
-        />
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
+            <h2 className="pr-12 text-lg font-semibold text-gray-900">
+              Create Category
+            </h2>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <CategoryForm
+              form={form}
+              onSubmit={onSubmit}
+              isLoading={isCreating}
+              submitLabel="Create"
+            />
+          </div>
+        </div>
       </Modal>
 
       <ConfirmModal

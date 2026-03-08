@@ -2,7 +2,7 @@
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import PasswordField from "@/app/components/molecules/PasswordField";
 import MainLayout from "@/app/components/templates/MainLayout";
@@ -46,6 +46,7 @@ const Signup = () => {
     requestDealerAccess: false,
   });
   const router = useRouter();
+  const searchParams = useSearchParams();
   const apiErrorMessage = getApiErrorMessage(
     error,
     "Signup failed. Please try again."
@@ -80,7 +81,12 @@ const Signup = () => {
         phone: normalizePhoneDigits(formData.phone, 10),
         emailOtpCode: formData.emailOtpCode.replace(/\D/g, "").slice(0, 6),
       }).unwrap();
-      router.push("/");
+      const requestedNextPath = searchParams.get("next");
+      const nextPath =
+        requestedNextPath && requestedNextPath.startsWith("/")
+          ? requestedNextPath
+          : null;
+      router.push(nextPath || "/");
     } catch {
       // Error is surfaced from mutation state.
     }
@@ -106,7 +112,7 @@ const Signup = () => {
       <MainLayout>
         <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
           <main className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 sm:p-8">
-            <h2 className="text-2xl sm:text-3xl font-semibold text-gray-800 text-center mb-6">
+            <h2 className="type-h2 text-gray-800 text-center mb-6">
               Sign Up
             </h2>
 

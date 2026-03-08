@@ -19,7 +19,9 @@ export class UserController {
 
   getAllUsers = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const users = await this.userService.getAllUsers();
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 50;
+      const users = await this.userService.getAllUsers({ page, limit });
       sendResponse(res, 200, {
         data: { users },
         message: "Users fetched successfully",

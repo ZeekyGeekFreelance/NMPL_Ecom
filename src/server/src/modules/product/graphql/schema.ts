@@ -100,7 +100,7 @@ const typeDefs = gql`
     featuredProducts(first: Int, skip: Int): ProductConnection!
     trendingProducts(first: Int, skip: Int): ProductConnection!
     bestSellerProducts(first: Int, skip: Int): ProductConnection!
-    categories(first: Int, skip: Int): [Category!]!
+    categories(first: Int, skip: Int, search: String): [Category!]!
   }
 `;
 

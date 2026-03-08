@@ -321,7 +321,7 @@ const UserOrders = () => {
           className="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-8"
         >
           <Package size={20} className="sm:w-6 sm:h-6 text-indigo-500" />
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
+          <h1 className="type-h2 text-gray-800">
             Your Orders
           </h1>
         </motion.div>

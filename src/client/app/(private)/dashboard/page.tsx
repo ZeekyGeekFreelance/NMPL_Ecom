@@ -96,7 +96,7 @@ const Dashboard = () => {
       transition={{ duration: 0.5, ease: "easeOut" }}
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-xl sm:text-2xl font-semibold">
+        <h1 className="type-h3 text-gray-900">
           Dashboard Overview
         </h1>
         <div className="flex items-center justify-center gap-2 w-full sm:w-auto">

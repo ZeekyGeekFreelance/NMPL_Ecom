@@ -392,8 +392,8 @@ const ProductsDashboard = () => {
     <div className="p-4 sm:p-6">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Product List</h1>
-          <p className="text-sm text-gray-500">Manage and view your products</p>
+          <h1 className="type-h4 text-gray-900">Product List</h1>
+          <p className="type-body-sm text-gray-500">Manage and view your products</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <button
@@ -420,7 +420,7 @@ const ProductsDashboard = () => {
       {isFileUploadOpen && (
         <div className="mb-6 bg-white p-5 rounded-lg shadow-sm border border-gray-200">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-medium">Import Products</h2>
+            <h2 className="text-base sm:text-lg font-semibold">Import Products</h2>
             <button
               onClick={() => setIsFileUploadOpen(false)}
               className="text-gray-500 hover:text-gray-700"

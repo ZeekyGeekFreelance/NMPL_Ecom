@@ -91,6 +91,7 @@ export const useProductDetail = () => {
             id: v.id || "",
             sku: v.sku || "",
             price: v.price || 0,
+            defaultDealerPrice: v.defaultDealerPrice ?? null,
             stock: v.stock || 0,
             lowStockThreshold: v.lowStockThreshold || 10,
             barcode: v.barcode || "",
@@ -156,6 +157,10 @@ export const useProductDetail = () => {
       payload.append(`variants[${index}][id]`, variant.id || "");
       payload.append(`variants[${index}][sku]`, variant.sku || "");
       payload.append(`variants[${index}][price]`, variant.price.toString());
+      payload.append(
+        `variants[${index}][defaultDealerPrice]`,
+        variant.defaultDealerPrice != null ? variant.defaultDealerPrice.toString() : ""
+      );
       payload.append(`variants[${index}][stock]`, variant.stock.toString());
       payload.append(
         `variants[${index}][lowStockThreshold]`,

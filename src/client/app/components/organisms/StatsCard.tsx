@@ -26,7 +26,7 @@ const StatsCard = ({ title, value, percentage, caption, icon }: StatsCardProps) 
         )}
       </div>
 
-      <div className="text-3xl font-bold">{value}</div>
+      <div className="text-2xl sm:text-3xl font-bold">{value}</div>
 
       <div className="flex items-center gap-1 text-sm">
         <div

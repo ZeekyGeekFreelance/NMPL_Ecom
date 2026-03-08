@@ -133,7 +133,7 @@ const Cart = () => {
 
   return (
     <MainLayout>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <BreadCrumb />
 
         {/* Cart Header */}
@@ -144,7 +144,7 @@ const Cart = () => {
           className="flex items-center space-x-2 mt-4 mb-6"
         >
           <h1 className="text-xl sm:text-2xl font-semibold text-gray-800">
-            Your Cart
+            Cart
           </h1>
           <span className="text-gray-500 text-sm">
             ({totalItems} items)
@@ -190,9 +190,9 @@ const Cart = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(320px,1fr)] lg:items-start">
             {/* Cart Items */}
-            <div className="space-y-4">
+            <section className="space-y-4">
               {cartItems.map((item) => {
                 const productSlug = item?.variant?.product?.slug;
                 const productHref = productSlug ? `/product/${productSlug}` : "/shop";
@@ -203,102 +203,98 @@ const Cart = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4 }}
-                    className="bg-white rounded-lg p-4 sm:p-6 border border-gray-200 flex flex-col sm:flex-row items-start sm:items-center gap-4"
+                    className="rounded-lg border border-gray-200 bg-white p-4 sm:p-5 lg:p-6"
                   >
-                    {/* Product Image */}
-                    <Link
-                      href={productHref}
-                      className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-50 rounded flex items-center justify-center overflow-hidden"
-                    >
-                      <Image
-                        src={
-                          item?.variant?.images[0] ||
-                          generateProductPlaceholder(item.variant.product.name)
-                        }
-                        alt={formatVariantName(item)}
-                        width={80}
-                        height={80}
-                        className="object-cover"
-                        sizes="(max-width: 640px) 64px, 80px"
-                        onError={(e) => {
-                          e.currentTarget.src = generateProductPlaceholder(
-                            item.variant.product.name
-                          );
-                        }}
-                      />
-                    </Link>
-
-                    {/* Variant Details */}
-                    <div className="flex-1">
+                    <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(0,1fr)_auto_auto]">
+                      {/* Product Image */}
                       <Link
                         href={productHref}
-                        className="font-medium text-gray-800 text-sm sm:text-base hover:text-indigo-600 transition-colors"
+                        className="h-16 w-16 overflow-hidden rounded bg-gray-50 sm:h-20 sm:w-20"
                       >
-                        {formatVariantName(item)}
+                        <Image
+                          src={
+                            item?.variant?.images[0] ||
+                            generateProductPlaceholder(item.variant.product.name)
+                          }
+                          alt={formatVariantName(item)}
+                          width={80}
+                          height={80}
+                          className="h-full w-full object-cover"
+                          sizes="(max-width: 640px) 64px, 80px"
+                          onError={(e) => {
+                            e.currentTarget.src = generateProductPlaceholder(
+                              item.variant.product.name
+                            );
+                          }}
+                        />
                       </Link>
-                      <p className="text-xs text-gray-500">
-                        SKU: {item.variant.sku}
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-500">
-                        {formatPrice(item.variant.price)}
-                      </p>
-                    </div>
 
-                    {/* Quantity Selector */}
-                    <div className="flex items-center gap-2 rounded-full max-w-fit border border-gray-300 bg-white px-2 py-1">
-                      <button
-                        type="button"
-                        onClick={() => handleQuantityChange(item, -1)}
-                        disabled={item.quantity <= 1}
-                        className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
-                      >
-                        <Minus size={16} />
-                      </button>
+                      {/* Variant Details */}
+                      <div className="min-w-0">
+                        <Link
+                          href={productHref}
+                          className="text-sm font-medium text-gray-800 transition-colors hover:text-indigo-600 sm:text-base"
+                        >
+                          {formatVariantName(item)}
+                        </Link>
+                        <p className="mt-1 text-xs text-gray-500">
+                          SKU: {item.variant.sku}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 sm:text-sm">
+                          {formatPrice(item.variant.price)}
+                        </p>
+                      </div>
 
-                      <span className="min-w-[32px] text-center font-semibold text-gray-800">
-                        {item.quantity}
-                      </span>
+                      {/* Quantity Selector */}
+                      <div className="inline-flex max-w-fit items-center gap-2 rounded-full border border-gray-300 bg-white px-2 py-1 lg:justify-self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleQuantityChange(item, -1)}
+                          disabled={item.quantity <= 1}
+                          className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
+                        >
+                          <Minus size={16} />
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() => handleQuantityChange(item, 1)}
-                        disabled={
-                          item.quantity >=
-                          Math.max(
-                            0,
-                            (Number(item.variant.stock) || 0) -
-                              (Number(item.variant.reservedStock) || 0)
-                          )
-                        }
-                        className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
+                        <span className="min-w-[32px] text-center font-semibold text-gray-800">
+                          {item.quantity}
+                        </span>
 
-                    {/* Subtotal and Remove */}
-                    <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 w-full sm:w-auto">
-                      <p className="font-medium text-gray-800 text-sm sm:text-base">
-                        {formatPrice(item.variant.price * item.quantity)}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => requestRemoveFromCart(item)}
-                        className="text-red-500 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuantityChange(item, 1)}
+                          className="rounded-full p-2 transition hover:bg-gray-100"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+
+                      {/* Subtotal and Remove */}
+                      <div className="flex w-full items-center justify-between gap-2 lg:w-auto lg:flex-col lg:items-end lg:justify-self-end">
+                        <p className="text-sm font-medium text-gray-800 sm:text-base">
+                          {formatPrice(item.variant.price * item.quantity)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => requestRemoveFromCart(item)}
+                          className="text-red-500 transition-colors hover:text-red-600"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 );
               })}
-            </div>
+            </section>
 
             {/* Cart Summary */}
-            <CartSummary
-              subtotal={subtotal}
-              totalItems={totalItems}
-            />
+            <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
+              <CartSummary
+                subtotal={subtotal}
+                totalItems={totalItems}
+              />
+            </aside>
           </div>
         )}
       </div>
@@ -318,4 +314,3 @@ const Cart = () => {
 };
 
 export default Cart;
-

@@ -27,7 +27,9 @@ export const GET_HOME_PAGE_DATA = gql`
         category { id slug name }
       }
     }
-    categories(first: 50) {
+    # Home page shows a curated sample — 20 categories is plenty for the bar.
+    # Users who want to browse all categories go to the shop filter.
+    categories(first: 20) {
       id slug name description
     }
   }
@@ -64,7 +66,7 @@ export const GET_SINGLE_PRODUCT = gql`
     product(slug: $slug) {
       id name slug isNew isFeatured isTrending isBestSeller description
       variants {
-        id sku price retailPrice images stock lowStockThreshold barcode
+        id sku price retailPrice images barcode
         attributes {
           id
           attribute { id name slug }
@@ -78,9 +80,19 @@ export const GET_SINGLE_PRODUCT = gql`
 
 // ── Categories ────────────────────────────────────────────────────────────────
 export const GET_CATEGORIES = gql`
-  query GetCategories($first: Int) {
-    categories(first: $first) {
+  query GetCategories($first: Int, $skip: Int) {
+    categories(first: $first, skip: $skip) {
       id slug name description
+    }
+  }
+`;
+
+// Searchable category query — used by the shop filter dropdown.
+// Bypasses the Redis cache on the server side (search results are not cached).
+export const GET_CATEGORIES_SEARCH = gql`
+  query GetCategoriesSearch($search: String, $first: Int) {
+    categories(search: $search, first: $first) {
+      id slug name
     }
   }
 `;

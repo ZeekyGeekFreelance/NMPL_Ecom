@@ -42,7 +42,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const mobileBasePrice = dealerPrice !== null ? retailPrice : hasPriceRange ? maxPriceRaw : null;
   const showMobileStrikePrice =
     mobileBasePrice !== null && mobileBasePrice > effectivePrice;
-  const isOutOfStock = effectivePrice <= 0;
 
   return (
     <div
@@ -94,64 +93,50 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </Link>
         </div>
 
-        {/* Stock Status */}
-        {isOutOfStock && (
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-            <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-medium">
-              Out of Stock
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="p-3 sm:p-4 lg:p-5 flex flex-col flex-grow">
         <Link href={`/product/${product.slug}`} className="block flex-grow">
-          <h3 className="font-semibold text-gray-900 text-xs sm:text-sm lg:text-base mb-2 line-clamp-2 leading-tight">
+          <h3 className="font-semibold text-gray-900 text-sm sm:text-sm lg:text-base mb-2 line-clamp-2 leading-snug">
             {product.name}
           </h3>
 
           <div className="flex items-center justify-between mb-2 sm:mb-3">
             <div className="flex items-center space-x-2">
-              {!isOutOfStock ? (
-                <div className="flex flex-col gap-0.5">
-                  <div className="sm:hidden">
-                    {showMobileStrikePrice ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-gray-500 line-through">
-                          {formatPrice(mobileBasePrice)}
-                        </span>
-                        <span className="text-sm text-gray-700">
-                          {formatPrice(effectivePrice)}
-                        </span>
-                      </div>
-                    ) : (
+              <div className="flex flex-col gap-0.5">
+                <div className="sm:hidden">
+                  {showMobileStrikePrice ? (
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-500 line-through">
+                        {formatPrice(mobileBasePrice)}
+                      </span>
                       <span className="text-sm text-gray-700">
                         {formatPrice(effectivePrice)}
                       </span>
-                    )}
-                  </div>
-                  <div className="hidden sm:flex sm:flex-col sm:gap-0.5">
-                    {dealerPrice !== null ? (
-                      <>
-                        <span className="text-sm lg:text-base text-gray-500 line-through">
-                          Retail: {formatPrice(retailPrice)}
-                        </span>
-                        <span className="text-lg lg:text-xl text-gray-700">
-                          Dealer: {formatPrice(dealerPrice)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-sm lg:text-base text-gray-700">
-                        {formatPrice(effectivePrice)}
-                      </span>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-700">
+                      {formatPrice(effectivePrice)}
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <span className="text-gray-500 font-medium text-sm sm:text-lg lg:text-xl">
-                  Out of stock
-                </span>
-              )}
+                <div className="hidden sm:flex sm:flex-col sm:gap-0.5">
+                  {dealerPrice !== null ? (
+                    <>
+                      <span className="text-xs sm:text-sm text-gray-500 line-through">
+                        Retail: {formatPrice(retailPrice)}
+                      </span>
+                      <span className="text-base sm:text-lg text-gray-700 font-semibold">
+                        Dealer: {formatPrice(dealerPrice)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-sm sm:text-base text-gray-700 font-medium">
+                      {formatPrice(effectivePrice)}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </Link>

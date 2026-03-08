@@ -155,7 +155,7 @@ const LogsDashboard = () => {
   return (
     <div className="p-4">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">System Logs</h1>
+        <h1 className="type-h3 text-gray-900">System Logs</h1>
         <div className="flex space-x-2">
           <button
             onClick={requestClearLogs}

@@ -2,20 +2,18 @@ import prisma from "@/infra/database/database.config";
 import { Prisma, ROLE } from "@prisma/client";
 import { passwordUtils } from "@/shared/utils/authUtils";
 import AppError from "@/shared/errors/AppError";
+import { clearProtectUserCache } from "@/shared/utils/auth/protectCache";
+import {
+  findDealerProfileByUserId as sharedFindDealerProfileByUserId,
+  findDealerProfilesByUserIds as sharedFindDealerProfilesByUserIds,
+  upsertDealerProfile as sharedUpsertDealerProfile,
+  updateDealerStatus as sharedUpdateDealerStatus,
+} from "@/shared/repositories/dealer.repository";
 
-export type DealerStatus = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
-
-export interface DealerProfile {
-  id: string;
-  userId: string;
-  businessName: string | null;
-  contactPhone: string | null;
-  status: DealerStatus;
-  approvedAt: Date | null;
-  approvedBy: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// Import into local scope (required for use inside this file)
+import type { DealerStatus, DealerProfileRecord as DealerProfile } from "@/shared/repositories/dealer.repository";
+// Re-export so existing imports from user.repository continue to work
+export type { DealerStatus, DealerProfileRecord as DealerProfile } from "@/shared/repositories/dealer.repository";
 
 export interface DealerPriceInput {
   variantId: string;
@@ -23,11 +21,9 @@ export interface DealerPriceInput {
 }
 
 export class UserRepository {
+  // ── Internal helpers (retained for DealerPriceMapping queries) ──────────
   private isDealerTableMissing(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
+    if (!(error instanceof Error)) return false;
     return (
       error.message.includes('relation "DealerProfile" does not exist') ||
       error.message.includes('relation "DealerPriceMapping" does not exist')
@@ -41,41 +37,20 @@ export class UserRepository {
     );
   }
 
+  // ── Dealer profile methods — delegate to shared repository ──────────────
   private async findDealerProfilesByUserIds(
     userIds: string[]
   ): Promise<DealerProfile[]> {
-    if (!userIds.length) {
-      return [];
-    }
-
-    try {
-      return await prisma.$queryRaw<DealerProfile[]>(
-        Prisma.sql`
-          SELECT
-            "id",
-            "userId",
-            "businessName",
-            "contactPhone",
-            "status",
-            "approvedAt",
-            "approvedBy",
-            "createdAt",
-            "updatedAt"
-          FROM "DealerProfile"
-          WHERE "userId" IN (${Prisma.join(userIds)})
-        `
-      );
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        return [];
-      }
-      throw error;
-    }
+    return sharedFindDealerProfilesByUserIds(userIds);
   }
 
-  async findAllUsers() {
+  async findAllUsers(options?: { skip?: number; take?: number }) {
+    const skip = options?.skip ?? 0;
+    const take = Math.min(options?.take ?? 50, 200);
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
+      skip,
+      take,
       select: {
         id: true,
         name: true,
@@ -158,20 +133,17 @@ export class UserRepository {
 
   async updateUser(
     id: string,
-    data: Partial<{
+    data: {
       name?: string;
       email?: string;
       phone?: string | null;
       password?: string;
-      avatar?: string;
+      avatar?: string | null;
       role?: ROLE;
       isBillingSupervisor?: boolean;
-      emailVerified?: boolean;
-      emailVerificationToken?: string | null;
-      emailVerificationTokenExpiresAt?: Date | null;
       resetPasswordToken?: string | null;
       resetPasswordTokenExpiresAt?: Date | null;
-    }>
+    }
   ) {
     return await prisma.user.update({ where: { id }, data });
   }
@@ -179,7 +151,7 @@ export class UserRepository {
   async updateUserPassword(userId: string, password: string) {
     const hashedPassword = await passwordUtils.hashPassword(password);
 
-    return prisma.user.update({
+    const result = await prisma.user.update({
       where: { id: userId },
       data: {
         password: hashedPassword,
@@ -188,10 +160,13 @@ export class UserRepository {
         tokenVersion: { increment: 1 },
       },
     });
+
+    await clearProtectUserCache(userId);
+    return result;
   }
 
   async incrementUserTokenVersion(userId: string) {
-    return prisma.user.update({
+    const result = await prisma.user.update({
       where: { id: userId },
       data: {
         tokenVersion: { increment: 1 },
@@ -200,6 +175,9 @@ export class UserRepository {
         id: true,
       },
     });
+
+    await clearProtectUserCache(userId);
+    return result;
   }
 
   async deleteUser(id: string) {
@@ -278,32 +256,7 @@ export class UserRepository {
   }
 
   async findDealerProfileByUserId(userId: string): Promise<DealerProfile | null> {
-    try {
-      const rows = await prisma.$queryRaw<DealerProfile[]>(
-        Prisma.sql`
-          SELECT
-            "id",
-            "userId",
-            "businessName",
-            "contactPhone",
-            "status",
-            "approvedAt",
-            "approvedBy",
-            "createdAt",
-            "updatedAt"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `
-      );
-
-      return rows[0] ?? null;
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        return null;
-      }
-      throw error;
-    }
+    return sharedFindDealerProfileByUserId(userId);
   }
 
   async upsertDealerProfile(data: {
@@ -313,52 +266,7 @@ export class UserRepository {
     status: DealerStatus;
     approvedBy?: string | null;
   }): Promise<DealerProfile | null> {
-    const now = new Date();
-    const approvedAt = data.status === "APPROVED" ? now : null;
-
-    try {
-      await prisma.$executeRaw(
-        Prisma.sql`
-          INSERT INTO "DealerProfile" (
-            "id",
-            "userId",
-            "businessName",
-            "contactPhone",
-            "status",
-            "approvedAt",
-            "approvedBy",
-            "createdAt",
-            "updatedAt"
-          )
-          VALUES (
-            gen_random_uuid(),
-            ${data.userId},
-            ${data.businessName ?? null},
-            ${data.contactPhone ?? null},
-            ${data.status}::"DEALER_STATUS",
-            ${approvedAt},
-            ${data.approvedBy ?? null},
-            ${now},
-            ${now}
-          )
-          ON CONFLICT ("userId")
-          DO UPDATE SET
-            "businessName" = COALESCE(EXCLUDED."businessName", "DealerProfile"."businessName"),
-            "contactPhone" = COALESCE(EXCLUDED."contactPhone", "DealerProfile"."contactPhone"),
-            "status"       = EXCLUDED."status",
-            "approvedAt"   = EXCLUDED."approvedAt",
-            "approvedBy"   = EXCLUDED."approvedBy",
-            "updatedAt"    = EXCLUDED."updatedAt"
-        `
-      );
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        this.throwDealerMigrationError();
-      }
-      throw error;
-    }
-
-    return this.findDealerProfileByUserId(data.userId);
+    return sharedUpsertDealerProfile(data);
   }
 
   async getDealers(status?: DealerStatus) {
@@ -424,66 +332,7 @@ export class UserRepository {
     status: DealerStatus,
     approvedBy?: string
   ): Promise<DealerProfile | null> {
-    const now = new Date();
-    const approvedAt = status === "APPROVED" ? now : null;
-    const nextRole =
-      status === "APPROVED" || status === "LEGACY" || status === "SUSPENDED"
-        ? ROLE.DEALER
-        : ROLE.USER;
-
-    try {
-      const rows = await prisma.$queryRaw<DealerProfile[]>(
-        Prisma.sql`
-          WITH updated_profile AS (
-            UPDATE "DealerProfile"
-            SET
-              "status"     = ${status}::"DEALER_STATUS",
-              "approvedAt" = ${approvedAt},
-              "approvedBy" = ${(status === "APPROVED" || status === "LEGACY") ? approvedBy ?? null : null},
-              "updatedAt"  = ${now}
-            WHERE "userId" = ${userId}
-            RETURNING
-              "id",
-              "userId",
-              "businessName",
-              "contactPhone",
-              "status",
-              "approvedAt",
-              "approvedBy",
-              "createdAt",
-              "updatedAt"
-          ),
-          updated_user AS (
-            UPDATE "User"
-            SET
-              "role" = ${nextRole}::"ROLE",
-              "tokenVersion" = "User"."tokenVersion" + 1,
-              "updatedAt" = ${now}
-            WHERE "id" = ${userId}
-              AND EXISTS (SELECT 1 FROM updated_profile)
-            RETURNING "id"
-          )
-          SELECT
-            up."id",
-            up."userId",
-            up."businessName",
-            up."contactPhone",
-            up."status",
-            up."approvedAt",
-            up."approvedBy",
-            up."createdAt",
-            up."updatedAt"
-          FROM updated_profile up
-        `
-      );
-
-      return rows[0] ?? null;
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        this.throwDealerMigrationError();
-      }
-      throw error;
-    }
+    return sharedUpdateDealerStatus(userId, status, approvedBy);
   }
 
   async setDealerPrices(dealerId: string, prices: DealerPriceInput[]) {

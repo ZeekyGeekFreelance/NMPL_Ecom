@@ -29,7 +29,7 @@ const OrderItems = ({ order }) => {
     >
       <div className="flex items-center space-x-2 mb-4">
         <ShoppingCart size={18} />
-        <h2 className="font-semibold text-gray-800">Order Items</h2>
+        <h2 className="text-sm sm:text-base font-semibold text-gray-800">Order Items</h2>
       </div>
 
       <div className="space-y-6">

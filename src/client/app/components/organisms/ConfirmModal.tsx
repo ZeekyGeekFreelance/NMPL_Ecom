@@ -174,7 +174,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 <h2 id={titleId} className="text-lg font-semibold text-gray-800">
                   {title}
                 </h2>
-                <p id={messageId} className="mt-2 text-gray-600 whitespace-pre-line">
+                <p id={messageId} className="mt-2 text-sm leading-relaxed text-gray-600 whitespace-pre-line">
                   {message}
                 </p>
               </div>

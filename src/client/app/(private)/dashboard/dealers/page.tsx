@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import PermissionGuard from "@/app/components/auth/PermissionGuard";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
+import Modal from "@/app/components/organisms/Modal";
 import { useAuth } from "@/app/hooks/useAuth";
 import {
   useCreateDealerMutation,
@@ -23,7 +25,6 @@ import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import {
   normalizeEmailValue,
   normalizePhoneDigits,
-  sanitizeLooseTextInput,
   sanitizeTextInput,
   validateBusinessName,
   validateDisplayName,
@@ -32,7 +33,7 @@ import {
   validateTenDigitPhone,
 } from "@/app/lib/validators/common";
 
-type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
+type DealerStatus = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 type DealerFilter = "ALL" | DealerStatus;
 
 type ConfirmationState = {
@@ -57,22 +58,12 @@ const DealersDashboard = () => {
     effectiveRole === "ADMIN" || effectiveRole === "SUPERADMIN";
 
   const [statusFilter, setStatusFilter] = useState<DealerFilter>("ALL");
-  const queryParams = useMemo(
-    () =>
-      statusFilter === "ALL" ? undefined : { status: statusFilter },
-    [statusFilter]
-  );
+  const [dealerSearch, setDealerSearch] = useState("");
 
-  const { data: allDealersData } = useGetDealersQuery(undefined, {
+  // #10: Single query + client-side filter — eliminates double API call on every status tab click.
+  const { data: allDealersData, isLoading } = useGetDealersQuery(undefined, {
     skip: !isAdminUser,
   });
-  const { data, isLoading } = useGetDealersQuery(queryParams, {
-    skip: !isAdminUser,
-  });
-  const { data: variantsData } = useGetAllVariantsQuery(
-    { limit: 500 },
-    { skip: !isAdminUser }
-  );
 
   const [createDealer, { isLoading: isCreatingDealer }] =
     useCreateDealerMutation();
@@ -85,6 +76,11 @@ const DealersDashboard = () => {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  // #9: Lazy-load variants only when the price modal is open — avoids fetching 500 records on page load.
+  const { data: variantsData } = useGetAllVariantsQuery(
+    { limit: 500 },
+    { skip: !isAdminUser || !isPriceModalOpen }
+  );
   const [selectedDealerId, setSelectedDealerId] = useState<string | null>(null);
 
   const [priceSearch, setPriceSearch] = useState("");
@@ -99,70 +95,54 @@ const DealersDashboard = () => {
     onConfirm: null,
   });
 
-  const [createDealerForm, setCreateDealerForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    businessName: "",
-    contactPhone: "",
-  });
   const [showCreateDealerPassword, setShowCreateDealerPassword] = useState(false);
-  const [createDealerSubmitAttempted, setCreateDealerSubmitAttempted] =
-    useState(false);
 
-  const createDealerFieldErrors = useMemo(() => {
-    const errors: Partial<Record<keyof typeof createDealerForm, string>> = {};
-
-    const nameValidation = validateDisplayName(createDealerForm.name, 2, 120, "Name");
-    if (nameValidation !== true) {
-      errors.name = nameValidation;
-    }
-
-    const emailValidation = validateEmailValue(createDealerForm.email);
-    if (emailValidation !== true) {
-      errors.email = emailValidation;
-    }
-
-    const passwordValidation = validatePasswordPolicy(createDealerForm.password);
-    if (passwordValidation !== true) {
-      errors.password = passwordValidation;
-    }
-
-    const businessNameValidation = validateBusinessName(createDealerForm.businessName);
-    if (businessNameValidation !== true) {
-      errors.businessName = businessNameValidation;
-    }
-
-    const contactPhoneValidation = validateTenDigitPhone(
-      createDealerForm.contactPhone,
-      "Contact phone"
-    );
-    if (contactPhoneValidation !== true) {
-      errors.contactPhone = contactPhoneValidation;
-    }
-
-    return errors;
-  }, [createDealerForm]);
-
-  const hasCreateDealerValidationErrors = Object.values(createDealerFieldErrors).some(
-    Boolean
-  );
-
-  const getVisibleCreateDealerFieldError = (
-    field: keyof typeof createDealerForm,
-    value: string
-  ) => {
-    const error = createDealerFieldErrors[field];
-    if (!error) {
-      return null;
-    }
-
-    if (createDealerSubmitAttempted || value.trim().length > 0) {
-      return error;
-    }
-
-    return null;
+  type CreateDealerFormValues = {
+    name: string;
+    email: string;
+    password: string;
+    businessName: string;
+    contactPhone: string;
   };
+
+  const {
+    register: registerDealerField,
+    handleSubmit: handleDealerSubmit,
+    reset: resetDealerForm,
+    formState: { errors: dealerFormErrors, isSubmitting: isDealerFormSubmitting },
+  } = useForm<CreateDealerFormValues>({
+    defaultValues: { name: "", email: "", password: "", businessName: "", contactPhone: "" },
+  });
+
+  useEffect(() => {
+    if (!isPriceModalOpen) {
+      return;
+    }
+
+    const body = document.body;
+    const previousOverflow = body.style.overflow;
+    const previousTouchAction = body.style.touchAction;
+    const currentCount = Number(body.dataset.modalOpenCount || "0");
+    const nextCount = currentCount + 1;
+
+    body.dataset.modalOpenCount = String(nextCount);
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+
+    return () => {
+      const latestCount = Number(body.dataset.modalOpenCount || "1");
+      const decrementedCount = Math.max(0, latestCount - 1);
+
+      if (decrementedCount === 0) {
+        delete body.dataset.modalOpenCount;
+        body.style.overflow = previousOverflow;
+        body.style.touchAction = previousTouchAction;
+        return;
+      }
+
+      body.dataset.modalOpenCount = String(decrementedCount);
+    };
+  }, [isPriceModalOpen]);
 
   const { data: dealerPriceData, isFetching: isFetchingDealerPrices } =
     useGetDealerPricesQuery(selectedDealerId || "", {
@@ -219,8 +199,82 @@ const DealersDashboard = () => {
     }
   };
 
-  const dealers = data?.dealers || [];
   const allDealers = allDealersData?.dealers || [];
+
+  // #10: Client-side filter derived from the single query result.
+  const dealers = useMemo(
+    () =>
+      statusFilter === "ALL"
+        ? allDealers
+        : allDealers.filter((d) => d.dealerProfile?.status === statusFilter),
+    [allDealers, statusFilter]
+  );
+  const visibleDealers = useMemo(() => {
+    const normalizedSearch = dealerSearch.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return dealers;
+    }
+
+    return dealers
+      .map((dealer) => {
+        const accountReference = (
+          dealer.accountReference || toAccountReference(dealer.id)
+        ).toLowerCase();
+        const name = (dealer.name || "").toLowerCase();
+        const email = (dealer.email || "").toLowerCase();
+        const businessName = (
+          dealer.dealerProfile?.businessName || ""
+        ).toLowerCase();
+        const accountPhone = (dealer.phone || "").toLowerCase();
+        const dealerPhone = (
+          dealer.dealerProfile?.contactPhone || ""
+        ).toLowerCase();
+        const status = (dealer.dealerProfile?.status || "PENDING").toLowerCase();
+        const searchBlob = [
+          accountReference,
+          name,
+          email,
+          businessName,
+          accountPhone,
+          dealerPhone,
+          status,
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        if (!searchBlob.includes(normalizedSearch)) {
+          return null;
+        }
+
+        let score = 0;
+        if (accountReference === normalizedSearch) score += 180;
+        if (email === normalizedSearch) score += 170;
+        if (name === normalizedSearch) score += 160;
+        if (businessName === normalizedSearch) score += 150;
+        if (accountReference.startsWith(normalizedSearch)) score += 130;
+        if (name.startsWith(normalizedSearch)) score += 120;
+        if (email.startsWith(normalizedSearch)) score += 110;
+        if (businessName.startsWith(normalizedSearch)) score += 100;
+        if (searchBlob.includes(` ${normalizedSearch}`)) score += 70;
+        score += 40;
+
+        return { dealer, score };
+      })
+      .filter(
+        (entry): entry is { dealer: (typeof dealers)[number]; score: number } =>
+          entry !== null
+      )
+      .sort((left, right) => {
+        if (right.score !== left.score) {
+          return right.score - left.score;
+        }
+
+        return (left.dealer.name || "").localeCompare(right.dealer.name || "", undefined, {
+          sensitivity: "base",
+        });
+      })
+      .map((entry) => entry.dealer);
+  }, [dealerSearch, dealers]);
 
   const pendingDealers = allDealers.filter(
     (dealer) => dealer.dealerProfile?.status === "PENDING"
@@ -228,8 +282,14 @@ const DealersDashboard = () => {
   const approvedDealers = allDealers.filter(
     (dealer) => dealer.dealerProfile?.status === "APPROVED"
   ).length;
+  const legacyDealers = allDealers.filter(
+    (dealer) => dealer.dealerProfile?.status === "LEGACY"
+  ).length;
   const rejectedDealers = allDealers.filter(
     (dealer) => dealer.dealerProfile?.status === "REJECTED"
+  ).length;
+  const suspendedDealers = allDealers.filter(
+    (dealer) => dealer.dealerProfile?.status === "SUSPENDED"
   ).length;
 
   const variants = useMemo(
@@ -306,65 +366,27 @@ const DealersDashboard = () => {
     () => Object.values(priceMap).filter((value) => value?.trim() !== "").length,
     [priceMap]
   );
-  const createDealerNameError = getVisibleCreateDealerFieldError(
-    "name",
-    createDealerForm.name
-  );
-  const createDealerEmailError = getVisibleCreateDealerFieldError(
-    "email",
-    createDealerForm.email
-  );
-  const createDealerPasswordError = getVisibleCreateDealerFieldError(
-    "password",
-    createDealerForm.password
-  );
-  const createDealerBusinessNameError = getVisibleCreateDealerFieldError(
-    "businessName",
-    createDealerForm.businessName
-  );
-  const createDealerContactPhoneError = getVisibleCreateDealerFieldError(
-    "contactPhone",
-    createDealerForm.contactPhone
-  );
+  const closeCreateDealerModal = () => {
+    setIsCreateModalOpen(false);
+    setShowCreateDealerPassword(false);
+    resetDealerForm();
+  };
 
-  const handleCreateDealer = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setCreateDealerSubmitAttempted(true);
+  const closePriceModal = () => {
+    setIsPriceModalOpen(false);
+  };
 
-    if (hasCreateDealerValidationErrors) {
-      const firstError = [
-        createDealerFieldErrors.name,
-        createDealerFieldErrors.email,
-        createDealerFieldErrors.password,
-        createDealerFieldErrors.businessName,
-        createDealerFieldErrors.contactPhone,
-      ].find(Boolean);
-
-      if (firstError) {
-        showToast(firstError, "error");
-      }
-      return;
-    }
-
+  const handleCreateDealer = handleDealerSubmit(async (values) => {
     try {
       await createDealer({
-        name: sanitizeTextInput(createDealerForm.name),
-        email: normalizeEmailValue(createDealerForm.email),
-        password: createDealerForm.password,
-        businessName: sanitizeTextInput(createDealerForm.businessName),
-        contactPhone: normalizePhoneDigits(createDealerForm.contactPhone, 10),
+        name: sanitizeTextInput(values.name),
+        email: normalizeEmailValue(values.email),
+        password: values.password,
+        businessName: sanitizeTextInput(values.businessName),
+        contactPhone: normalizePhoneDigits(values.contactPhone, 10),
       }).unwrap();
 
-      setIsCreateModalOpen(false);
-      setCreateDealerSubmitAttempted(false);
-      setShowCreateDealerPassword(false);
-      setCreateDealerForm({
-        name: "",
-        email: "",
-        password: "",
-        businessName: "",
-        contactPhone: "",
-      });
+      closeCreateDealerModal();
       showToast("Dealer account created successfully", "success");
     } catch (error) {
       showToast(
@@ -372,7 +394,7 @@ const DealersDashboard = () => {
         "error"
       );
     }
-  };
+  });
 
   const requestUpdateDealerStatus = (
     dealerId: string,
@@ -484,7 +506,7 @@ const DealersDashboard = () => {
             prices: normalizedPrices,
           }).unwrap();
           showToast("Dealer pricing updated", "success");
-          setIsPriceModalOpen(false);
+          closePriceModal();
         } catch (error) {
           showToast(
             getApiErrorMessage(error as any, "Failed to save dealer pricing"),
@@ -540,8 +562,10 @@ const DealersDashboard = () => {
 
   const statusBadgeClass = (status: string) => {
     if (status === "APPROVED") return "bg-green-100 text-green-800";
+    if (status === "LEGACY") return "bg-blue-100 text-blue-800";
     if (status === "REJECTED") return "bg-red-100 text-red-700";
-    return "bg-amber-100 text-amber-800";
+    if (status === "SUSPENDED") return "bg-orange-100 text-orange-800";
+    return "bg-amber-100 text-amber-800"; // PENDING
   };
 
   const filterButtons: Array<{
@@ -552,7 +576,9 @@ const DealersDashboard = () => {
     { value: "ALL", label: "All", count: allDealers.length },
     { value: "PENDING", label: "Pending", count: pendingDealers },
     { value: "APPROVED", label: "Approved", count: approvedDealers },
+    { value: "LEGACY", label: "Legacy", count: legacyDealers },
     { value: "REJECTED", label: "Rejected", count: rejectedDealers },
+    { value: "SUSPENDED", label: "Suspended", count: suspendedDealers },
   ];
 
   const actionInFlight =
@@ -577,15 +603,15 @@ const DealersDashboard = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Dealers</h1>
-            <p className="text-sm text-gray-600 mt-1">
+            <h1 className="type-h3 text-gray-900">Dealers</h1>
+            <p className="type-body-sm text-gray-600 mt-1">
               Create dealer accounts, approve dealer requests, and configure dealer pricing.
             </p>
           </div>
           <button
             onClick={() => {
-              setCreateDealerSubmitAttempted(false);
               setShowCreateDealerPassword(false);
+              resetDealerForm();
               setIsCreateModalOpen(true);
             }}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
@@ -597,35 +623,57 @@ const DealersDashboard = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-sm text-gray-600">Total dealers</p>
-            <p className="text-2xl font-semibold text-gray-900">{allDealers.length}</p>
+            <p className="text-xl sm:text-2xl font-semibold text-gray-900">{allDealers.length}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-sm text-gray-600">Pending approvals</p>
-            <p className="text-2xl font-semibold text-amber-700">{pendingDealers}</p>
+            <p className="text-xl sm:text-2xl font-semibold text-amber-700">{pendingDealers}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-sm text-gray-600">Approved dealers</p>
-            <p className="text-2xl font-semibold text-green-700">{approvedDealers}</p>
+            <p className="text-xl sm:text-2xl font-semibold text-green-700">{approvedDealers}</p>
           </div>
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Filter by status</p>
-          <div className="flex flex-wrap gap-2">
-            {filterButtons.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                onClick={() => setStatusFilter(filter.value)}
-                className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-                  statusFilter === filter.value
-                    ? "border-indigo-600 bg-indigo-600 text-white"
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                {filter.label} ({filter.count})
-              </button>
-            ))}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-3">Filter by status</p>
+              <div className="flex flex-wrap gap-2">
+                {filterButtons.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setStatusFilter(filter.value)}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      statusFilter === filter.value
+                        ? "border-indigo-600 bg-indigo-600 text-white"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {filter.label} ({filter.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="w-full lg:w-80">
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Search dealers
+              </label>
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  type="text"
+                  value={dealerSearch}
+                  onChange={(event) => setDealerSearch(event.target.value)}
+                  placeholder="Name, email, reference, business, phone"
+                  className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -648,14 +696,16 @@ const DealersDashboard = () => {
                     Loading dealer accounts...
                   </td>
                 </tr>
-              ) : dealers.length === 0 ? (
+              ) : visibleDealers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                    No dealer accounts found.
+                    {dealerSearch.trim().length > 0
+                      ? "No dealers match your search."
+                      : "No dealer accounts found."}
                   </td>
                 </tr>
               ) : (
-                dealers.map((dealer, index) => (
+                visibleDealers.map((dealer, index) => (
                   <tr key={dealer.id} className="border-b border-gray-100 last:border-b-0">
                     <td className="px-4 py-3 text-gray-700">{index + 1}</td>
                     <td className="px-4 py-3">
@@ -724,12 +774,16 @@ const DealersDashboard = () => {
                             )}
                           </button>
                         )}
-                        <button
-                          onClick={() => openPriceModal(dealer.id)}
-                          className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
-                        >
-                          Set Prices
-                        </button>
+                        {/* #7: Only APPROVED or LEGACY dealers are eligible for custom pricing. */}
+                        {(dealer.dealerProfile?.status === "APPROVED" ||
+                          dealer.dealerProfile?.status === "LEGACY") && (
+                          <button
+                            onClick={() => openPriceModal(dealer.id)}
+                            className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+                          >
+                            Set Prices
+                          </button>
+                        )}
                         <button
                           disabled={actionInFlight}
                           onClick={() =>
@@ -753,163 +807,124 @@ const DealersDashboard = () => {
           </table>
         </div>
 
-        {isCreateModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            onClick={() => {
-              setIsCreateModalOpen(false);
-              setCreateDealerSubmitAttempted(false);
-              setShowCreateDealerPassword(false);
-            }}
-          >
-            <form
-              onClick={(event) => event.stopPropagation()}
-              onSubmit={handleCreateDealer}
-              className="w-full max-w-lg max-h-[88vh] rounded-xl bg-white flex flex-col overflow-hidden"
-            >
-              <div className="sticky top-0 z-20 border-b border-gray-200 bg-white px-6 py-4">
-                <h2 className="text-xl font-semibold text-gray-900">Create Dealer</h2>
-              </div>
+        <Modal
+          open={isCreateModalOpen}
+          onClose={closeCreateDealerModal}
+          contentClassName="max-w-3xl overflow-hidden p-0"
+        >
+          <form onSubmit={handleCreateDealer} className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 border-b border-gray-200 bg-white px-6 pb-4 pt-6">
+              <h2 className="pr-12 text-base sm:text-lg font-semibold text-gray-900">Create Dealer</h2>
+            </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              <input
+                type="text"
+                placeholder="Name"
+                {...registerDealerField("name", {
+                  validate: (v) => {
+                    const r = validateDisplayName(v, 2, 120, "Name");
+                    return r === true ? true : r;
+                  },
+                })}
+                className={`w-full rounded-lg border px-3 py-2 ${
+                  dealerFormErrors.name ? "border-red-500 bg-red-50" : "border-gray-300"
+                }`}
+              />
+              {dealerFormErrors.name && (
+                <p className="mt-1 text-xs text-red-600">{dealerFormErrors.name.message}</p>
+              )}
+              <input
+                type="email"
+                placeholder="Email"
+                {...registerDealerField("email", {
+                  validate: (v) => {
+                    const r = validateEmailValue(v);
+                    return r === true ? true : r;
+                  },
+                })}
+                className={`w-full rounded-lg border px-3 py-2 ${
+                  dealerFormErrors.email ? "border-red-500 bg-red-50" : "border-gray-300"
+                }`}
+              />
+              {dealerFormErrors.email && (
+                <p className="mt-1 text-xs text-red-600">{dealerFormErrors.email.message}</p>
+              )}
+              <div className="relative">
                 <input
-                  type="text"
-                  required
-                  placeholder="Name"
-                  value={createDealerForm.name}
-                  onChange={(event) =>
-                    setCreateDealerForm((prev) => ({
-                      ...prev,
-                      name: sanitizeLooseTextInput(event.target.value),
-                    }))
-                  }
-                  className={`w-full rounded-lg border px-3 py-2 ${
-                    createDealerNameError ? "border-red-500 bg-red-50" : "border-gray-300"
+                  type={showCreateDealerPassword ? "text" : "password"}
+                  placeholder="Temporary password"
+                  {...registerDealerField("password", {
+                    validate: (v) => {
+                      const r = validatePasswordPolicy(v);
+                      return r === true ? true : r;
+                    },
+                  })}
+                  className={`w-full rounded-lg border px-3 py-2 pr-10 ${
+                    dealerFormErrors.password ? "border-red-500 bg-red-50" : "border-gray-300"
                   }`}
                 />
-                {createDealerNameError ? (
-                  <p className="mt-1 text-xs text-red-600">{createDealerNameError}</p>
-                ) : null}
-                <input
-                  type="email"
-                  required
-                  placeholder="Email"
-                  value={createDealerForm.email}
-                  onChange={(event) =>
-                    setCreateDealerForm((prev) => ({
-                      ...prev,
-                      email: normalizeEmailValue(event.target.value),
-                    }))
-                  }
-                  className={`w-full rounded-lg border px-3 py-2 ${
-                    createDealerEmailError ? "border-red-500 bg-red-50" : "border-gray-300"
-                  }`}
-                />
-                {createDealerEmailError ? (
-                  <p className="mt-1 text-xs text-red-600">{createDealerEmailError}</p>
-                ) : null}
-                <div className="relative">
-                  <input
-                    type={showCreateDealerPassword ? "text" : "password"}
-                    required
-                    minLength={8}
-                    placeholder="Temporary password"
-                    value={createDealerForm.password}
-                    onChange={(event) =>
-                      setCreateDealerForm((prev) => ({
-                        ...prev,
-                        password: event.target.value,
-                      }))
-                    }
-                    className={`w-full rounded-lg border px-3 py-2 pr-10 ${
-                      createDealerPasswordError
-                        ? "border-red-500 bg-red-50"
-                        : "border-gray-300"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowCreateDealerPassword((previous) => !previous)
-                    }
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    aria-label={
-                      showCreateDealerPassword ? "Hide password" : "Show password"
-                    }
-                  >
-                    {showCreateDealerPassword ? (
-                      <EyeOff size={18} />
-                    ) : (
-                      <Eye size={18} />
-                    )}
-                  </button>
-                </div>
-                {createDealerPasswordError ? (
-                  <p className="mt-1 text-xs text-red-600">{createDealerPasswordError}</p>
-                ) : null}
-                <input
-                  type="text"
-                  placeholder="Business name"
-                  value={createDealerForm.businessName}
-                  onChange={(event) =>
-                    setCreateDealerForm((prev) => ({
-                      ...prev,
-                      businessName: sanitizeLooseTextInput(event.target.value),
-                    }))
-                  }
-                  className={`w-full rounded-lg border px-3 py-2 ${
-                    createDealerBusinessNameError
-                      ? "border-red-500 bg-red-50"
-                      : "border-gray-300"
-                  }`}
-                />
-                {createDealerBusinessNameError ? (
-                  <p className="mt-1 text-xs text-red-600">
-                    {createDealerBusinessNameError}
-                  </p>
-                ) : null}
-                <input
-                  type="tel"
-                  required
-                  pattern="^[0-9]{10}$"
-                  maxLength={10}
-                  inputMode="numeric"
-                  placeholder="Contact phone"
-                  value={createDealerForm.contactPhone}
-                  onChange={(event) =>
-                    setCreateDealerForm((prev) => ({
-                      ...prev,
-                      contactPhone: normalizePhoneDigits(event.target.value, 10),
-                    }))
-                  }
-                  className={`w-full rounded-lg border px-3 py-2 ${
-                    createDealerContactPhoneError
-                      ? "border-red-500 bg-red-50"
-                      : "border-gray-300"
-                  }`}
-                />
-                {createDealerContactPhoneError ? (
-                  <p className="mt-1 text-xs text-red-600">
-                    {createDealerContactPhoneError}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white px-6 py-4 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsCreateModalOpen(false);
-                    setCreateDealerSubmitAttempted(false);
-                    setShowCreateDealerPassword(false);
-                  }}
+                  onClick={() => setShowCreateDealerPassword((p) => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  aria-label={showCreateDealerPassword ? "Hide password" : "Show password"}
+                >
+                  {showCreateDealerPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {dealerFormErrors.password && (
+                <p className="mt-1 text-xs text-red-600">{dealerFormErrors.password.message}</p>
+              )}
+              <input
+                type="text"
+                placeholder="Business name"
+                {...registerDealerField("businessName", {
+                  validate: (v) => {
+                    if (!v) return true;
+                    const r = validateBusinessName(v);
+                    return r === true ? true : r;
+                  },
+                })}
+                className={`w-full rounded-lg border px-3 py-2 ${
+                  dealerFormErrors.businessName ? "border-red-500 bg-red-50" : "border-gray-300"
+                }`}
+              />
+              {dealerFormErrors.businessName && (
+                <p className="mt-1 text-xs text-red-600">{dealerFormErrors.businessName.message}</p>
+              )}
+              <input
+                type="tel"
+                maxLength={10}
+                inputMode="numeric"
+                placeholder="Contact phone"
+                {...registerDealerField("contactPhone", {
+                  validate: (v) => {
+                    const r = validateTenDigitPhone(v, "Contact phone");
+                    return r === true ? true : r;
+                  },
+                })}
+                className={`w-full rounded-lg border px-3 py-2 ${
+                  dealerFormErrors.contactPhone ? "border-red-500 bg-red-50" : "border-gray-300"
+                }`}
+              />
+              {dealerFormErrors.contactPhone && (
+                <p className="mt-1 text-xs text-red-600">{dealerFormErrors.contactPhone.message}</p>
+              )}
+            </div>
+
+            <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-4">
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeCreateDealerModal}
                   className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreatingDealer || hasCreateDealerValidationErrors}
+                  disabled={isCreatingDealer || isDealerFormSubmitting}
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {isCreatingDealer ? (
@@ -922,22 +937,22 @@ const DealersDashboard = () => {
                   )}
                 </button>
               </div>
-            </form>
-          </div>
-        )}
+            </div>
+          </form>
+        </Modal>
 
         {isPriceModalOpen && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            onClick={() => setIsPriceModalOpen(false)}
+            onClick={closePriceModal}
           >
             <div
               onClick={(event) => event.stopPropagation()}
-              className="w-full max-w-6xl h-[88vh] max-h-[820px] rounded-xl bg-white p-6 flex flex-col"
+              className="flex min-h-0 w-full max-w-6xl flex-col rounded-xl bg-white p-6 max-h-[calc(100dvh-2rem)]"
             >
               <div className="sticky top-0 z-20 bg-white pb-4 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">Dealer Price Mapping</h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <h2 className="type-h4 text-gray-900">Dealer Price Mapping</h2>
+                <p className="type-body-sm text-gray-600 mt-1">
                   Configure custom variant prices for{" "}
                   <span className="font-medium text-gray-900">
                     {selectedDealer?.name || "selected dealer"}
@@ -1166,7 +1181,7 @@ const DealersDashboard = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsPriceModalOpen(false)}
+                    onClick={closePriceModal}
                     className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
                   >
                     Cancel

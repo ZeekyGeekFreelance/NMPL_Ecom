@@ -37,20 +37,20 @@ const OrderStatus = ({ order }) => {
   const getStatusIcon = (status: OrderLifecycleStatus) => {
     switch (status) {
       case "PENDING_VERIFICATION":
-        return <Clock size={24} />;
+        return <Clock size={18} />;
       case "WAITLISTED":
-        return <Package size={24} />;
+        return <Package size={18} />;
       case "AWAITING_PAYMENT":
-        return <Package size={24} />;
+        return <Package size={18} />;
       case "CONFIRMED":
-        return <Truck size={24} />;
+        return <Truck size={18} />;
       case "DELIVERED":
-        return <CheckCircle size={24} />;
+        return <CheckCircle size={18} />;
       case "QUOTATION_REJECTED":
       case "QUOTATION_EXPIRED":
-        return <XCircle size={24} />;
+        return <XCircle size={18} />;
       default:
-        return <ShoppingBag size={24} />;
+        return <ShoppingBag size={18} />;
     }
   };
 
@@ -126,12 +126,12 @@ const OrderStatus = ({ order }) => {
       <div className="border-b border-gray-100 pb-4 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <p
-            className={`font-medium px-3 py-1 rounded-full flex items-center ${getOrderStatusColor(
+            className={`text-sm font-medium px-3 py-1 rounded-full flex items-center gap-1.5 ${getOrderStatusColor(
               currentStatus
             )}`}
           >
             {getStatusIcon(currentStatus)}
-            <span className="ml-2">
+            <span>
               {getCustomerOrderStatusLabel(currentStatus)}
             </span>
           </p>
@@ -147,11 +147,11 @@ const OrderStatus = ({ order }) => {
 
       <div className="relative mt-6">
         <div
-          className="absolute top-5 left-0 h-1 bg-gray-200 w-full"
+          className="absolute top-[18px] sm:top-5 left-0 h-0.5 sm:h-1 bg-gray-200 w-full"
           style={{ zIndex: 1 }}
         />
         <div
-          className="absolute top-5 left-0 h-1 bg-blue-500 transition-all duration-500"
+          className="absolute top-[18px] sm:top-5 left-0 h-0.5 sm:h-1 bg-blue-500 transition-all duration-500"
           style={{
             zIndex: 2,
             width: `${
@@ -161,7 +161,7 @@ const OrderStatus = ({ order }) => {
           }}
         />
 
-        <div className="relative z-10 flex items-start justify-between gap-3">
+        <div className="relative z-10 flex items-start justify-between gap-1 sm:gap-3">
           {timelineStatuses.map((status, index) => {
             const active = stepIndexByStatus[status] <= currentStep;
 
@@ -174,22 +174,22 @@ const OrderStatus = ({ order }) => {
                 transition={{ duration: 0.3, delay: index * 0.1 }}
               >
                 <div
-                  className={`w-12 h-12 rounded-md flex items-center justify-center mb-2 ${
+                  className={`w-9 h-9 sm:w-12 sm:h-12 rounded-md flex items-center justify-center mb-2 ${
                     active
                       ? "bg-blue-100 text-blue-500"
                       : "bg-gray-100 text-gray-400"
                   }`}
                 >
                   {status === "CONFIRMED" || status === "DELIVERED" ? (
-                    <CheckCircle size={24} />
+                    <CheckCircle size={18} />
                   ) : (
                     getStatusIcon(status)
                   )}
                 </div>
-                <span className="text-sm font-medium">
+                <span className="text-[10px] sm:text-xs font-medium leading-tight">
                   {getCustomerOrderStatusLabel(status)}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-[9px] sm:type-caption text-gray-400 mt-0.5 leading-tight">
                   {getStatusDate(status)}
                 </span>
               </motion.div>

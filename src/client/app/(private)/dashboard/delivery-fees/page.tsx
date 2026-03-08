@@ -161,7 +161,7 @@ const DeliveryFeesDashboard = () => {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">State Delivery Fees</h1>
+            <h1 className="type-h3 text-gray-900">State Delivery Fees</h1>
             <p className="mt-1 text-sm text-gray-600">
               Configure state-level delivery charges for checkout fallback when
               pincode mapping is unavailable.

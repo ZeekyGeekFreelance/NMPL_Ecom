@@ -263,7 +263,7 @@ const AnalyticsDashboard = () => {
       transition={{ duration: 0.35, ease: "easeOut" }}
     >
       <section className="space-y-4">
-        <h1 className="text-2xl font-semibold text-gray-900 whitespace-nowrap">
+        <h1 className="type-h3 text-gray-900">
           Analytics Dashboard
         </h1>
 

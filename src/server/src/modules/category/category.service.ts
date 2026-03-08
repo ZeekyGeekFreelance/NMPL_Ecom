@@ -10,30 +10,48 @@ export class CategoryService {
   constructor(private categoryRepository: CategoryRepository) {}
 
   async getAllCategories(queryString: Record<string, any>) {
-    const apiFeatures = new ApiFeatures(queryString)
+    const hasExplicitPagination =
+      queryString?.page !== undefined || queryString?.limit !== undefined;
+
+    const apiFeaturesBuilder = new ApiFeatures(queryString)
       .filter()
       .sort()
-      .limitFields()
-      .paginate()
-      .build();
+      .limitFields();
+
+    const apiFeatures = hasExplicitPagination
+      ? apiFeaturesBuilder.paginate().build()
+      : apiFeaturesBuilder.build();
 
     const { where, orderBy, skip, take } = apiFeatures;
 
-    const categories = await this.categoryRepository.findManyCategories({
-      where,
-      orderBy,
-      skip,
-      take,
-      includeProducts: true,
-    });
+    const [categories, totalResults] = await Promise.all([
+      this.categoryRepository.findManyCategories({
+        where,
+        orderBy,
+        skip: hasExplicitPagination ? skip : undefined,
+        take: hasExplicitPagination ? take : undefined,
+        includeProducts: true,
+      }),
+      this.categoryRepository.countCategories(where),
+    ]);
 
-    // const categoriesWithCounts = categories.map((category) => ({
-    //   ...category,
-    //   productCount: category.products?.length || 0,
-    //   variantCount: category.products?.reduce((sum, product) => sum + (product.variants?.length || 0), 0) || 0,
-    // }));
+    const requestedPage = Number(queryString?.page) || 1;
+    const requestedLimit = Number(queryString?.limit) || 16;
+    const resultsPerPage = hasExplicitPagination
+      ? requestedLimit
+      : Math.max(totalResults, 1);
+    const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage));
+    const currentPage = hasExplicitPagination
+      ? Math.min(Math.max(requestedPage, 1), totalPages)
+      : 1;
 
-    return categories;
+    return {
+      categories,
+      totalResults,
+      totalPages,
+      currentPage,
+      resultsPerPage,
+    };
   }
 
   async getCategory(categoryId: string) {

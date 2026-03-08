@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Table from "@/app/components/layout/Table";
 import {
   useGetAllUsersQuery,
@@ -7,8 +7,8 @@ import {
   useUpdateBillingSupervisorMutation,
   useUpdateAdminPasswordMutation,
 } from "@/app/store/apis/UserApi";
-import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   Users,
   Building2,
@@ -16,18 +16,21 @@ import {
   AlertCircle,
   Pencil,
   Trash2,
-  X,
   Crown,
   Shield,
   BadgeCheck,
   KeyRound,
   Eye,
   EyeOff,
+  ChevronDown,
+  ShieldCheck,
+  ShieldOff,
 } from "lucide-react";
 import useToast from "@/app/hooks/ui/useToast";
 import { useForm } from "react-hook-form";
 import UserForm, { UserFormData } from "./UserForm";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
+import Modal from "@/app/components/organisms/Modal";
 import { usePathname } from "next/navigation";
 import ToggleableText from "@/app/components/atoms/ToggleableText";
 import { withAuth } from "@/app/components/HOC/WithAuth";
@@ -57,6 +60,14 @@ type PendingRoleChange = {
   previousRole: string;
 };
 
+type PendingDeleteTarget = {
+  id: string | number;
+  name: string;
+  displayRole: string;
+  isBillingSupervisor: boolean;
+  accountRef: string;
+};
+
 const UsersDashboard = () => {
   const { showToast } = useToast();
   const pathname = usePathname();
@@ -80,12 +91,16 @@ const UsersDashboard = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isEmployeeDeleteConfirmOpen, setIsEmployeeDeleteConfirmOpen] =
+    useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [directoryFilter, setDirectoryFilter] = useState<UserDirectoryFilter>("ALL");
   const [userToDelete, setUserToDelete] = useState<string | number | null>(
     null
   );
+  const [pendingDeleteTarget, setPendingDeleteTarget] =
+    useState<PendingDeleteTarget | null>(null);
   const [passwordTargetUser, setPasswordTargetUser] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -102,6 +117,10 @@ const UsersDashboard = () => {
   const [billingActionUserId, setBillingActionUserId] = useState<
     string | number | null
   >(null);
+  const [openBillingMenuUserId, setOpenBillingMenuUserId] = useState<
+    string | number | null
+  >(null);
+  const billingMenuRef = useRef<HTMLDivElement | null>(null);
   const [editingOriginalRole, setEditingOriginalRole] = useState<string | null>(
     null
   );
@@ -134,6 +153,26 @@ const UsersDashboard = () => {
       passwordFieldTouched.confirmPassword ||
       normalizedConfirmPassword.length > 0);
 
+  useEffect(() => {
+    if (!openBillingMenuUserId) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        billingMenuRef.current &&
+        !billingMenuRef.current.contains(event.target as Node)
+      ) {
+        setOpenBillingMenuUserId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [openBillingMenuUserId]);
+
   const form = useForm<UserFormData>({
     mode: "onBlur",
     reValidateMode: "onChange",
@@ -142,7 +181,6 @@ const UsersDashboard = () => {
       name: "",
       email: "",
       role: "USER",
-      emailVerified: false,
     },
   });
 
@@ -352,45 +390,87 @@ const UsersDashboard = () => {
     {
       key: "actions",
       label: "Actions",
-      render: (row: any) => (
+      render: (row: any) => {
+        const displayRole = resolveDisplayRole(row);
+        const isAdmin = displayRole === "ADMIN";
+        const isInternalAccount =
+          displayRole === "ADMIN" || displayRole === "SUPERADMIN";
+        const isBillingUpdateBusy =
+          isUpdatingBillingSupervisor &&
+          String(billingActionUserId) === String(row.id);
+
+        return (
         <div className="flex items-center gap-2">
-          {resolveDisplayRole(row) === "ADMIN" && (
+                    {isAdmin && (
             <AdminActionGuard action="create_admin" showFallback={false}>
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingBillingChange({
-                    id: String(row.id),
-                    isBillingSupervisor: !row?.isBillingSupervisor,
-                    accountRef:
-                      row?.accountReference || toAccountReference(row.id || ""),
-                  });
-                  setIsBillingConfirmOpen(true);
-                }}
-                disabled={
-                  isUpdatingBillingSupervisor && billingActionUserId === row.id
+              <div
+                className="relative"
+                ref={
+                  openBillingMenuUserId === row.id ? billingMenuRef : undefined
                 }
-                className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  row?.isBillingSupervisor
-                    ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                    : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
-                }`}
               >
-                {isUpdatingBillingSupervisor && billingActionUserId === row.id ? (
-                  <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenBillingMenuUserId((previous) =>
+                      previous === row.id ? null : row.id
+                    )
+                  }
+                  disabled={isBillingUpdateBusy}
+                  className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    row?.isBillingSupervisor
+                      ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {isBillingUpdateBusy ? (
                     <Loader2 size={14} className="mr-1 animate-spin" />
-                    Updating...
-                  </>
-                ) : row?.isBillingSupervisor ? (
-                  "Remove Billing"
-                ) : (
-                  "Assign Billing"
-                )}
-              </button>
+                  ) : row?.isBillingSupervisor ? (
+                    <ShieldCheck size={14} className="mr-1" />
+                  ) : (
+                    <ShieldOff size={14} className="mr-1" />
+                  )}
+                  Billing Admin
+                  <ChevronDown size={13} className="ml-1" />
+                </button>
+
+                {openBillingMenuUserId === row.id ? (
+                  <div className="absolute right-0 z-20 mt-1 min-w-[180px] rounded-md border border-gray-200 bg-white p-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenBillingMenuUserId(null);
+                        setPendingBillingChange({
+                          id: String(row.id),
+                          isBillingSupervisor: !row?.isBillingSupervisor,
+                          accountRef:
+                            row?.accountReference ||
+                            toAccountReference(row.id || ""),
+                        });
+                        setIsBillingConfirmOpen(true);
+                      }}
+                      className={`flex w-full items-center rounded px-2 py-1.5 text-left text-xs font-medium ${
+                        row?.isBillingSupervisor
+                          ? "text-red-700 hover:bg-red-50"
+                          : "text-emerald-700 hover:bg-emerald-50"
+                      }`}
+                    >
+                      {row?.isBillingSupervisor ? (
+                        <ShieldOff size={14} className="mr-2" />
+                      ) : (
+                        <ShieldCheck size={14} className="mr-2" />
+                      )}
+                      {row?.isBillingSupervisor
+                        ? "Remove as Billing-Admin"
+                        : "Assign as Billing-Admin"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </AdminActionGuard>
           )}
 
-          {resolveDisplayRole(row) === "ADMIN" && (
+          {isAdmin && (
             <AdminActionGuard action="create_admin" showFallback={false}>
               <button
                 type="button"
@@ -415,38 +495,39 @@ const UsersDashboard = () => {
             </AdminActionGuard>
           )}
 
-          <RoleHierarchyGuard
-            targetUserRole={resolveDisplayRole(row)}
-            targetUserId={row.id}
-            showFallback={false}
-          >
-            <AdminActionGuard action="update_user" showFallback={false}>
-              <button
-                type="button"
-                onClick={() => {
-                  form.reset({
-                    id: row.id,
-                    name: row.name || "",
-                    email: row.email || "",
-                    role: row.role || "USER",
-                    emailVerified: Boolean(row.emailVerified),
-                  });
-                  void form.trigger();
-                  setEditingOriginalRole(String(row.role || "").toUpperCase());
-                  setEditingUser(row);
-                  setIsModalOpen(true);
-                }}
-                className="inline-flex h-8 items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                aria-label="Edit user"
-              >
-                <Pencil size={14} className="mr-1" />
-                Edit
-              </button>
-            </AdminActionGuard>
-          </RoleHierarchyGuard>
+          {isInternalAccount ? (
+            <RoleHierarchyGuard
+              targetUserRole={displayRole}
+              targetUserId={row.id}
+              showFallback={false}
+            >
+              <AdminActionGuard action="update_user" showFallback={false}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    form.reset({
+                      id: row.id,
+                      name: row.name || "",
+                      email: row.email || "",
+                      role: row.role || "USER",
+                    });
+                    void form.trigger();
+                    setEditingOriginalRole(String(row.role || "").toUpperCase());
+                    setEditingUser(row);
+                    setIsModalOpen(true);
+                  }}
+                  className="inline-flex h-8 items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                  aria-label="Edit employee"
+                >
+                  <Pencil size={14} className="mr-1" />
+                  Edit
+                </button>
+              </AdminActionGuard>
+            </RoleHierarchyGuard>
+          ) : null}
 
           <RoleHierarchyGuard
-            targetUserRole={resolveDisplayRole(row)}
+            targetUserRole={displayRole}
             targetUserId={row.id}
             showFallback={false}
           >
@@ -455,6 +536,14 @@ const UsersDashboard = () => {
                 type="button"
                 onClick={() => {
                   setUserToDelete(row.id);
+                  setPendingDeleteTarget({
+                    id: row.id,
+                    name: row.name || "this employee",
+                    displayRole,
+                    isBillingSupervisor: Boolean(row?.isBillingSupervisor),
+                    accountRef:
+                      row?.accountReference || toAccountReference(row.id || ""),
+                  });
                   setIsConfirmModalOpen(true);
                 }}
                 className="inline-flex h-8 items-center rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-700 hover:bg-red-100"
@@ -476,29 +565,38 @@ const UsersDashboard = () => {
             </AdminActionGuard>
           </RoleHierarchyGuard>
         </div>
-      ),
+      )},
     },
   ];
 
+  const closeEditModal = () => {
+    setIsModalOpen(false);
+    setEditingOriginalRole(null);
+    setEditingUser(null);
+  };
+
+  const closePasswordModal = () => {
+    setIsPasswordModalOpen(false);
+    setPasswordTargetUser(null);
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setPasswordSubmitAttempted(false);
+    setPasswordFieldTouched({
+      password: false,
+      confirmPassword: false,
+    });
+    setShowAdminPassword(false);
+    setShowAdminConfirmPassword(false);
+  };
+
   const executeUserUpdate = async (data: UserFormData) => {
     try {
-      const isEditingInternalAccount =
-        editingUser &&
-        ["ADMIN", "SUPERADMIN"].includes(resolveDisplayRole(editingUser));
       const payload: Partial<UserFormData> = {
         role: data.role,
-        emailVerified: data.emailVerified,
       };
 
-      if (!isEditingInternalAccount) {
-        payload.name = data.name;
-        payload.email = data.email;
-      }
-
       await updateUser({ id: String(data.id), data: payload }).unwrap();
-      setIsModalOpen(false);
-      setEditingOriginalRole(null);
-      setEditingUser(null);
+      closeEditModal();
       showToast("User updated successfully", "success");
     } catch (err: any) {
       console.error("Failed to update user:", err);
@@ -589,17 +687,7 @@ const UsersDashboard = () => {
         id: String(passwordTargetUser.id),
         newPassword: normalizedNewPassword,
       }).unwrap();
-      setIsPasswordModalOpen(false);
-      setPasswordTargetUser(null);
-      setNewPassword("");
-      setConfirmNewPassword("");
-      setPasswordSubmitAttempted(false);
-      setPasswordFieldTouched({
-        password: false,
-        confirmPassword: false,
-      });
-      setShowAdminPassword(false);
-      setShowAdminConfirmPassword(false);
+      closePasswordModal();
       showToast("Admin password updated and all active sessions logged out", "success");
     } catch (err: any) {
       const errorMessage =
@@ -613,6 +701,8 @@ const UsersDashboard = () => {
     try {
       await deleteUser(userToDelete).unwrap();
       setIsConfirmModalOpen(false);
+      setIsEmployeeDeleteConfirmOpen(false);
+      setPendingDeleteTarget(null);
       setUserToDelete(null);
       showToast("User deleted successfully", "success");
     } catch (err: any) {
@@ -620,6 +710,32 @@ const UsersDashboard = () => {
       const errorMessage = err?.data?.message || "Failed to delete user";
       showToast(errorMessage, "error");
     }
+  };
+
+  const requiresEmployeeDoubleDeleteConfirm = Boolean(
+    pendingDeleteTarget &&
+      (pendingDeleteTarget.displayRole === "ADMIN" ||
+        pendingDeleteTarget.displayRole === "SUPERADMIN" ||
+        pendingDeleteTarget.isBillingSupervisor)
+  );
+
+  const clearDeleteState = () => {
+    if (isDeleting) {
+      return;
+    }
+    setIsConfirmModalOpen(false);
+    setIsEmployeeDeleteConfirmOpen(false);
+    setPendingDeleteTarget(null);
+    setUserToDelete(null);
+  };
+
+  const handleInitialDeleteConfirm = async () => {
+    if (requiresEmployeeDoubleDeleteConfirm) {
+      setIsConfirmModalOpen(false);
+      setIsEmployeeDeleteConfirmOpen(true);
+      return;
+    }
+    await handleDelete();
   };
 
   return (
@@ -635,7 +751,7 @@ const UsersDashboard = () => {
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-3">
               <Users className="h-8 w-8 text-blue-600" />
-              <h1 className="text-3xl font-bold text-gray-800">
+              <h1 className="type-h2 text-gray-800">
                 Users Dashboard
               </h1>
             </div>
@@ -706,215 +822,158 @@ const UsersDashboard = () => {
         </motion.div>
 
         {/* Edit Modal */}
-        <AnimatePresence>
-          {isModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
-              onClick={() => {
-                setIsModalOpen(false);
-                setEditingOriginalRole(null);
-                setEditingUser(null);
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 border border-gray-100"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-bold text-gray-800">Edit User</h2>
-                  <button
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setEditingOriginalRole(null);
-                      setEditingUser(null);
-                    }}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <UserForm
-                  form={form}
-                  onSubmit={handleEditSubmit}
-                  isLoading={isUpdating}
-                  submitLabel="Save Changes"
-                  targetUser={editingUser}
-                />
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <Modal
+          open={isModalOpen}
+          onClose={closeEditModal}
+          contentClassName="max-w-3xl overflow-hidden p-0"
+        >
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
+              <h2 className="pr-12 text-lg font-semibold text-gray-900">
+                Edit Employee
+              </h2>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+              <UserForm
+                form={form}
+                onSubmit={handleEditSubmit}
+                isLoading={isUpdating}
+                submitLabel="Save Changes"
+                targetUser={editingUser}
+              />
+            </div>
+          </div>
+        </Modal>
 
         {/* Change Admin Password Modal */}
-        <AnimatePresence>
-          {isPasswordModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
-              onClick={() => {
-                setIsPasswordModalOpen(false);
-                setPasswordTargetUser(null);
-                setNewPassword("");
-                setConfirmNewPassword("");
-                setPasswordSubmitAttempted(false);
-                setPasswordFieldTouched({
-                  password: false,
-                  confirmPassword: false,
-                });
-                setShowAdminPassword(false);
-                setShowAdminConfirmPassword(false);
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 border border-gray-100"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-bold text-gray-800">
-                    Change Admin Password
-                  </h2>
+        <Modal
+          open={isPasswordModalOpen}
+          onClose={closePasswordModal}
+          contentClassName="max-w-2xl overflow-hidden p-0"
+        >
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
+              <h2 className="pr-12 text-lg font-semibold text-gray-900">
+                Change Admin Password
+              </h2>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+              <p className="text-sm text-gray-600">
+                Admin:{" "}
+                <span className="font-semibold text-gray-800">
+                  {passwordTargetUser?.email || "N/A"}
+                </span>
+              </p>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showAdminPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    onBlur={() =>
+                      setPasswordFieldTouched((previous) => ({
+                        ...previous,
+                        password: true,
+                      }))
+                    }
+                    className={`w-full rounded-lg p-3 pr-10 text-gray-800 focus:outline-none focus:ring-2 ${
+                      showPasswordPolicyError
+                        ? "border border-red-500 bg-red-50 focus:ring-red-200"
+                        : "border border-gray-300 focus:ring-blue-500"
+                    }`}
+                    placeholder="Enter new password"
+                  />
                   <button
-                    onClick={() => {
-                      setIsPasswordModalOpen(false);
-                      setPasswordTargetUser(null);
-                      setNewPassword("");
-                      setConfirmNewPassword("");
-                      setPasswordSubmitAttempted(false);
-                      setPasswordFieldTouched({
-                        password: false,
-                        confirmPassword: false,
-                      });
-                      setShowAdminPassword(false);
-                      setShowAdminConfirmPassword(false);
-                    }}
-                    className="text-gray-500 hover:text-gray-700"
+                    type="button"
+                    onClick={() => setShowAdminPassword((previous) => !previous)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    aria-label={showAdminPassword ? "Hide password" : "Show password"}
                   >
-                    <X size={20} />
+                    {showAdminPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600">
-                    Admin:{" "}
-                    <span className="font-semibold text-gray-800">
-                      {passwordTargetUser?.email || "N/A"}
-                    </span>
-                  </p>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      New Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showAdminPassword ? "text" : "password"}
-                        value={newPassword}
-                        onChange={(event) => setNewPassword(event.target.value)}
-                        onBlur={() =>
-                          setPasswordFieldTouched((previous) => ({
-                            ...previous,
-                            password: true,
-                          }))
-                        }
-                        className={`w-full p-3 pr-10 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
-                          showPasswordPolicyError
-                            ? "border border-red-500 bg-red-50 focus:ring-red-200"
-                            : "border border-gray-300 focus:ring-blue-500"
-                        }`}
-                        placeholder="Enter new password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowAdminPassword((previous) => !previous)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                        aria-label={showAdminPassword ? "Hide password" : "Show password"}
-                      >
-                        {showAdminPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                    {showPasswordPolicyError ? (
-                      <p className="mt-1 text-xs text-red-600">{passwordPolicyError}</p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showAdminConfirmPassword ? "text" : "password"}
-                        value={confirmNewPassword}
-                        onChange={(event) => setConfirmNewPassword(event.target.value)}
-                        onBlur={() =>
-                          setPasswordFieldTouched((previous) => ({
-                            ...previous,
-                            confirmPassword: true,
-                          }))
-                        }
-                        className={`w-full p-3 pr-10 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
-                          showConfirmPasswordError
-                            ? "border border-red-500 bg-red-50 focus:ring-red-200"
-                            : "border border-gray-300 focus:ring-blue-500"
-                        }`}
-                        placeholder="Confirm new password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowAdminConfirmPassword((previous) => !previous)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                        aria-label={
-                          showAdminConfirmPassword ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showAdminConfirmPassword ? (
-                          <EyeOff size={18} />
-                        ) : (
-                          <Eye size={18} />
-                        )}
-                      </button>
-                    </div>
-                    {showConfirmPasswordError ? (
-                      <p className="mt-1 text-xs text-red-600">{confirmPasswordError}</p>
-                    ) : null}
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Password policy: 8+ chars, uppercase, lowercase, number, special
-                    character.
-                  </p>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleAdminPasswordSubmit}
-                      disabled={
-                        isUpdatingAdminPassword ||
-                        Boolean(passwordPolicyError) ||
-                        Boolean(confirmPasswordError)
-                      }
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {isUpdatingAdminPassword ? "Updating..." : "Update Password"}
-                    </button>
-                  </div>
+                {showPasswordPolicyError ? (
+                  <p className="mt-1 text-xs text-red-600">{passwordPolicyError}</p>
+                ) : null}
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showAdminConfirmPassword ? "text" : "password"}
+                    value={confirmNewPassword}
+                    onChange={(event) => setConfirmNewPassword(event.target.value)}
+                    onBlur={() =>
+                      setPasswordFieldTouched((previous) => ({
+                        ...previous,
+                        confirmPassword: true,
+                      }))
+                    }
+                    className={`w-full rounded-lg p-3 pr-10 text-gray-800 focus:outline-none focus:ring-2 ${
+                      showConfirmPasswordError
+                        ? "border border-red-500 bg-red-50 focus:ring-red-200"
+                        : "border border-gray-300 focus:ring-blue-500"
+                    }`}
+                    placeholder="Confirm new password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowAdminConfirmPassword((previous) => !previous)
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    aria-label={
+                      showAdminConfirmPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showAdminConfirmPassword ? (
+                      <EyeOff size={18} />
+                    ) : (
+                      <Eye size={18} />
+                    )}
+                  </button>
                 </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                {showConfirmPasswordError ? (
+                  <p className="mt-1 text-xs text-red-600">{confirmPasswordError}</p>
+                ) : null}
+              </div>
+              <p className="text-xs text-gray-500">
+                Password policy: 8+ chars, uppercase, lowercase, number, special
+                character.
+              </p>
+            </div>
+
+            <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-4">
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closePasswordModal}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAdminPasswordSubmit}
+                  disabled={
+                    isUpdatingAdminPassword ||
+                    Boolean(passwordPolicyError) ||
+                    Boolean(confirmPasswordError)
+                  }
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isUpdatingAdminPassword ? "Updating..." : "Update Password"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
 
         <ConfirmModal
           isOpen={isBillingConfirmOpen}
@@ -967,11 +1026,35 @@ const UsersDashboard = () => {
         {/* Delete Confirmation */}
         <ConfirmModal
           isOpen={isConfirmModalOpen}
-          message="Are you sure you want to delete this user? This action cannot be undone."
-          onConfirm={handleDelete}
-          onCancel={() => setIsConfirmModalOpen(false)}
-          title="Delete User"
+          message={
+            requiresEmployeeDoubleDeleteConfirm
+              ? "You are deleting an employee identity. Confirm step 1 to continue to a final safety check."
+              : "Are you sure you want to delete this user? This action cannot be undone."
+          }
+          onConfirm={handleInitialDeleteConfirm}
+          onCancel={clearDeleteState}
+          title={
+            requiresEmployeeDoubleDeleteConfirm
+              ? "Delete Employee (Step 1 of 2)"
+              : "Delete User"
+          }
           type="danger"
+          isConfirming={isDeleting}
+          disableCancelWhileConfirming
+        />
+
+        <ConfirmModal
+          isOpen={isEmployeeDeleteConfirmOpen}
+          title="Delete Employee (Final Confirmation)"
+          message={
+            pendingDeleteTarget
+              ? `Final check: permanently delete ${pendingDeleteTarget.name} (${pendingDeleteTarget.accountRef}) and revoke all access? This can impact admin and billing workflows.`
+              : "Final confirmation required."
+          }
+          type="danger"
+          confirmLabel="Delete Employee Permanently"
+          onConfirm={handleDelete}
+          onCancel={clearDeleteState}
           isConfirming={isDeleting}
           disableCancelWhileConfirming
         />
@@ -981,4 +1064,3 @@ const UsersDashboard = () => {
 };
 
 export default withAuth(UsersDashboard);
-

@@ -20,7 +20,7 @@ export default function ShippingAddressCard({ order }) {
     >
       <div className="flex items-center space-x-2 mb-4">
         <MapPin size={18} />
-        <h2 className="font-semibold text-gray-800">Shipping Address</h2>
+        <h2 className="text-sm sm:text-base font-semibold text-gray-800">Shipping Address</h2>
       </div>
 
       <div className="ml-6 pl-4 border-l-2 border-indigo-100 space-y-3 text-gray-700">

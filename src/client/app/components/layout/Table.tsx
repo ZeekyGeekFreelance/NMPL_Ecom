@@ -36,6 +36,8 @@ interface TableProps {
   resultsPerPage?: number;
   currentPage?: number;
   onPageChange?: (page: number) => void;
+  clientPagination?: boolean;
+  clientPageSize?: number;
   expandable?: boolean;
   expandedRowId?: string | null;
   renderExpandedRow?: (row: any) => React.ReactNode;
@@ -160,6 +162,8 @@ const Table: React.FC<TableProps> = ({
   resultsPerPage,
   currentPage,
   onPageChange,
+  clientPagination = false,
+  clientPageSize = 16,
   expandable = false,
   expandedRowId = null,
   renderExpandedRow,
@@ -174,6 +178,7 @@ const Table: React.FC<TableProps> = ({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [localPage, setLocalPage] = useState(1);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(columns.map((col) => col.key))
   );
@@ -210,6 +215,13 @@ const Table: React.FC<TableProps> = ({
     setSortKey(initialSortKey);
     setSortDirection(initialSortDirection);
   }, [initialSortDirection, initialSortKey]);
+
+  useEffect(() => {
+    if (!clientPagination) {
+      return;
+    }
+    setLocalPage(1);
+  }, [clientPagination, debouncedSearchQuery]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -383,19 +395,52 @@ const Table: React.FC<TableProps> = ({
     });
   };
 
+  const filteredColumns = columns.filter((col) => visibleColumns.has(col.key));
+  const normalizedClientPageSize = Math.max(1, Math.floor(clientPageSize));
+  const clientTotalResults = rankedAndSortedData.length;
+  const clientTotalPages = Math.max(
+    1,
+    Math.ceil(clientTotalResults / normalizedClientPageSize)
+  );
+  const resolvedCurrentPage = clientPagination
+    ? Math.min(Math.max(localPage, 1), clientTotalPages)
+    : typeof currentPage === "number" && currentPage > 0
+      ? currentPage
+      : 1;
+  const paginatedData = clientPagination
+    ? rankedAndSortedData.slice(
+        (resolvedCurrentPage - 1) * normalizedClientPageSize,
+        resolvedCurrentPage * normalizedClientPageSize
+      )
+    : rankedAndSortedData;
+  const resolvedTotalPages = clientPagination ? clientTotalPages : totalPages;
+  const resolvedResultsPerPage = clientPagination
+    ? normalizedClientPageSize
+    : resultsPerPage;
+
+  useEffect(() => {
+    if (!clientPagination) {
+      return;
+    }
+    setLocalPage((previousPage) =>
+      Math.min(Math.max(previousPage, 1), clientTotalPages)
+    );
+  }, [clientPagination, clientTotalPages]);
+
+  const displayedTotalResults =
+    clientPagination
+      ? rankedAndSortedData.length
+      : debouncedSearchQuery.trim().length > 0
+      ? rankedAndSortedData.length
+      : totalResults !== undefined
+        ? totalResults
+        : rankedAndSortedData.length;
+
   if (!Array.isArray(data)) {
     return (
       <div className="text-center py-12 text-gray-600">{emptyMessage}</div>
     );
   }
-
-  const filteredColumns = columns.filter((col) => visibleColumns.has(col.key));
-  const displayedTotalResults =
-    debouncedSearchQuery.trim().length > 0
-      ? rankedAndSortedData.length
-      : totalResults !== undefined
-        ? totalResults
-        : rankedAndSortedData.length;
 
   return (
     <div
@@ -406,8 +451,8 @@ const Table: React.FC<TableProps> = ({
           title={title}
           subtitle={subtitle}
           totalResults={displayedTotalResults}
-          currentPage={currentPage}
-          resultsPerPage={resultsPerPage}
+          currentPage={resolvedCurrentPage}
+          resultsPerPage={resolvedResultsPerPage}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
         />
@@ -425,7 +470,7 @@ const Table: React.FC<TableProps> = ({
       />
       <div className="w-full overflow-x-auto">
         <TableBody
-          data={rankedAndSortedData}
+          data={paginatedData}
           columns={filteredColumns}
           isLoading={isLoading}
           emptyMessage={emptyMessage}
@@ -441,12 +486,19 @@ const Table: React.FC<TableProps> = ({
           onClearSelection={handleClearSelection}
         />
       </div>
-      {showPaginationDetails && totalPages !== undefined && (
+      {showPaginationDetails &&
+        (clientPagination || totalPages !== undefined) && (
         <div className="p-4 border-t border-blue-100">
           <PaginationComponent
-            totalPages={totalPages}
-            currentPage={currentPage}
-            onPageChange={onPageChange}
+            totalPages={resolvedTotalPages || 1}
+            currentPage={resolvedCurrentPage}
+            onPageChange={(page) => {
+              if (clientPagination) {
+                setLocalPage(page);
+                return;
+              }
+              onPageChange?.(page);
+            }}
           />
         </div>
       )}

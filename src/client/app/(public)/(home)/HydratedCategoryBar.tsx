@@ -63,7 +63,7 @@ const HydratedCategoryBar: React.FC<HydratedCategoryBarProps> = ({
           transition={{ duration: 0.6 }}
           className="text-left mb-8"
         >
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="type-h2 text-gray-800 mb-2">
             Shop by Category
           </h2>
         </motion.div>
@@ -111,7 +111,7 @@ const HydratedCategoryBar: React.FC<HydratedCategoryBarProps> = ({
                       </motion.div>
                     </div>
                     <div className="text-center">
-                      <h3 className="font-semibold text-gray-800 text-sm group-hover:text-indigo-700 transition-colors duration-300 truncate">
+                      <h3 className="font-semibold text-gray-800 text-xs sm:text-sm group-hover:text-indigo-700 transition-colors duration-300 truncate">
                         {category.name}
                       </h3>
                     </div>

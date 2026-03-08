@@ -17,7 +17,7 @@ export default function MainLayout({
     >
       <Navbar />
       <div
-        className={`w-full px-4 sm:px-6 lg:px-8 xl:max-w-7xl xl:mx-auto ${
+        className={`w-full px-3 sm:px-6 lg:px-8 xl:max-w-7xl xl:mx-auto ${
           showFooter ? "" : "flex-1 min-h-0"
         }`}
       >

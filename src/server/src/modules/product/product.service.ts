@@ -2,18 +2,21 @@ import AppError from "@/shared/errors/AppError";
 import ApiFeatures from "@/shared/utils/ApiFeatures";
 import { ProductRepository } from "./product.repository";
 import slugify from "@/shared/utils/slugify";
-import { parse } from "csv-parse/sync";
-import * as XLSX from "xlsx";
 import prisma from "@/infra/database/database.config";
 import { AttributeRepository } from "../attribute/attribute.repository";
 import { VariantRepository } from "../variant/variant.repository";
 import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
-import { clearCatalogListingCache } from "./graphql/resolver";
+import { clearCatalogListingCache } from "@/shared/utils/catalogCache";
 import { normalizeHumanTextForField } from "@/shared/utils/textNormalization";
+import { VariantValidationService } from "./variant-validation.service";
+import { BulkImportService } from "./bulk-import.service";
 
 export class ProductService {
   private static readonly BASE_VARIANT_DELETE_MESSAGE =
     "Base variant cannot be deleted. Add another variant first or delete the product instead.";
+
+  private readonly variantValidator = new VariantValidationService();
+  private readonly bulkImporter = new BulkImportService();
 
   constructor(
     private productRepository: ProductRepository,
@@ -473,21 +476,23 @@ export class ProductService {
 
     // Validate category and required attributes
     let requiredAttributeIds: string[] = [];
+    let requiredAttributeNameById = new Map<string, string>();
     if (normalizedProductData.categoryId) {
       const category = await prisma.category.findUnique({
         where: { id: normalizedProductData.categoryId },
         include: {
           attributes: {
             where: { isRequired: true },
-            select: { attributeId: true },
+            select: { attributeId: true, attribute: { select: { name: true } } },
           },
         },
       });
       if (!category) {
         throw new AppError(404, "Category not found");
       }
-      requiredAttributeIds = category.attributes.map(
-        (attr) => attr.attributeId
+      requiredAttributeIds = category.attributes.map((attr) => attr.attributeId);
+      requiredAttributeNameById = new Map(
+        category.attributes.map((attr) => [attr.attributeId, attr.attribute.name])
       );
     }
 
@@ -578,10 +583,13 @@ export class ProductService {
         (id) => !variantAttributeIds.includes(id)
       );
       if (missingAttributes.length > 0) {
+        // Use requiredAttributeNameById (sourced from the category join) so we always
+        // get human-readable names — even for attributes absent from all variants.
+        const missingNames = missingAttributes.map(
+          (id) => requiredAttributeNameById.get(id) ?? attributeNameById.get(id) ?? id
+        );
         throw this.buildVariantValidationError(
-          `${variantLabel} is missing required attributes: ${missingAttributes.join(
-            ", "
-          )}.`
+          `${variantLabel} is missing required attributes: ${missingNames.join(", ")}.`
         );
       }
     });
@@ -830,13 +838,15 @@ export class ProductService {
       const categoryId =
         normalizedProductData.categoryId || existingProduct.categoryId;
       let requiredAttributeIds: string[] = [];
+      let requiredAttributeNameById = new Map<string, string>();
       if (categoryId) {
         const requiredAttributes = await prisma.categoryAttribute.findMany({
           where: { categoryId, isRequired: true },
-          select: { attributeId: true },
+          select: { attributeId: true, attribute: { select: { name: true } } },
         });
-        requiredAttributeIds = requiredAttributes.map(
-          (attr) => attr.attributeId
+        requiredAttributeIds = requiredAttributes.map((attr) => attr.attributeId);
+        requiredAttributeNameById = new Map(
+          requiredAttributes.map((attr) => [attr.attributeId, attr.attribute.name])
         );
       }
 
@@ -849,10 +859,11 @@ export class ProductService {
           (id) => !variantAttributeIds.includes(id)
         );
         if (missingAttributes.length > 0) {
+          const missingNames = missingAttributes.map(
+            (id) => requiredAttributeNameById.get(id) ?? id
+          );
           throw this.buildVariantValidationError(
-            `${variantLabel} is missing required attributes: ${missingAttributes.join(
-              ", "
-            )}.`
+            `${variantLabel} is missing required attributes: ${missingNames.join(", ")}.`
           );
         }
       });
@@ -1028,187 +1039,11 @@ export class ProductService {
   }
 
   async bulkCreateProducts(file: Express.Multer.File) {
-    if (!file) {
-      throw new AppError(400, "No file uploaded");
-    }
-
-    let records: any[];
-    try {
-      if (file.mimetype === "text/csv") {
-        records = parse(file.buffer.toString(), {
-          columns: true,
-          skip_empty_lines: true,
-          trim: true,
-        });
-      } else if (
-        file.mimetype ===
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      ) {
-        const workbook = XLSX.read(file.buffer, { type: "buffer" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        records = XLSX.utils.sheet_to_json(sheet);
-      } else {
-        throw new AppError(400, "Unsupported file format. Use CSV or XLSX");
-      }
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-      throw new AppError(400, "Failed to parse file");
-    }
-
-    if (records.length === 0) {
-      throw new AppError(400, "File is empty");
-    }
-
-    const parseBoolean = (value: unknown) =>
-      value === true ||
-      value === "true" ||
-      value === "TRUE" ||
-      value === 1 ||
-      value === "1";
-
-    const rows = records.map((record, index) => {
-      const name = record.name
-        ? normalizeHumanTextForField(String(record.name), "name")
-        : "";
-      const sku = record.sku ? String(record.sku).trim() : "";
-      const price = Number(record.price);
-      const stock = Number.parseInt(String(record.stock), 10);
-      const lowStockThresholdRaw =
-        record.lowStockThreshold === undefined ||
-        record.lowStockThreshold === null ||
-        record.lowStockThreshold === ""
-          ? 10
-          : Number.parseInt(String(record.lowStockThreshold), 10);
-
-      if (!name || !sku || Number.isNaN(price) || Number.isNaN(stock)) {
-        throw new AppError(
-          400,
-          `Invalid record at row ${index + 1}. Required columns: name, sku, price, stock.`
-        );
-      }
-
-      if (price <= 0) {
-        throw new AppError(
-          400,
-          `Invalid price at row ${index + 1}. Price must be greater than 0.`
-        );
-      }
-
-      if (stock < 0) {
-        throw new AppError(
-          400,
-          `Invalid stock at row ${index + 1}. Stock must be non-negative.`
-        );
-      }
-
-      if (Number.isNaN(lowStockThresholdRaw) || lowStockThresholdRaw < 0) {
-        throw new AppError(
-          400,
-          `Invalid lowStockThreshold at row ${index + 1}.`
-        );
-      }
-
-      return {
-        name,
-        slug: slugify(name),
-        description: record.description
-          ? String(record.description)
-          : undefined,
-        categoryId: record.categoryId ? String(record.categoryId) : undefined,
-        isNew: parseBoolean(record.isNew),
-        isTrending: parseBoolean(record.isTrending),
-        isBestSeller: parseBoolean(record.isBestSeller),
-        isFeatured: parseBoolean(record.isFeatured),
-        sku,
-        price,
-        stock,
-        lowStockThreshold: lowStockThresholdRaw,
-      };
-    });
-
-    const categoryIds = rows
-      .filter((row) => row.categoryId)
-      .map((row) => row.categoryId!);
-    if (categoryIds.length > 0) {
-      const existingCategories = await prisma.category.findMany({
-        where: { id: { in: categoryIds } },
-        select: { id: true },
-      });
-      const validCategoryIds = new Set(existingCategories.map((c) => c.id));
-      for (const row of rows) {
-        if (row.categoryId && !validCategoryIds.has(row.categoryId)) {
-          throw new AppError(400, `Invalid categoryId: ${row.categoryId}`);
-        }
-      }
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      let createdVariants = 0;
-      let skippedVariants = 0;
-      const productIdCache = new Map<string, string>();
-
-      for (const row of rows) {
-        const existingVariant = await tx.productVariant.findUnique({
-          where: { sku: row.sku },
-          select: { id: true },
-        });
-
-        if (existingVariant) {
-          skippedVariants += 1;
-          continue;
-        }
-
-        let productId = productIdCache.get(row.name);
-        if (!productId) {
-          const existingProduct = await tx.product.findUnique({
-            where: { name: row.name },
-            select: { id: true },
-          });
-
-          if (existingProduct) {
-            productId = existingProduct.id;
-          } else {
-            const createdProduct = await tx.product.create({
-              data: {
-                name: row.name,
-                slug: row.slug,
-                description: row.description,
-                categoryId: row.categoryId,
-                isNew: row.isNew,
-                isTrending: row.isTrending,
-                isBestSeller: row.isBestSeller,
-                isFeatured: row.isFeatured,
-              },
-              select: { id: true },
-            });
-            productId = createdProduct.id;
-          }
-
-          productIdCache.set(row.name, productId);
-        }
-
-        await tx.productVariant.create({
-          data: {
-            productId,
-            sku: row.sku,
-            price: row.price,
-            stock: row.stock,
-            lowStockThreshold: row.lowStockThreshold,
-            images: [],
-          },
-        });
-
-        createdVariants += 1;
-      }
-
-      return { createdVariants, skippedVariants };
-    });
-
-    if (result.createdVariants > 0) {
+    const result = await this.bulkImporter.run(file);
+    if (result.count > 0) {
       await clearCatalogListingCache();
     }
-
-    return { count: result.createdVariants, skipped: result.skippedVariants };
+    return result;
   }
 
   async deleteProduct(productId: string) {

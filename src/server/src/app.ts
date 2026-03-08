@@ -4,7 +4,6 @@ import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import helmet from "helmet";
-import ExpressMongoSanitize from "express-mongo-sanitize";
 import hpp from "hpp";
 import morgan from "morgan";
 import logger from "./infra/winston/logger";
@@ -24,6 +23,7 @@ import webhookRoutes from "./modules/webhook/webhook.routes";
 import healthRoutes from "./routes/health.routes";
 import { Server as HTTPServer } from "http";
 import { SocketManager } from "@/infra/socket/socket";
+import { setIo } from "@/infra/socket/IoProvider";
 import { connectDB } from "./infra/database/database.config";
 import { setupSwagger } from "./docs/swagger";
 import { config, isAllowedOrigin } from "@/config";
@@ -63,6 +63,8 @@ export const createApp = async () => {
   const httpServer = new HTTPServer(app);
   const socketManager = new SocketManager(httpServer);
   const io = socketManager.getIO();
+  // Register the singleton so modules can call getIo() without constructor injection.
+  setIo(io);
 
   setupSwagger(app);
   app.disable("x-powered-by");
@@ -189,7 +191,6 @@ export const createApp = async () => {
     });
   }
 
-  app.use(ExpressMongoSanitize());
   app.use(
     hpp({
       whitelist: ["sort", "filter", "fields", "page", "limit"],

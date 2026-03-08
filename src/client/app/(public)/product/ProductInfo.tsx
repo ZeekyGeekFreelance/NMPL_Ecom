@@ -54,11 +54,6 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
       return null;
     }
 
-    if (selectedVariant.stock <= 0) {
-      showToast("Selected variant is out of stock", "error");
-      return null;
-    }
-
     return selectedVariant;
   };
 
@@ -179,9 +174,8 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const discountPercent = hasDealerSpecificPrice
     ? Math.max(0, Math.round(((retailPrice - effectivePrice) / retailPrice) * 100))
     : 0;
-  const stock = selectedVariant ? selectedVariant.stock : variants[0]?.stock || 0;
   const selectedSku = selectedVariant?.sku || variants[0]?.sku || "N/A";
-  const cartActionAllowed = stock > 0 && !!selectedVariant;
+  const cartActionAllowed = !!selectedVariant;
   const canUseCart = !isAuthLoading && cartActionAllowed && (isGuest || isCustomerUser);
 
   const colorValues = new Set<string>();
@@ -248,8 +242,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
     };
 
     return variants.some(
-      (variant) =>
-        variant.stock > 0 && variantMatchesSelections(variant, intendedSelections)
+      (variant) => variantMatchesSelections(variant, intendedSelections)
     );
   };
 
@@ -260,11 +253,9 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
     };
 
     const matchedVariant =
-      variants.find(
-        (variant) =>
-          variant.stock > 0 && variantMatchesSelections(variant, intendedSelections)
-      ) ??
-      variants.find((variant) => variantMatchesSelections(variant, intendedSelections));
+      variants.find((variant) =>
+        variantMatchesSelections(variant, intendedSelections)
+      );
 
     if (!matchedVariant) {
       return null;
@@ -282,24 +273,24 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
     <div className="px-4 py-6 sm:px-6">
       <div className="space-y-6">
         <header className="border-b border-gray-200 pb-4">
-          <h1 className="text-[1.55rem] font-semibold leading-tight tracking-[-0.01em] text-slate-900 sm:text-[1.7rem]">
+          <h1 className="type-h2 text-slate-900">
             {name}
           </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+          <p className="mt-2 prose-section text-slate-500">{description}</p>
         </header>
 
         <section className="space-y-2 border-b border-gray-200 pb-5">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="text-[1.95rem] font-semibold tracking-tight text-slate-900">
+            <span className="price-display text-slate-900">
               {formatPrice(effectivePrice)}
             </span>
             {hasDealerSpecificPrice && (
               <>
-                <span className="text-[1.35rem] text-slate-500 line-through">
+                <span className="price-display-sm text-slate-500 line-through">
                   {formatPrice(retailPrice)}
                 </span>
                 {discountPercent > 0 && (
-                  <span className="text-[1.2rem] font-semibold text-amber-600">
+                  <span className="text-base sm:text-lg font-semibold text-amber-600">
                     ({discountPercent}% OFF)
                   </span>
                 )}
@@ -307,12 +298,8 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
             )}
           </div>
           <p className="text-sm font-medium text-emerald-700">inclusive of all taxes</p>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
             <span>SKU: {selectedSku}</span>
-            <span className="h-1 w-1 rounded-full bg-slate-300" />
-            <span className={stock > 0 ? "text-emerald-600" : "text-rose-500"}>
-              {stock > 0 ? `${stock} in stock` : "Out of stock"}
-            </span>
             {colorValues.size > 0 && (
               <>
                 <span className="h-1 w-1 rounded-full bg-slate-300" />
@@ -396,7 +383,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
                             )}
                           </span>
                           <span
-                            className={`text-[11px] font-medium tracking-[0.04em] ${
+                            className={`text-xs font-medium tracking-[0.04em] ${
                               isSelected ? "text-slate-900" : "text-slate-600"
                             }`}
                           >
@@ -436,7 +423,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
                           <span className="block text-sm font-semibold leading-tight">{value}</span>
                           {optionPrice && (
                             <span
-                              className={`mt-1 block text-[11px] font-medium leading-tight ${
+                              className={`mt-1 block text-xs font-medium leading-tight ${
                                 isSelected ? "text-slate-200" : "text-slate-500"
                               }`}
                             >

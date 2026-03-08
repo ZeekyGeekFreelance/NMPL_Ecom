@@ -259,6 +259,8 @@ model Category {
   updatedAt   DateTime            @updatedAt
 
   @@index([name, slug])
+  @@index([createdAt])  // required for ORDER BY createdAt DESC pagination at 1300+ categories
+  @@index([name])       // supports server-side category name search
 }
 
 model CategoryAttribute {
@@ -559,6 +561,8 @@ model CartEvent {
   cart      Cart       @relation(fields: [cartId], references: [id], onDelete: Cascade)
   user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt DateTime   @default(now())
+
+  @@index([timestamp]) // P1.4: analytics range queries on abandoned cart events
 }
 
 model Interaction {
@@ -585,6 +589,7 @@ model Report {
   filePath   String?
 
   @@index([userId])
+  @@index([createdAt]) // P1.4: admin report pagination ordered by createdAt
 }
 
 model Log {
@@ -593,6 +598,8 @@ model Log {
   message   String
   context   Json?
   createdAt DateTime @default(now())
+
+  @@index([createdAt]) // P1.4: admin log pagination ordered by createdAt
 }
 
 model AppSetting {

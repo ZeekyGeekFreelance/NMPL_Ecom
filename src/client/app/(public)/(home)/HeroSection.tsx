@@ -202,11 +202,11 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
                       </span>
                     </div>
 
-                    <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold mb-4 leading-tight">
+                    <h1 className="type-h1 font-bold mb-4 text-white" style={{ fontSize: 'clamp(1.75rem, 5vw, 3.5rem)' }}>
                       {currentSlide.title}
                     </h1>
 
-                    <p className="text-lg sm:text-xl text-white/90 mb-8 max-w-lg">
+                    <p className="type-body text-white/90 mb-8 max-w-lg" style={{ fontSize: 'clamp(1rem, 2vw, 1.25rem)' }}>
                       {currentSlide.subtitle}
                     </p>
 

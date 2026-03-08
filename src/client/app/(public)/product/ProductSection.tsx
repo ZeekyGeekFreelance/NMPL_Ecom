@@ -215,7 +215,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
             className="mb-8"
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <h2 className="text-xl sm:text-[22px] font-semibold text-gray-900 capitalize">
+              <h2 className="type-h3 text-gray-900 capitalize">
                 {title}
               </h2>
               {products.length > 8 && (

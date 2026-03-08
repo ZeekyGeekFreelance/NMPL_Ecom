@@ -9,3 +9,7 @@
  * (SSR props) or by adding categories to the GraphQL query instead of
  * hitting the REST /categories endpoint separately.
  */
+
+const CategoryBrowser = () => null;
+
+export default CategoryBrowser;

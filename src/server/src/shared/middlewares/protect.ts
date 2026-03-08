@@ -5,6 +5,11 @@ import prisma from "@/infra/database/database.config";
 import { User } from "../types/userTypes";
 import { resolveEffectiveRoleFromUser } from "@/shared/utils/userRole";
 import { config } from "@/config";
+import {
+  getProtectUserCache,
+  setProtectUserCache,
+  type ProtectUserCacheRecord,
+} from "@/shared/utils/auth/protectCache";
 
 const protect = async (
   req: Request,
@@ -27,22 +32,45 @@ const protect = async (
       });
     req._decodedAccessToken = decoded;
 
-    const user = await prisma.user.findUnique({
-      where: { id: String(decoded.id) },
-      select: {
-        id: true,
-        role: true,
-        tokenVersion: true,
-        dealerProfile: {
-          select: {
-            status: true,
-          },
-        },
-      },
-    });
+    const userId = String(decoded.id);
+
+    // ── Redis cache lookup ────────────────────────────────────────────────
+    // Skips the DB round-trip on the hot path.  The record is invalidated
+    // explicitly whenever tokenVersion changes (password reset, dealer status
+    // update) and expires automatically after 60 s as a safety backstop.
+    let user: ProtectUserCacheRecord | null = await getProtectUserCache(userId);
 
     if (!user) {
-      return next(new AppError(401, "User no longer exists."));
+      // Cache miss — query the database and populate the cache.
+      const dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          role: true,
+          tokenVersion: true,
+          dealerProfile: {
+            select: {
+              status: true,
+            },
+          },
+        },
+      });
+
+      if (!dbUser) {
+        return next(new AppError(401, "User no longer exists."));
+      }
+
+      user = {
+        id: dbUser.id,
+        role: dbUser.role as string,
+        tokenVersion: dbUser.tokenVersion,
+        dealerProfile: dbUser.dealerProfile
+          ? { status: dbUser.dealerProfile.status as string }
+          : null,
+      };
+
+      // Fire-and-forget: cache write failure must never block the request.
+      await setProtectUserCache(userId, user);
     }
 
     const accessTokenVersion = typeof decoded.tv === "number" ? decoded.tv : 0;
@@ -52,8 +80,8 @@ const protect = async (
 
     req.user = {
       id: decoded.id,
-      role: user.role,
-      effectiveRole: resolveEffectiveRoleFromUser(user),
+      role: user.role as any,
+      effectiveRole: resolveEffectiveRoleFromUser(user as any),
     };
     next();
   } catch (error) {

@@ -71,6 +71,12 @@ input:disabled,
   display: none;
 }
 
+/* Use app-level password toggle UI consistently across browsers. */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
 .bg-primary {
   background-color: var(--primary);
 }
@@ -80,11 +86,11 @@ input:disabled,
 }
 
 .th {
-  @apply p-3 text-left font-semibold text-[16px] capitalize;
+  @apply p-2 sm:p-3 text-left font-semibold text-sm sm:text-base capitalize;
 }
 
 .td {
-  @apply p-3 text-[13.5px] font-medium capitalize;
+  @apply p-2 sm:p-3 text-xs sm:text-sm font-medium capitalize;
 }
 
 ::-webkit-scrollbar {
@@ -131,6 +137,106 @@ input:disabled,
 
 .btn-ghost {
   @apply inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors duration-200 whitespace-nowrap bg-transparent text-gray-700 hover:bg-gray-100;
+}
+
+/* ============================================================
+   RESPONSIVE TYPOGRAPHY SYSTEM
+   Centralized, fluid type scale. All headings and body text
+   derive from these tokens — change here, propagates everywhere.
+   ============================================================ */
+
+:root {
+  /* Fluid scale: clamp(mobile-min, fluid-mid, desktop-max) */
+  --text-h1:      clamp(1.5rem,   4vw,   2.25rem);    /* 24 → 36 px */
+  --text-h2:      clamp(1.375rem, 3vw,   1.875rem);   /* 22 → 30 px */
+  --text-h3:      clamp(1.25rem,  2.5vw, 1.625rem);   /* 20 → 26 px */
+  --text-h4:      clamp(1.125rem, 2vw,   1.375rem);   /* 18 → 22 px */
+  --text-h5:      clamp(1rem,     1.5vw, 1.125rem);   /* 16 → 18 px */
+  --text-body:    clamp(0.9375rem, 1.2vw, 1.0625rem); /* 15 → 17 px */
+  --text-body-sm: clamp(0.875rem,  1vw,  0.9375rem);  /* 14 → 15 px */
+  --text-caption: clamp(0.75rem,   0.8vw, 0.8125rem); /* 12 → 13 px */
+
+  /* Line-height tokens */
+  --lh-heading: 1.25;
+  --lh-body:    1.65;
+  --lh-tight:   1.35;
+
+  /* Fluid spacing */
+  --space-section:   clamp(1.5rem, 3vw, 2.5rem);
+  --space-component: clamp(1rem, 2vw, 1.5rem);
+}
+
+/* ── Semantic heading classes ─────────────────────────────── */
+.type-h1 {
+  font-size:      var(--text-h1);
+  line-height:    var(--lh-heading);
+  font-weight:    700;
+  letter-spacing: -0.02em;
+}
+
+.type-h2 {
+  font-size:      var(--text-h2);
+  line-height:    var(--lh-heading);
+  font-weight:    600;
+  letter-spacing: -0.015em;
+}
+
+.type-h3 {
+  font-size:      var(--text-h3);
+  line-height:    var(--lh-tight);
+  font-weight:    600;
+}
+
+.type-h4 {
+  font-size:      var(--text-h4);
+  line-height:    var(--lh-tight);
+  font-weight:    600;
+}
+
+.type-h5 {
+  font-size:      var(--text-h5);
+  line-height:    var(--lh-tight);
+  font-weight:    600;
+}
+
+/* ── Body & utility classes ───────────────────────────────── */
+.type-body {
+  font-size:   var(--text-body);
+  line-height: var(--lh-body);
+}
+
+.type-body-sm {
+  font-size:   var(--text-body-sm);
+  line-height: var(--lh-body);
+}
+
+.type-caption {
+  font-size:   var(--text-caption);
+  line-height: 1.5;
+}
+
+/* Prose wrapper — for description blocks, long-form content */
+.prose-section {
+  font-size:   var(--text-body-sm);
+  line-height: var(--lh-body);
+}
+
+.prose-section p + p {
+  margin-top: 0.875em;
+}
+
+/* Product price — large fluid price display */
+.price-display {
+  font-size:      clamp(1.625rem, 3.5vw, 2rem);
+  font-weight:    600;
+  line-height:    1.2;
+  letter-spacing: -0.02em;
+}
+
+.price-display-sm {
+  font-size:      clamp(1.125rem, 2vw, 1.375rem);
+  font-weight:    500;
+  line-height:    1.2;
 }
 
 /* NProgress styles */

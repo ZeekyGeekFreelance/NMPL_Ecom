@@ -95,7 +95,7 @@ const LogDetails: React.FC = () => {
     <div className="p-4 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Log Details</h1>
+        <h1 className="type-h3 text-gray-900">Log Details</h1>
         <button
           onClick={() => router.push("/dashboard/logs")}
           className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors"
@@ -142,7 +142,7 @@ const LogDetails: React.FC = () => {
 
       {/* Context Details */}
       <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold mb-4">Context</h2>
+        <h2 className="text-base font-semibold mb-4">Context</h2>
         {context && Object.keys(context).length > 0 ? (
           <div className="grid grid-cols-1 gap-4">
             {Object.entries(context).map(([key, value]) => (

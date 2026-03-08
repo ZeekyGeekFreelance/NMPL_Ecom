@@ -26,9 +26,13 @@ export class OrderRepository {
     return cleanToken.slice(-2).toLowerCase();
   }
 
-  async findAllOrders() {
+  async findAllOrders(options?: { skip?: number; take?: number }) {
+    const skip = options?.skip ?? 0;
+    const take = Math.min(options?.take ?? 50, 200);
     return prisma.order.findMany({
       orderBy: { orderDate: "desc" },
+      skip,
+      take,
       include: {
         orderItems: { include: { variant: { include: { product: true } } } },
         quotationLogs: {

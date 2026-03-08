@@ -5,6 +5,8 @@ export type CheckoutDeliveryMode = "PICKUP" | "DELIVERY";
 export type CheckoutSelectionPayload = {
   addressId?: string;
   deliveryMode: CheckoutDeliveryMode;
+  /** Live total from the preceding summary step — triggers server-side drift guard. */
+  expectedTotal?: number;
 };
 
 export type CheckoutSummary = {

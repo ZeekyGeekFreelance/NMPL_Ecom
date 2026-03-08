@@ -64,10 +64,10 @@ const StoreHighlights = () => {
             <div className="inline-flex rounded-lg bg-teal-50 p-2 text-teal-700">
               <item.icon size={18} />
             </div>
-            <h3 className="mt-3 text-base font-semibold text-slate-900">
+            <h3 className="mt-3 text-sm sm:text-base font-semibold text-slate-900">
               {item.title}
             </h3>
-            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+            <p className="mt-2 prose-section text-slate-600">
               {item.description}
             </p>
           </motion.article>
@@ -86,8 +86,8 @@ const StoreHighlights = () => {
             <p className="text-xs uppercase tracking-wide text-teal-300">
               Collection
             </p>
-            <h4 className="mt-1 text-xl font-semibold">{collection.title}</h4>
-            <p className="mt-2 text-sm text-slate-300">{collection.subtitle}</p>
+            <h4 className="mt-1 text-lg sm:text-xl font-semibold">{collection.title}</h4>
+            <p className="mt-2 type-body-sm text-slate-300">{collection.subtitle}</p>
             <Link
               href={collection.href}
               className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-300 hover:text-teal-200"

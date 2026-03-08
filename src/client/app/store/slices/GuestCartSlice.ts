@@ -29,10 +29,7 @@ const guestCartSlice = createSlice({
       );
 
       if (existingItem) {
-        existingItem.quantity = Math.min(
-          existingItem.quantity + 1,
-          Math.max(existingItem.stock, 1)
-        );
+        existingItem.quantity += 1;
         return;
       }
 
@@ -52,10 +49,7 @@ const guestCartSlice = createSlice({
         return;
       }
 
-      const safeQuantity = Math.max(
-        1,
-        Math.min(action.payload.quantity, Math.max(existingItem.stock, 1))
-      );
+      const safeQuantity = Math.max(1, action.payload.quantity);
       existingItem.quantity = safeQuantity;
     },
     removeGuestCartItem: (state, action: PayloadAction<string>) => {

@@ -8,7 +8,9 @@ export class OrderController {
   constructor(private orderService: OrderService) {}
 
   getAllOrders = asyncHandler(async (req: Request, res: Response) => {
-    const orders = await this.orderService.getAllOrders();
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 50;
+    const orders = await this.orderService.getAllOrders({ page, limit });
     sendResponse(res, 200, {
       data: { orders },
       message: "Orders retrieved successfully",
@@ -81,7 +83,7 @@ export class OrderController {
 
   createOrder = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const { cartId, addressId, deliveryMode } = req.body || {};
+    const { cartId, addressId, deliveryMode, expectedTotal } = req.body || {};
     if (!userId) {
       throw new AppError(400, "User not found");
     }
@@ -94,11 +96,18 @@ export class OrderController {
     if (deliveryMode === "DELIVERY" && !addressId) {
       throw new AppError(400, "Address selection is required for delivery");
     }
+    // expectedTotal is optional: when provided the service validates no price
+    // drift occurred since the checkout summary was shown to the user.
+    const parsedExpectedTotal =
+      expectedTotal !== undefined && expectedTotal !== null
+        ? Number(expectedTotal)
+        : undefined;
     const order = await this.orderService.createOrderFromCart(
       userId,
       cartId,
       addressId,
-      deliveryMode
+      deliveryMode,
+      Number.isFinite(parsedExpectedTotal) ? parsedExpectedTotal : undefined
     );
     sendResponse(res, 201, {
       data: { order },

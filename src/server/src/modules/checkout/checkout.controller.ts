@@ -59,6 +59,7 @@ export class CheckoutController {
     const order = await this.checkoutService.placeOrder(userId, cart.id, {
       addressId: req.body?.addressId,
       deliveryMode: req.body?.deliveryMode,
+      expectedTotal: typeof req.body?.expectedTotal === "number" ? req.body.expectedTotal : undefined,
     });
     await this.cartService.logCartEvent(cart.id, "CHECKOUT_COMPLETED", userId);
 

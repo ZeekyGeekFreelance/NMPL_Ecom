@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import AppError from "../errors/AppError";
 import prisma from "@/infra/database/database.config";
+import { getProtectUserCache } from "@/shared/utils/auth/protectCache";
 
 const getRoleHierarchy = (role: string): number => {
   const hierarchy: { [key: string]: number } = {
@@ -26,16 +27,6 @@ const authorizeRoleHierarchy = (minRequiredRole: string) => {
         return next(new AppError(400, "Target user ID is required"));
       }
 
-      // Get target user's role
-      const targetUser = await prisma.user.findUnique({
-        where: { id: targetUserId },
-        select: { role: true },
-      });
-
-      if (!targetUser) {
-        return next(new AppError(404, "Target user not found"));
-      }
-
       if (req.user.id === targetUserId) {
         return next(
           new AppError(
@@ -52,8 +43,26 @@ const authorizeRoleHierarchy = (minRequiredRole: string) => {
         );
       }
 
+      // #11: Resolve the target user's role from the protect cache before falling back to a
+      // DB query. The cache is warm for any recently active user and has a 60-second TTL,
+      // so the vast majority of admin-on-user operations never touch the DB here.
+      let targetUserRole: string;
+      const cachedTarget = await getProtectUserCache(targetUserId);
+      if (cachedTarget) {
+        targetUserRole = cachedTarget.role;
+      } else {
+        const targetUser = await prisma.user.findUnique({
+          where: { id: targetUserId },
+          select: { role: true },
+        });
+        if (!targetUser) {
+          return next(new AppError(404, "Target user not found"));
+        }
+        targetUserRole = targetUser.role;
+      }
+
       const actorHierarchy = getRoleHierarchy(userRole);
-      const targetHierarchy = getRoleHierarchy(targetUser.role);
+      const targetHierarchy = getRoleHierarchy(targetUserRole);
 
       // SuperAdmin can manage other SuperAdmins (except self), and the
       // service layer enforces last-superadmin protections for delete/demote.

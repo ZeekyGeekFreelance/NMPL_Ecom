@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import useToast from "@/app/hooks/ui/useToast";
 import { useAuth } from "@/app/hooks/useAuth";
@@ -36,6 +36,8 @@ import { toTransactionReference } from "@/app/lib/utils/accountReference";
 const TransactionDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
   const [newStatus, setNewStatus] = useState<OrderLifecycleStatus | "">("");
@@ -44,6 +46,7 @@ const TransactionDetailsPage = () => {
     useState(false);
   const [isQuotationModalOpen, setIsQuotationModalOpen] = useState(false);
   const [isQuotationConfirmOpen, setIsQuotationConfirmOpen] = useState(false);
+  const [hasProcessedQuickAction, setHasProcessedQuickAction] = useState(false);
   const [quotationRows, setQuotationRows] = useState<
     Array<{
       orderItemId: string;
@@ -196,7 +199,7 @@ const TransactionDetailsPage = () => {
     setIsStatusConfirmModalOpen(false);
   };
 
-  const handleOpenQuotationModal = () => {
+  const handleOpenQuotationModal = useCallback(() => {
     if (!canEditQuotation) {
       return;
     }
@@ -251,7 +254,45 @@ const TransactionDetailsPage = () => {
       : [];
     setQuotationRows(rows);
     setIsQuotationModalOpen(true);
-  };
+  }, [canEditQuotation, order?.orderItems, order?.quotationLogs]);
+
+  useEffect(() => {
+    const quickAction = searchParams.get("quickAction");
+    if (
+      quickAction !== "quote" ||
+      hasProcessedQuickAction ||
+      isLoading ||
+      !transaction
+    ) {
+      return;
+    }
+
+    setHasProcessedQuickAction(true);
+
+    if (canEditQuotation) {
+      handleOpenQuotationModal();
+    } else {
+      showToast(
+        "Quotation editor is unavailable for the current transaction status.",
+        "error"
+      );
+    }
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("quickAction");
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname);
+  }, [
+    canEditQuotation,
+    handleOpenQuotationModal,
+    hasProcessedQuickAction,
+    isLoading,
+    pathname,
+    router,
+    searchParams,
+    showToast,
+    transaction,
+  ]);
 
   const handleCloseQuotationModal = () => {
     setQuotationRows([]);
@@ -429,46 +470,54 @@ const TransactionDetailsPage = () => {
 
       <TransactionTimeline transaction={transaction} payment={order?.payment} />
 
-      <Modal open={isQuotationModalOpen} onClose={handleCloseQuotationModal}>
-        <div className="flex max-h-[82vh] flex-col">
-          <h2 className="text-lg font-semibold mb-4 pr-10">
-            Edit Quotation and Reserve Stock
-          </h2>
-          <p className="mb-4 text-sm text-gray-600">
-            Update final quantity and unit price for each line item before
-            issuing quotation. Quoted quantity cannot exceed original ordered
-            units.
-          </p>
-          <div className="overflow-y-auto pr-1 pb-32">
+      <Modal
+        open={isQuotationModalOpen}
+        onClose={handleCloseQuotationModal}
+        contentClassName="max-w-6xl overflow-hidden p-0"
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
+            <h2 className="pr-12 text-lg font-semibold text-gray-900">
+              Edit Quotation and Reserve Stock
+            </h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Update final quantity and unit price for each line item before
+              issuing quotation. Quoted quantity cannot exceed original ordered
+              units.
+            </p>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
             {quotationRows.some((row) => row.quantity > row.availableStock) && (
               <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 One or more items exceed available stock. Reduce quoted quantity
                 to the available units before sending quotation.
               </div>
             )}
-            <div className="overflow-x-auto rounded-md border border-gray-200">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
+
+            <div className="rounded-md border border-gray-200">
+              <table className="w-full table-fixed divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="w-[20%] px-3 py-2 text-left font-medium text-gray-600">
                       Product
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="w-[18%] px-3 py-2 text-left font-medium text-gray-600">
                       SKU
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="w-[10%] px-3 py-2 text-left font-medium text-gray-600">
                       Available
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="w-[10%] px-3 py-2 text-left font-medium text-gray-600">
                       Original Qty
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="w-[16%] px-3 py-2 text-left font-medium text-gray-600">
                       Quoted Qty
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="w-[13%] px-3 py-2 text-left font-medium text-gray-600">
                       Unit Price
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="w-[13%] px-3 py-2 text-right font-medium text-gray-600">
                       Line Total
                     </th>
                   </tr>
@@ -489,8 +538,12 @@ const TransactionDetailsPage = () => {
                         key={row.orderItemId}
                         className={hasQuantityError ? "bg-red-50/40" : undefined}
                       >
-                        <td className="px-3 py-2">{row.productName}</td>
-                        <td className="px-3 py-2 font-mono">{row.sku}</td>
+                        <td className="break-words px-3 py-2 text-gray-900">
+                          {row.productName}
+                        </td>
+                        <td className="break-all px-3 py-2 font-mono text-xs text-gray-700">
+                          {row.sku}
+                        </td>
                         <td
                           className={`px-3 py-2 ${
                             exceedsAvailableStock
@@ -501,7 +554,7 @@ const TransactionDetailsPage = () => {
                           {row.availableStock}
                         </td>
                         <td className="px-3 py-2">{row.originalQuantity}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 align-top">
                           <input
                             type="number"
                             min={1}
@@ -514,7 +567,7 @@ const TransactionDetailsPage = () => {
                                 event.target.value
                               )
                             }
-                            className={`w-24 rounded-md border px-2 py-1 ${
+                            className={`w-full rounded-md border px-2 py-1 ${
                               hasQuantityError
                                 ? "border-red-400 bg-red-50 text-red-700"
                                 : "border-gray-300"
@@ -539,10 +592,10 @@ const TransactionDetailsPage = () => {
                                 event.target.value
                               )
                             }
-                            className="w-28 rounded-md border border-gray-300 px-2 py-1"
+                            className="w-full rounded-md border border-gray-300 px-2 py-1"
                           />
                         </td>
-                        <td className="px-3 py-2 font-medium text-gray-800">
+                        <td className="px-3 py-2 text-right font-medium text-gray-800">
                           {(row.quantity * row.price).toFixed(2)}
                         </td>
                       </tr>
@@ -551,29 +604,35 @@ const TransactionDetailsPage = () => {
                 </tbody>
               </table>
             </div>
-            <div className="mt-4 text-sm font-semibold text-gray-900">
-              Quoted Total:{" "}
-              {quotationRows
-                .reduce((sum, row) => sum + row.quantity * row.price, 0)
-                .toFixed(2)}
-            </div>
           </div>
-          <div className="mt-6 sticky bottom-0 border-t border-gray-200 bg-gradient-to-br from-white to-gray-50 pt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={handleCloseQuotationModal}
-              className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={requestIssueQuotation}
-              disabled={!canSubmitQuotation || isIssuingQuotation}
-              className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-            >
-              {isIssuingQuotation ? "Sending..." : "Send Quotation"}
-            </button>
+
+          <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-gray-900">
+                Quoted Total:{" "}
+                {quotationRows
+                  .reduce((sum, row) => sum + row.quantity * row.price, 0)
+                  .toFixed(2)}
+              </p>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseQuotationModal}
+                  className="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={requestIssueQuotation}
+                  disabled={!canSubmitQuotation || isIssuingQuotation}
+                  className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                >
+                  {isIssuingQuotation ? "Sending..." : "Send Quotation"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </Modal>

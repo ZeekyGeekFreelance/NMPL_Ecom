@@ -13,7 +13,7 @@ const PaymentInformation = ({ payment }) => {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
         <div className="flex items-center mb-4">
           <CreditCard className="mr-2 text-blue-600" size={20} />
-          <h2 className="text-lg font-semibold">Payment Information</h2>
+          <h2 className="text-base sm:text-lg font-semibold">Payment Information</h2>
         </div>
         <p className="text-sm text-gray-500">Payment has not been generated yet.</p>
       </div>
@@ -24,7 +24,7 @@ const PaymentInformation = ({ payment }) => {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
       <div className="flex items-center mb-4">
         <CreditCard className="mr-2 text-blue-600" size={20} />
-        <h2 className="text-lg font-semibold">Payment Information</h2>
+        <h2 className="text-base sm:text-lg font-semibold">Payment Information</h2>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3 gap-x-6">
         <div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Controller } from "react-hook-form";
-import { Eye, EyeOff, LucideIcon } from "lucide-react";
+import { Eye, EyeClosed, LucideIcon } from "lucide-react";
 import {
   normalizeHumanTextForField,
   toTitleCaseWordsForTyping,
@@ -98,13 +98,13 @@ const Input: React.FC<InputProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowPassword((previous) => !previous)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-800"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-800"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-[20px] w-[20px]" />
-                    ) : (
                       <Eye className="h-[20px] w-[20px]" />
+                    ) : (
+                      <EyeClosed className="h-[20px] w-[20px]" />
                     )}
                   </button>
                 ) : null}

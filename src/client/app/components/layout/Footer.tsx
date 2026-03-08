@@ -84,8 +84,8 @@ const Footer = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 md:grid-cols-4 gap-10">
         <div>
-          <h3 className="text-xl font-semibold text-white">{PLATFORM_NAME}</h3>
-          <p className="mt-3 text-sm text-slate-400 leading-relaxed">
+          <h3 className="text-lg sm:text-xl font-semibold text-white">{PLATFORM_NAME}</h3>
+          <p className="mt-3 text-sm leading-relaxed text-slate-400">
             A complete storefront experience with safer order placement and
             confirmation-first checkout.
           </p>

@@ -187,8 +187,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
   );
   const checkoutInFlightRef = useRef(false);
   const orderSummaryRef = useRef<HTMLDivElement | null>(null);
-  const orderSummaryHeadingRef = useRef<HTMLHeadingElement | null>(null);
-  const shouldFocusSummaryOnNextSuccessRef = useRef(false);
   const summaryHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -251,71 +249,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     return query ? `${pathname}?${query}` : pathname;
   }, [pathname, searchParams]);
 
-  const focusOrderSummary = useCallback(() => {
-    const targetNode = orderSummaryHeadingRef.current || orderSummaryRef.current;
-    if (!targetNode) {
-      return;
-    }
-
-    if (typeof window !== "undefined") {
-      const topOverlayHeight = (() => {
-        const intervals = Array.from(
-          document.body.querySelectorAll<HTMLElement>("*")
-        )
-          .map((node) => {
-            const style = window.getComputedStyle(node);
-            if (style.display === "none" || style.visibility === "hidden") {
-              return null;
-            }
-
-            if (style.position !== "fixed" && style.position !== "sticky") {
-              return null;
-            }
-
-            const rect = node.getBoundingClientRect();
-            if (rect.height <= 0 || rect.bottom <= 0 || rect.top >= window.innerHeight) {
-              return null;
-            }
-
-            return {
-              top: Math.max(rect.top, 0),
-              bottom: Math.max(rect.bottom, 0),
-            };
-          })
-          .filter(
-            (
-              interval
-            ): interval is {
-              top: number;
-              bottom: number;
-            } => interval !== null
-          )
-          .sort((a, b) => a.top - b.top);
-
-        let coveredTop = 0;
-        for (const interval of intervals) {
-          if (interval.top > coveredTop + 1) {
-            continue;
-          }
-          if (interval.bottom > coveredTop) {
-            coveredTop = interval.bottom;
-          }
-        }
-
-        return coveredTop;
-      })();
-
-      const targetTop =
-        targetNode.getBoundingClientRect().top + window.scrollY - topOverlayHeight;
-      window.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
-      window.requestAnimationFrame(() => {
-        orderSummaryHeadingRef.current?.focus({ preventScroll: true });
-      });
-    }
-  }, []);
-
   const focusAndHighlightSummary = useCallback(() => {
-    focusOrderSummary();
     if (summaryHighlightTimerRef.current) {
       clearTimeout(summaryHighlightTimerRef.current);
     }
@@ -324,13 +258,21 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       setIsSummaryHighlighted(false);
       summaryHighlightTimerRef.current = null;
     }, 1800);
-  }, [focusOrderSummary]);
+  }, []);
 
   const clearCheckoutSuccessRedirectTimer = useCallback(() => {
     if (checkoutSuccessRedirectTimerRef.current) {
       clearTimeout(checkoutSuccessRedirectTimerRef.current);
       checkoutSuccessRedirectTimerRef.current = null;
     }
+  }, []);
+
+  const openNewAddressForm = useCallback(() => {
+    setAddressInputMode((previous) => (previous === "new" ? "saved" : "new"));
+    setAddressSubmitAttempted(false);
+    setAddressTouchedFields({});
+    setSummaryError(null);
+    latestSummaryRequestRef.current = "";
   }, []);
 
   useEffect(() => {
@@ -355,10 +297,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       return;
     }
 
-    if (addressInputMode === "new") {
-      return;
-    }
-
     setSelectedAddressId((previous) => {
       if (previous && addresses.some((address) => address.id === previous)) {
         return previous;
@@ -366,7 +304,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       return defaultAddressId;
     });
   }, [
-    addressInputMode,
     addresses,
     defaultAddressId,
     hasSavedAddresses,
@@ -381,7 +318,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       if (totalItems <= 0 || (requiresAddress && !effectiveAddressId)) {
         setCheckoutSummary(null);
         setSummaryError(null);
-        shouldFocusSummaryOnNextSuccessRef.current = false;
         latestSummaryRequestRef.current = "";
         return null;
       }
@@ -398,10 +334,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         latestSummaryRequestRef.current === requestKey &&
         checkoutSummary
       ) {
-        if (shouldFocusSummaryOnNextSuccessRef.current) {
-          focusAndHighlightSummary();
-          shouldFocusSummaryOnNextSuccessRef.current = false;
-        }
         return checkoutSummary;
       }
 
@@ -426,10 +358,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         }
 
         setCheckoutSummary(parsedSummary);
-        if (shouldFocusSummaryOnNextSuccessRef.current) {
-          focusAndHighlightSummary();
-          shouldFocusSummaryOnNextSuccessRef.current = false;
-        }
         return parsedSummary;
       } catch (error) {
         const message = getApiErrorMessage(
@@ -438,14 +366,12 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         );
         setCheckoutSummary(null);
         setSummaryError(message);
-        shouldFocusSummaryOnNextSuccessRef.current = false;
         return null;
       }
     },
     [
       checkoutSummary,
       deliveryMode,
-      focusAndHighlightSummary,
       getCheckoutSummary,
       selectedAddressId,
       subtotal,
@@ -457,7 +383,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     const requiresAddress = deliveryMode === "DELIVERY";
     if (
       !isAuthenticated ||
-      (requiresAddress && addressInputMode !== "saved") ||
       (requiresAddress && !selectedAddressId) ||
       totalItems <= 0
     ) {
@@ -466,7 +391,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
 
     void requestCheckoutSummary();
   }, [
-    addressInputMode,
     deliveryMode,
     isAuthenticated,
     requestCheckoutSummary,
@@ -579,7 +503,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       setAddressSubmitAttempted(false);
       setAddressTouchedFields({});
       setHasReviewedPriceBreakup(false);
-      shouldFocusSummaryOnNextSuccessRef.current = true;
       latestSummaryRequestRef.current = "";
       showToast("Address saved successfully.", "success");
     } catch (error) {
@@ -616,6 +539,113 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     addressForm.pincode
   );
   const hasAddressValidationErrors = Object.values(addressFieldErrors).some(Boolean);
+
+  const renderSavedAddressList = () => {
+    if (isAddressesLoading) {
+      return <p className="text-xs text-gray-500">Loading addresses...</p>;
+    }
+
+    if (addresses.length > 0) {
+      return (
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+          {addresses.map((address) => {
+            const isSelected = selectedAddressId === address.id;
+
+            return (
+              <label
+                key={address.id}
+                className={`block cursor-pointer rounded-lg border p-3.5 transition-all ${
+                  isSelected
+                    ? "border-indigo-500 bg-indigo-50 shadow-sm"
+                    : "border-gray-200 bg-white hover:border-indigo-300"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="checkout-address"
+                    className="mt-1 h-4 w-4 accent-indigo-600"
+                    checked={isSelected}
+                    onChange={() => {
+                      setSelectedAddressId(address.id);
+                      setHasReviewedPriceBreakup(false);
+                      setSummaryError(null);
+                      latestSummaryRequestRef.current = "";
+                    }}
+                  />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-800">
+                        {address.fullName}
+                      </p>
+                      {address.type ? (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                          {address.type}
+                        </span>
+                      ) : null}
+                      {address.isDefault ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                          Default
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {address.line1}
+                      {address.line2 ? `, ${address.line2}` : ""}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {[address.city, address.state, address.country]
+                        .filter(Boolean)
+                        .join(", ")}{" "}
+                      - {address.pincode}
+                    </p>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <p className="text-xs text-gray-600">
+                        Phone: {address.phoneNumber}
+                      </p>
+                      {!address.isDefault ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            void handleSetDefaultAddress(address.id);
+                          }}
+                          disabled={isSettingDefaultAddress}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 disabled:text-gray-400"
+                        >
+                          Set default
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3">
+        <p className="text-xs text-amber-700">
+          No saved address found. Add a new address to continue with delivery.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            if (addressInputMode !== "new") {
+              openNewAddressForm();
+            }
+          }}
+          className="mt-2 text-xs font-medium text-indigo-700 hover:text-indigo-800"
+        >
+          Add New Address
+        </button>
+      </div>
+    );
+  };
 
   const handleInitiateCheckout = async () => {
     if (checkoutInFlightRef.current || isPlacingOrder) {
@@ -657,11 +687,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       const orderReference =
         responsePayload?.orderReference ||
         (orderId ? toOrderReference(orderId) : null);
-      const redirectPath = orderReference
-        ? `/orders/${orderReference}#tracking`
-        : orderId
-          ? `/orders/${orderId}#tracking`
-          : "/orders";
+      const redirectPath = "/orders";
 
       setCheckoutSuccessState({
         isOpen: true,
@@ -733,20 +759,24 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.4 }}
-        className={`bg-white rounded-lg p-6 sm:p-8 border transition-shadow duration-300 ${
+        className={`rounded-lg border bg-white p-5 sm:p-6 transition-shadow duration-300 ${
           isSummaryHighlighted
             ? "border-indigo-400 shadow-[0_0_0_3px_rgba(99,102,241,0.2)]"
             : "border-gray-200"
         }`}
       >
         <h2
-          ref={orderSummaryHeadingRef}
           tabIndex={-1}
-          className="text-lg sm:text-xl font-semibold text-gray-800 mb-4"
+          className="type-h4 text-gray-800"
         >
-          Order Summary
+          Checkout
         </h2>
+        <p className="mt-1 type-caption text-gray-500">
+          Set delivery details first, then review totals and place the order.
+        </p>
 
+        <div className="mt-4 flex flex-col gap-4">
+          <section className="order-2 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
         <div className="space-y-3 text-sm">
           <div className="flex justify-between text-gray-700">
             <span>Total Items</span>
@@ -804,14 +834,22 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
             </label>
           </div>
         )}
+          </section>
 
-        <div className="mt-4 border-t border-gray-200 pt-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-2">
+        <section className="order-1 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 sm:p-5">
+          <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-1">
+            Delivery and Address
+          </h3>
+          <p className="mb-3 type-caption text-gray-600">
+            Choose delivery mode and address before checkout.
+          </p>
+        <div>
+          <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-2">
             Delivery Method
           </h3>
 
           <div className="space-y-2">
-            <label className="flex items-start gap-2 rounded-md border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-indigo-200 bg-white p-3 hover:border-indigo-300">
               <input
                 type="radio"
                 name="delivery-mode"
@@ -821,7 +859,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                   setDeliveryMode("DELIVERY");
                   setHasReviewedPriceBreakup(false);
                   setSummaryError(null);
-                  shouldFocusSummaryOnNextSuccessRef.current = true;
                   latestSummaryRequestRef.current = "";
                 }}
               />
@@ -831,7 +868,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
               </span>
             </label>
 
-            <label className="flex items-start gap-2 rounded-md border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-indigo-200 bg-white p-3 hover:border-indigo-300">
               <input
                 type="radio"
                 name="delivery-mode"
@@ -841,7 +878,6 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                   setDeliveryMode("PICKUP");
                   setHasReviewedPriceBreakup(false);
                   setSummaryError(null);
-                  shouldFocusSummaryOnNextSuccessRef.current = true;
                   latestSummaryRequestRef.current = "";
                 }}
               />
@@ -856,158 +892,30 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         </div>
 
         {deliveryMode === "DELIVERY" ? (
-          <div className="mt-4 border-t border-gray-200 pt-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-2">
+          <div className="mt-4 border-t border-indigo-200 pt-4">
+            <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-2">
               Delivery Address
             </h3>
 
-            <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="mb-4 flex items-center justify-end">
               <button
                 type="button"
-                onClick={() => {
-                  setAddressInputMode("saved");
-                  setAddressSubmitAttempted(false);
-                  setAddressTouchedFields({});
-                  setHasReviewedPriceBreakup(false);
-                  setSummaryError(null);
-                  latestSummaryRequestRef.current = "";
-                  if (!isAddressesLoading && !hasSavedAddresses) {
-                    setSelectedAddressId("");
-                    setCheckoutSummary(null);
-                  } else if (!selectedAddressId && defaultAddressId) {
-                    setSelectedAddressId(defaultAddressId);
-                  }
-                }}
-                className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  addressInputMode === "saved"
-                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                }`}
-              >
-                Choose Saved Address
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddressInputMode("new");
-                  setAddressSubmitAttempted(false);
-                  setAddressTouchedFields({});
-                  setHasReviewedPriceBreakup(false);
-                  setSelectedAddressId("");
-                  setCheckoutSummary(null);
-                  setSummaryError(null);
-                  latestSummaryRequestRef.current = "";
-                }}
+                onClick={openNewAddressForm}
                 className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                   addressInputMode === "new"
-                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                    ? "border-indigo-600 bg-indigo-600 text-white"
+                    : "border-indigo-200 bg-white text-gray-700 hover:bg-indigo-50"
                 }`}
               >
-                Deliver to New Address
+                {addressInputMode === "new" ? "Hide New Address Form" : "Add New Address"}
               </button>
             </div>
 
-            {addressInputMode === "saved" ? (
-              isAddressesLoading ? (
-                <p className="text-xs text-gray-500">Loading addresses...</p>
-              ) : addresses.length > 0 ? (
-                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                  {addresses.map((address) => {
-                    const isSelected = selectedAddressId === address.id;
-
-                    return (
-                      <label
-                        key={address.id}
-                        className={`block rounded-md border p-3 cursor-pointer transition-colors ${
-                          isSelected
-                            ? "border-indigo-500 bg-indigo-50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <input
-                            type="radio"
-                            name="checkout-address"
-                            className="mt-1"
-                            checked={isSelected}
-                            onChange={() => {
-                              setSelectedAddressId(address.id);
-                              setHasReviewedPriceBreakup(false);
-                              setSummaryError(null);
-                              shouldFocusSummaryOnNextSuccessRef.current = true;
-                              latestSummaryRequestRef.current = "";
-                            }}
-                          />
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium text-gray-800">
-                                {address.fullName}
-                              </p>
-                              {address.isDefault ? (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                                  Default
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {address.line1}
-                              {address.line2 ? `, ${address.line2}` : ""}
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              {[address.city, address.state, address.country]
-                                .filter(Boolean)
-                                .join(", ")}{" "}
-                              - {address.pincode}
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              Phone: {address.phoneNumber}
-                            </p>
-                          </div>
-
-                          {!address.isDefault ? (
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                void handleSetDefaultAddress(address.id);
-                              }}
-                              disabled={isSettingDefaultAddress}
-                              className="text-xs text-indigo-600 hover:text-indigo-700 disabled:text-gray-400"
-                            >
-                              Set default
-                            </button>
-                          ) : null}
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3">
-                  <p className="text-xs text-amber-700">
-                    No saved address found. Add a new address to continue with
-                    delivery.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddressInputMode("new");
-                      setAddressSubmitAttempted(false);
-                      setAddressTouchedFields({});
-                      setHasReviewedPriceBreakup(false);
-                      setSummaryError(null);
-                      latestSummaryRequestRef.current = "";
-                    }}
-                    className="mt-2 text-xs font-medium text-indigo-700 hover:text-indigo-800"
-                  >
-                    Add New Address
-                  </button>
-                </div>
-              )
-            ) : (
-              <form onSubmit={handleCreateAddress} className="mt-3 space-y-2">
+            {addressInputMode === "new" ? (
+              <form
+                onSubmit={handleCreateAddress}
+                className="mb-4 space-y-2 rounded-lg border border-indigo-200 bg-white p-3"
+              >
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     Address Type
@@ -1234,18 +1142,26 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                   {isCreatingAddress ? "Saving..." : "Save Address and Use for Checkout"}
                 </button>
               </form>
-            )}
+            ) : null}
+
+            {addressInputMode === "new" && addresses.length > 0 ? (
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">
+                Saved Addresses
+              </p>
+            ) : null}
+
+            {renderSavedAddressList()}
           </div>
         ) : (
-          <div className="mt-4 border-t border-gray-200 pt-4">
+          <div className="mt-4 border-t border-indigo-200 pt-4">
             <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
               In-store pickup selected. Delivery address is not required for this order.
             </p>
           </div>
         )}
 
-          {summaryError ? (
-            <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+        {summaryError ? (
+            <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
               {summaryError}
             </p>
           ) : null}
@@ -1258,41 +1174,45 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
             Calculating checkout summary...
           </p>
         ) : null}
+        </section>
 
-        {isAuthLoading ? (
-          <button
-            disabled
-            className="mt-4 w-full bg-gray-300 text-gray-700 py-2.5 rounded-md font-medium text-sm cursor-not-allowed"
-          >
-            Checking session...
-          </button>
-        ) : isAuthenticated ? (
-          <button
-            disabled={
-              isBusy ||
-              totalItems === 0 ||
-              (deliveryMode === "DELIVERY" && !selectedAddressId) ||
-              !checkoutSummary ||
-              !!summaryError ||
-              !hasReviewedPriceBreakup
-            }
-            onClick={handleCheckoutClick}
-            className="mt-4 w-full bg-indigo-600 text-white py-2.5 rounded-md font-medium text-sm hover:bg-indigo-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            {isBusy
-              ? "Processing..."
-              : !hasReviewedPriceBreakup
-              ? "Review Price Breakup to Continue"
-              : "Proceed to Checkout"}
-          </button>
-        ) : (
-          <Link
-            href={`/sign-in?next=${encodeURIComponent(currentPathWithSearch)}`}
-            className="mt-4 w-full inline-block text-center bg-gray-300 text-gray-800 py-2.5 rounded-md font-medium text-sm hover:bg-gray-400 transition-colors"
-          >
-            Sign in to Checkout
-          </Link>
-        )}
+        <div className="order-3 mt-2 border-t border-gray-200 pt-4">
+          {isAuthLoading ? (
+            <button
+              disabled
+              className="w-full cursor-not-allowed rounded-md bg-gray-300 py-2.5 text-sm font-medium text-gray-700"
+            >
+              Checking session...
+            </button>
+          ) : isAuthenticated ? (
+            <button
+              disabled={
+                isBusy ||
+                totalItems === 0 ||
+                (deliveryMode === "DELIVERY" && !selectedAddressId) ||
+                !checkoutSummary ||
+                !!summaryError ||
+                !hasReviewedPriceBreakup
+              }
+              onClick={handleCheckoutClick}
+              className="w-full rounded-md bg-indigo-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {isBusy
+                ? "Processing..."
+                : !hasReviewedPriceBreakup
+                ? "Review Price Breakup to Continue"
+                : "Proceed to Checkout"}
+            </button>
+          ) : (
+            <Link
+              href={`/sign-in?next=${encodeURIComponent(currentPathWithSearch)}`}
+              className="inline-block w-full rounded-md bg-gray-300 py-2.5 text-center text-sm font-medium text-gray-800 transition-colors hover:bg-gray-400"
+            >
+              Sign in to Checkout
+            </Link>
+          )}
+        </div>
+        </div>
       </motion.div>
 
       <AnimatePresence>
@@ -1328,7 +1248,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                   : "Your order has been submitted."}
               </p>
               <p className="mt-3 text-xs font-medium text-emerald-700">
-                Redirecting to tracking...
+                Redirecting to your orders...
               </p>
             </motion.div>
           </motion.div>

@@ -13,7 +13,7 @@ import { Product } from "@/app/types/productTypes";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 
 const getDefaultVariant = (variants: Product["variants"]) =>
-  variants.find((variant) => variant.stock > 0) || variants[0] || null;
+  variants[0] || null;
 
 const isBrandAttribute = (name: string) => name.trim().toLowerCase() === "brand";
 
@@ -147,11 +147,7 @@ const ProductDetailsPage = () => {
       [attributeName]: value,
     };
 
-    const exactInStockMatch = product.variants.find((variant) => {
-      if (variant.stock <= 0) {
-        return false;
-      }
-
+    const exactMatch = product.variants.find((variant) => {
       return Object.entries(nextSelections).every(
         ([attributeKey, attributeValue]) =>
           variant.attributes.some(
@@ -162,13 +158,13 @@ const ProductDetailsPage = () => {
       );
     });
 
-    if (!exactInStockMatch) {
+    if (!exactMatch) {
       // Keep current selection intact instead of auto-switching another attribute.
       return;
     }
 
     setSelectedAttributes(nextSelections);
-    setSelectedVariant(exactInStockMatch);
+    setSelectedVariant(exactMatch);
   };
 
   const selectedVariantImages =

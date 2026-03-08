@@ -94,3 +94,13 @@ export const orderRateLimiter = createLimiter({
   max: config.rateLimit.orderMax,
   message: "Too many order placement attempts. Please try again later.",
 });
+
+// Dedicated limiter for the token-refresh endpoint.
+// Prevents refresh-token flooding / DoS without blocking normal SPA usage
+// (a well-behaved client refreshes at most once per access-token lifetime).
+export const refreshTokenLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // generous for multi-tab usage, tight enough to block floods
+  message: "Too many token refresh attempts. Please log in again.",
+  keyGenerator: resolveClientIp,
+});

@@ -41,7 +41,7 @@ const ManageProduct = () => {
       <div className="min-h-screen bg-gray-50 p-4 md:p-8 flex flex-col items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
           <XCircle size={48} className="text-rose-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="type-h3 text-gray-800 mb-2">
             Error Loading Product
           </h2>
           <p className="text-gray-600 mb-6">
@@ -64,7 +64,7 @@ const ManageProduct = () => {
       <div className="min-h-screen bg-gray-50 p-4 md:p-8 flex flex-col items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
           <AlertCircle size={48} className="text-amber-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="type-h3 text-gray-800 mb-2">
             Product Not Found
           </h2>
           <p className="text-gray-600 mb-6">The product could not be found.</p>

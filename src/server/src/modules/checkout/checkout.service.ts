@@ -17,13 +17,14 @@ export class CheckoutService {
   async placeOrder(
     userId: string,
     cartId: string,
-    data: { addressId?: string; deliveryMode: "PICKUP" | "DELIVERY" }
+    data: { addressId?: string; deliveryMode: "PICKUP" | "DELIVERY"; expectedTotal?: number }
   ) {
     return this.orderService.createOrderFromCart(
       userId,
       cartId,
       data.addressId,
-      data.deliveryMode
+      data.deliveryMode,
+      data.expectedTotal
     );
   }
 }

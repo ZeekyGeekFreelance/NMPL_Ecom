@@ -856,10 +856,10 @@ const UserProfile = () => {
                   )}
 
                   <div>
-                    <h1 className="text-2xl font-semibold">
+                    <h1 className="type-h2 font-semibold">
                       {user.name || "Account"}
                     </h1>
-                    <p className="text-sm text-slate-200 mt-1">
+                    <p className="type-body-sm text-slate-200 mt-1">
                       {accountMeta.title}
                     </p>
                   </div>
@@ -889,7 +889,7 @@ const UserProfile = () => {
                 <div className="rounded-xl border border-gray-200 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <User size={16} className="text-indigo-600" />
-                    <h3 className="text-sm font-semibold text-gray-800">Identity</h3>
+                    <h3 className="text-sm sm:text-base font-semibold text-gray-800">Identity</h3>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="text-gray-700">
@@ -971,7 +971,7 @@ const UserProfile = () => {
                 <div className="rounded-xl border border-gray-200 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <CalendarDays size={16} className="text-indigo-600" />
-                    <h3 className="text-sm font-semibold text-gray-800">Account Status</h3>
+                    <h3 className="text-sm sm:text-base font-semibold text-gray-800">Account Status</h3>
                   </div>
                   <div className="space-y-2 text-sm">
                     <p className="text-gray-700">
@@ -1043,7 +1043,7 @@ const UserProfile = () => {
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <WalletCards size={16} className="text-blue-700" />
-                    <h3 className="text-sm font-semibold text-blue-900">
+                    <h3 className="text-sm sm:text-base font-semibold text-blue-900">
                       Customer Scope
                     </h3>
                   </div>
@@ -1058,7 +1058,7 @@ const UserProfile = () => {
                 <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <LayoutDashboard size={16} className="text-indigo-700" />
-                    <h3 className="text-sm font-semibold text-indigo-900">
+                    <h3 className="text-sm sm:text-base font-semibold text-indigo-900">
                       Admin Scope
                     </h3>
                   </div>
@@ -1073,7 +1073,7 @@ const UserProfile = () => {
                 <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Crown size={16} className="text-rose-700" />
-                    <h3 className="text-sm font-semibold text-rose-900">
+                    <h3 className="text-sm sm:text-base font-semibold text-rose-900">
                       Superadmin Scope
                     </h3>
                   </div>
@@ -1085,11 +1085,11 @@ const UserProfile = () => {
               )}
 
               {shouldShowAddressBook && (
-                <div className="rounded-xl border border-gray-200 p-4">
+                <div className="flex flex-col rounded-xl border border-gray-200 p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <MapPin size={16} className="text-indigo-600" />
-                      <h3 className="text-sm font-semibold text-gray-800">
+                      <h3 className="text-sm sm:text-base font-semibold text-gray-800">
                         Saved Addresses
                       </h3>
                     </div>
@@ -1121,107 +1121,8 @@ const UserProfile = () => {
                     </button>
                   </div>
 
-                  {isAddressesLoading ? (
-                    <p className="text-sm text-gray-600">Loading saved addresses...</p>
-                  ) : addresses.length === 0 ? (
-                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                      No address saved yet. Add one now for faster checkout.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {addresses.map((address) => (
-                        <div
-                          key={address.id}
-                          className={`rounded-md border p-3 ${
-                            editingAddressId === address.id
-                              ? "border-indigo-300 bg-indigo-50/40"
-                              : "border-gray-200 bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-semibold text-gray-800">
-                                  {address.fullName}
-                                </p>
-                                <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">
-                                  {address.type}
-                                </span>
-                                {address.isDefault && (
-                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                                    Default
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-gray-600 mt-1">
-                                {address.line1}
-                                {address.line2 ? `, ${address.line2}` : ""}
-                                {address.landmark ? `, ${address.landmark}` : ""}
-                              </p>
-                              <p className="text-xs text-gray-600">
-                                {[address.city, address.state, address.country]
-                                  .filter(Boolean)
-                                  .join(", ")}{" "}
-                                - {address.pincode}
-                              </p>
-                              <p className="text-xs text-gray-600">
-                                Phone: {address.phoneNumber}
-                              </p>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2">
-                              {!address.isDefault && (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleSetDefaultAddress(address.id)}
-                                  disabled={
-                                    isSettingDefaultAddress ||
-                                    isDeletingAddress ||
-                                    isSubmittingAddress
-                                  }
-                                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Set Default
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => openAddressEditor(address)}
-                                disabled={
-                                  isSettingDefaultAddress ||
-                                  isDeletingAddress ||
-                                  isSubmittingAddress
-                                }
-                                className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                <Pencil size={12} />
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openDeleteAddressConfirm(address)}
-                                disabled={
-                                  isSettingDefaultAddress ||
-                                  isDeletingAddress ||
-                                  isSubmittingAddress
-                                }
-                                className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                <Trash2 size={12} />
-                                {deletingAddressId === address.id ? "Deleting..." : "Delete"}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {isAddressesFetching && (
-                    <p className="mt-2 text-xs text-gray-500">Refreshing address list...</p>
-                  )}
-
-                  {isAddressFormOpen && (
+                  <div className="order-1">
+                    {isAddressFormOpen && (
                     <form
                       ref={addressFormRef}
                       tabIndex={-1}
@@ -1484,14 +1385,117 @@ const UserProfile = () => {
                       )}
                     </form>
                   )}
+                  </div>
+
+                  <div className="order-2">
+                    {isAddressesLoading ? (
+                      <p className="text-sm text-gray-600">Loading saved addresses...</p>
+                    ) : addresses.length === 0 ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        No address saved yet. Add one now for faster checkout.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {addresses.map((address) => (
+                          <div
+                            key={address.id}
+                            className={`rounded-md border p-3 ${
+                              editingAddressId === address.id
+                                ? "border-indigo-300 bg-indigo-50/40"
+                                : "border-gray-200 bg-gray-50"
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-semibold text-gray-800">
+                                    {address.fullName}
+                                  </p>
+                                  <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                                    {address.type}
+                                  </span>
+                                  {address.isDefault && (
+                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                      Default
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-600 mt-1">
+                                  {address.line1}
+                                  {address.line2 ? `, ${address.line2}` : ""}
+                                  {address.landmark ? `, ${address.landmark}` : ""}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  {[address.city, address.state, address.country]
+                                    .filter(Boolean)
+                                    .join(", ")}{" "}
+                                  - {address.pincode}
+                                </p>
+                                <p className="text-xs text-gray-600">
+                                  Phone: {address.phoneNumber}
+                                </p>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                {!address.isDefault && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleSetDefaultAddress(address.id)}
+                                    disabled={
+                                      isSettingDefaultAddress ||
+                                      isDeletingAddress ||
+                                      isSubmittingAddress
+                                    }
+                                    className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Set Default
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => openAddressEditor(address)}
+                                  disabled={
+                                    isSettingDefaultAddress ||
+                                    isDeletingAddress ||
+                                    isSubmittingAddress
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <Pencil size={12} />
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openDeleteAddressConfirm(address)}
+                                  disabled={
+                                    isSettingDefaultAddress ||
+                                    isDeletingAddress ||
+                                    isSubmittingAddress
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <Trash2 size={12} />
+                                  {deletingAddressId === address.id ? "Deleting..." : "Delete"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {isAddressesFetching && (
+                      <p className="mt-2 text-xs text-gray-500">Refreshing address list...</p>
+                    )}
+                  </div>
                 </div>
               )}
 
               <div className="rounded-xl border border-gray-200 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <PackageSearch size={16} className="text-indigo-600" />
-                  <h3 className="text-sm font-semibold text-gray-800">
-                    Quick Navigation
+                  <h3 className="text-sm sm:text-base font-semibold text-gray-800">
+                  Quick Navigation
                   </h3>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">

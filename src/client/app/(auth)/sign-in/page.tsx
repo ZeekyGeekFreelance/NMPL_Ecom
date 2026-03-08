@@ -81,7 +81,7 @@ const SignIn = () => {
       <MainLayout>
         <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
           <main className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 sm:p-8">
-            <h2 className="text-2xl sm:text-3xl font-semibold text-gray-800 text-center mb-6">
+            <h2 className="type-h2 text-gray-800 text-center mb-6">
               Sign In
             </h2>
             <div className="text-center text-sm mb-4 space-y-1">

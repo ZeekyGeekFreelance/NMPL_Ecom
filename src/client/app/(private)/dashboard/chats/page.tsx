@@ -32,7 +32,7 @@ const AdminChatsPage = () => {
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar with chat list */}
       <div className="w-64 bg-white border-r border-gray-200 p-4">
-        <h2 className="font-semibold text-lg mb-4">Open Support Chats</h2>
+        <h2 className="text-sm sm:text-base font-semibold mb-4">Open Support Chats</h2>
 
         {isLoading ? (
           <div>Loading open chats...</div>

@@ -242,7 +242,7 @@ const OrderSummary = ({
       className="bg-white rounded-xl shadow-md p-6 border border-gray-100"
     >
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-bold text-gray-800">Order Details</h2>
+        <h2 className="text-base sm:text-lg font-bold text-gray-800">Order Details</h2>
         <button
           type="button"
           onClick={handleDownloadInvoice}
@@ -305,7 +305,7 @@ const OrderSummary = ({
       )}
 
       <div className="mb-4">
-        <h3 className="mb-2 text-sm font-semibold text-gray-800">
+        <h3 className="mb-2 text-sm sm:text-base font-semibold text-gray-800">
           Quotation History
         </h3>
         {quotationLogs.length === 0 ? (
@@ -370,54 +370,50 @@ const OrderSummary = ({
 
       {/* Order Details Section */}
       <div className="border-b border-gray-100 pb-4 mb-4">
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2">
-            <Package size={16} />
-            <span className="font-medium text-gray-800">Tracking Number:</span>
-            <ToggleableText
-              content={order?.shipment?.trackingNumber || "Not available"}
-              truncateLength={10}
-            />
-          </div>
-          <div className="flex items-center space-x-2">
-            <ShoppingBag size={16} />
-            <span className="font-medium text-gray-800">Order ID:</span>
-            <ToggleableText
-              content={toOrderReference(order?.id || "")}
-              truncateLength={12}
-            />
-          </div>
-          <div className="flex items-center space-x-2">
-            <Calendar size={16} />
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <Package size={14} className="shrink-0 text-gray-400" />
+            <span className="text-gray-500">Tracking:</span>
             <span className="font-medium text-gray-800">
-              Placed on {formatDate(order.orderDate)}
+              <ToggleableText
+                content={order?.shipment?.trackingNumber || "Not available"}
+                truncateLength={10}
+              />
             </span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <ShoppingBag size={14} className="shrink-0 text-gray-400" />
+            <span className="text-gray-500">Order ID:</span>
+            <span className="font-medium text-gray-800">
+              <ToggleableText
+                content={toOrderReference(order?.id || "")}
+                truncateLength={12}
+              />
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Calendar size={14} className="shrink-0 text-gray-400" />
+            <span>Placed on {formatDate(order.orderDate)}</span>
           </div>
         </div>
       </div>
 
       {/* Financial Summary Section */}
-      <div className="space-y-3">
-        <div className="flex justify-between text-gray-700">
-          <p>Product Price</p>
-          <div className="flex items-center space-x-4">
-            <span className="text-gray-500">
-              {order.orderItems.length} Item(s)
-            </span>
-            <span className="font-medium text-gray-800">
-              {formatPrice(subtotal)}
-            </span>
+      <div className="space-y-2.5 text-sm">
+        <div className="flex justify-between text-gray-600">
+          <span>Product Price</span>
+          <div className="flex items-center gap-3">
+            <span className="text-gray-400">{order.orderItems.length} item(s)</span>
+            <span className="font-medium text-gray-800">{formatPrice(subtotal)}</span>
           </div>
         </div>
-        <div className="flex justify-between text-gray-700">
-          <p>Delivery Charge</p>
-          <span className="font-medium text-gray-800">
-            {formatPrice(deliveryCharge)}
-          </span>
+        <div className="flex justify-between text-gray-600">
+          <span>Delivery Charge</span>
+          <span className="font-medium text-gray-800">{formatPrice(deliveryCharge)}</span>
         </div>
-        <div className="flex justify-between pt-2 border-t border-gray-100">
-          <p className="font-semibold text-gray-800">Total</p>
-          <span className="font-semibold text-gray-800">{total}</span>
+        <div className="flex justify-between pt-2 border-t border-gray-100 text-gray-800">
+          <span className="font-semibold">Total</span>
+          <span className="font-semibold">{total}</span>
         </div>
       </div>
 

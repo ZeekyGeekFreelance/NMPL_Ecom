@@ -105,7 +105,7 @@ const createApolloClient = (initialState: any = null) => {
   const retryLink = new RetryLink({
     attempts: {
       max: 4,
-      retryIf: (error, _operation) => {
+      retryIf: (error) => {
         if (!error) return false;
 
         // Always retry transient network failures ("Failed to fetch",

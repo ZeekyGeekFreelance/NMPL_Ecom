@@ -395,8 +395,10 @@ export class UserService {
     return changes;
   }
 
-  async getAllUsers() {
-    const users = await this.userRepository.findAllUsers();
+  async getAllUsers(options?: { page?: number; limit?: number }) {
+    const limit = Math.min(options?.limit ?? 50, 200);
+    const skip = ((options?.page ?? 1) - 1) * limit;
+    const users = await this.userRepository.findAllUsers({ skip, take: limit });
     return users.map((user) => this.withAccountReference(user));
   }
 

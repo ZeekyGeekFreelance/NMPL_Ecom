@@ -75,63 +75,51 @@ export class CartService {
     abandonmentRate: number;
     potentialRevenueLost: number;
   }> {
-    const cartEvents = await prisma.cartEvent.findMany({
-      where: {
-        timestamp: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      include: {
-        cart: {
-          include: { cartItems: { include: { variant: true } } },
-        },
-        user: true,
-      },
+    // Step 1: distinct cart IDs that had an ADD event in the window (lightweight).
+    const cartsWithAdd = await prisma.cartEvent.findMany({
+      where: { eventType: "ADD", timestamp: { gte: startDate, lte: endDate } },
+      select: { cartId: true },
+      distinct: ["cartId"],
     });
 
-    const cartEventsByCartId = cartEvents.reduce((acc: any, event) => {
-      if (!acc[event.cartId]) acc[event.cartId] = [];
-      acc[event.cartId].push(event);
-      return acc;
-    }, {});
-
-    let totalCarts = 0;
-    let totalAbandonedCarts = 0;
-    let potentialRevenueLost = 0;
-
-    for (const cartId in cartEventsByCartId) {
-      const events = cartEventsByCartId[cartId];
-      const hasAddToCart = events.some((e: any) => e.eventType === "ADD");
-      const hasCheckoutCompleted = events.some(
-        (e: any) => e.eventType === "CHECKOUT_COMPLETED"
-      );
-
-      const cart = events[0].cart;
-      if (!cart || !cart.cartItems || cart.cartItems.length === 0) continue;
-
-      totalCarts++;
-
-      if (hasAddToCart && !hasCheckoutCompleted) {
-        const addToCartEvent = events.find((e: any) => e.eventType === "ADD");
-        const oneHourLater = new Date(
-          addToCartEvent.timestamp.getTime() + 60 * 60 * 1000
-        );
-        const now = new Date();
-
-        if (now > oneHourLater) {
-          totalAbandonedCarts++;
-          potentialRevenueLost += cart.cartItems.reduce(
-            (sum: number, item: any) =>
-              sum + item.quantity * item.variant.price,
-            0
-          );
-        }
-      }
+    const totalCarts = cartsWithAdd.length;
+    if (totalCarts === 0) {
+      return { totalAbandonedCarts: 0, abandonmentRate: 0, potentialRevenueLost: 0 };
     }
 
-    const abandonmentRate =
-      totalCarts > 0 ? (totalAbandonedCarts / totalCarts) * 100 : 0;
+    const addedCartIds = cartsWithAdd.map((e) => e.cartId);
+
+    // Step 2: which of those also completed checkout? (no includes needed)
+    const cartsWithCheckout = await prisma.cartEvent.findMany({
+      where: {
+        cartId: { in: addedCartIds },
+        eventType: "CHECKOUT_COMPLETED",
+      },
+      select: { cartId: true },
+      distinct: ["cartId"],
+    });
+    const checkoutSet = new Set(cartsWithCheckout.map((e) => e.cartId));
+
+    // Carts that added items but never checked out — abandoned.
+    const abandonedCartIds = addedCartIds.filter((id) => !checkoutSet.has(id));
+    const totalAbandonedCarts = abandonedCartIds.length;
+
+    // Step 3: estimate revenue lost using a targeted aggregation on abandoned carts only.
+    // Prisma can't SUM(quantity * price) natively, so we use a raw aggregate:
+    // sum each item's (quantity × variant.price) across all abandoned cart items.
+    let potentialRevenueLost = 0;
+    if (abandonedCartIds.length > 0) {
+      const items = await prisma.cartItem.findMany({
+        where: { cartId: { in: abandonedCartIds } },
+        select: { quantity: true, variant: { select: { price: true } } },
+      });
+      potentialRevenueLost = items.reduce(
+        (sum, item) => sum + item.quantity * Number(item.variant.price),
+        0
+      );
+    }
+
+    const abandonmentRate = (totalAbandonedCarts / totalCarts) * 100;
 
     return {
       totalAbandonedCarts,
@@ -223,8 +211,23 @@ export class CartService {
       return;
     }
 
-    // Cart now uses authenticated user ownership as the single source of truth.
-    await this.getOrCreateCart(userId);
+    // #12: Look up the guest session cart. Nothing to merge if it doesn't exist or is empty.
+    const sessionCart = await this.cartRepository.getCartBySessionId(sessionId);
+    if (!sessionCart || !sessionCart.cartItems.length) {
+      return;
+    }
+
+    // Ensure the user has an active cart to merge into.
+    const userCart = await this.getOrCreateCart(userId);
+
+    // Guard against merging a cart into itself (shouldn't happen, but be safe).
+    if (sessionCart.id === userCart.id) {
+      return;
+    }
+
+    // Merge session cart items into the user cart, then delete the session cart.
+    // mergeCarts handles quantity accumulation per item.
+    await this.cartRepository.mergeCarts(sessionCart.id, userCart.id);
   }
 
   async clearCartOnSignOut(userId?: string) {

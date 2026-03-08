@@ -42,7 +42,7 @@ const ProductHeader: React.FC<ProductHeaderProps> = ({
             <Package className="text-indigo-600" size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{product.name}</h1>
+            <h1 className="type-h3 text-gray-800">{product.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <span className="font-semibold text-gray-900">
                 {formattedPrice}

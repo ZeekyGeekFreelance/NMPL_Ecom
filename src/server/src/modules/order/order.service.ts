@@ -101,8 +101,10 @@ export class OrderService {
     });
   }
 
-  async getAllOrders() {
-    return this.orderRepository.findAllOrders();
+  async getAllOrders(options?: { page?: number; limit?: number }) {
+    const limit = Math.min(options?.limit ?? 50, 200);
+    const skip = ((options?.page ?? 1) - 1) * limit;
+    return this.orderRepository.findAllOrders({ skip, take: limit });
   }
 
   async getUserOrders(userId: string) {
@@ -549,7 +551,8 @@ export class OrderService {
     userId: string,
     cartId: string,
     addressId: string | undefined,
-    deliveryMode: "PICKUP" | "DELIVERY"
+    deliveryMode: "PICKUP" | "DELIVERY",
+    expectedTotal?: number
   ) {
     const draft = await this.buildCheckoutOrderDraft({
       userId,
@@ -557,6 +560,19 @@ export class OrderService {
       addressId,
       deliveryMode,
     });
+
+    // Guard against price drift between the checkout summary preview and actual
+    // order placement (e.g. dealer pricing changed, delivery quote updated).
+    // Tolerance: ₹0.01 (sub-penny rounding is acceptable).
+    if (expectedTotal !== undefined) {
+      const drift = Math.abs(draft.pricing.finalTotal - expectedTotal);
+      if (drift > 0.01) {
+        throw new AppError(
+          409,
+          `Order total has changed from ₹${expectedTotal.toFixed(2)} to ₹${draft.pricing.finalTotal.toFixed(2)}. Please review the updated summary and confirm.`
+        );
+      }
+    }
 
     const order = await this.orderRepository.createOrder({
       userId,
@@ -608,22 +624,35 @@ export class OrderService {
   private async getAdminNotificationRecipients(
     excludeEmail?: string
   ): Promise<string[]> {
-    const admins = await prisma.user.findMany({
+    // Only notify admins who are designated billing supervisors.
+    // This prevents every admin/superadmin from receiving a copy on every order.
+    const billingSupervisors = await prisma.user.findMany({
       where: {
-        role: {
-          in: [ROLE.ADMIN, ROLE.SUPERADMIN],
-        },
+        role: { in: [ROLE.ADMIN, ROLE.SUPERADMIN] },
+        isBillingSupervisor: true,
       },
-      select: {
-        email: true,
-      },
+      select: { email: true },
     });
 
     const normalizedExclude = excludeEmail?.trim().toLowerCase();
-    const emails = admins
+
+    let emails = billingSupervisors
       .map((admin) => admin.email?.trim())
       .filter((email): email is string => !!email)
       .filter((email) => email.toLowerCase() !== normalizedExclude);
+
+    // Fallback: if no billing supervisors are configured, use BILLING_NOTIFICATION_EMAILS
+    // so order alerts are never silently dropped.
+    if (emails.length === 0) {
+      const fallbackRaw = config.branding.billingNotificationEmails;
+      if (fallbackRaw) {
+        emails = fallbackRaw
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean)
+          .filter((email) => email.toLowerCase() !== normalizedExclude);
+      }
+    }
 
     return Array.from(new Set(emails));
   }

@@ -1,7 +1,9 @@
 "use client";
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { X, SlidersHorizontal } from "lucide-react";
+import { X, SlidersHorizontal, ChevronDown, Search, Loader2 } from "lucide-react";
+import { useLazyQuery } from "@apollo/client";
+import { GET_CATEGORIES_SEARCH } from "@/app/gql/Product";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import CheckBox from "@/app/components/atoms/CheckBox";
 import { debounce } from "lodash";
@@ -28,15 +30,163 @@ interface ProductFiltersProps {
   initialFilters: FilterValues;
   currentSortBy?: SortByOption;
   onFilterChange: (filters: FilterValues) => void;
-  categories: Array<{ id: string; name: string }>;
+  // `categories` prop is kept for backward-compat but is no longer used
+  // for the filter dropdown — the dropdown now lazy-searches server-side.
+  categories?: Array<{ id: string; name: string }>;
   isMobile?: boolean;
   onCloseMobile?: () => void;
 }
 
+// ── Searchable category dropdown ─────────────────────────────────────────────
+// Replaces the static flat list. Fires a server-side search on each keystroke
+// (debounced 250 ms). Works correctly with 1 330+ categories.
+interface CategorySearchDropdownProps {
+  value: string | undefined;
+  onChange: (id: string | undefined) => void;
+}
+
+const CATEGORY_FETCH_LIMIT = 50;
+
+const CategorySearchDropdown: React.FC<CategorySearchDropdownProps> = ({
+  value,
+  onChange,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [selectedLabel, setSelectedLabel] = useState("All Categories");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [fetchCategories, { data, loading }] = useLazyQuery(
+    GET_CATEGORIES_SEARCH,
+    { fetchPolicy: "cache-and-network" }
+  );
+
+  const debouncedFetch = useMemo(
+    () =>
+      debounce((q: string) => {
+        fetchCategories({
+          variables: { search: q || undefined, first: CATEGORY_FETCH_LIMIT },
+        });
+      }, 250),
+    [fetchCategories]
+  );
+
+  // Fetch on open (empty search = first 50 alphabetically)
+  useEffect(() => {
+    if (open) {
+      debouncedFetch("");
+    }
+  }, [debouncedFetch, open]);
+
+  useEffect(() => {
+    return () => debouncedFetch.cancel();
+  }, [debouncedFetch]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const handleSearch = (q: string) => {
+    setSearchInput(q);
+    debouncedFetch(q);
+  };
+
+  const handleSelect = (id: string, name: string) => {
+    onChange(id || undefined);
+    setSelectedLabel(id ? name : "All Categories");
+    setOpen(false);
+    setSearchInput("");
+  };
+
+  // When value is cleared externally, reset label
+  useEffect(() => {
+    if (!value) setSelectedLabel("All Categories");
+  }, [value]);
+
+  const results: Array<{ id: string; name: string }> = data?.categories ?? [];
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm text-left text-gray-800 hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDown size={16} className={`shrink-0 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+          {/* Search input */}
+          <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+            <Search size={14} className="text-gray-400 shrink-0" />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search categories..."
+              value={searchInput}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="flex-1 text-sm outline-none bg-transparent placeholder-gray-400"
+            />
+            {loading && <Loader2 size={14} className="animate-spin text-gray-400 shrink-0" />}
+          </div>
+
+          {/* List */}
+          <ul className="max-h-52 overflow-y-auto py-1">
+            {/* "All" option */}
+            <li>
+              <button
+                type="button"
+                onClick={() => handleSelect("", "All Categories")}
+                className={`w-full px-3.5 py-2.5 text-left text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors ${
+                  !value ? "font-semibold text-indigo-700 bg-indigo-50" : "text-gray-700"
+                }`}
+              >
+                All Categories
+              </button>
+            </li>
+            {results.map((cat) => (
+              <li key={cat.id}>
+                <button
+                  type="button"
+                  onClick={() => handleSelect(cat.id, cat.name)}
+                  className={`w-full px-3.5 py-2.5 text-left text-sm hover:bg-indigo-50 hover:text-indigo-700 transition-colors ${
+                    value === cat.id ? "font-semibold text-indigo-700 bg-indigo-50" : "text-gray-700"
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              </li>
+            ))}
+            {!loading && results.length === 0 && (
+              <li className="px-3.5 py-4 text-center text-sm text-gray-400">
+                No categories found
+              </li>
+            )}
+            {results.length === CATEGORY_FETCH_LIMIT && (
+              <li className="px-3.5 py-2 text-center text-xs text-gray-400 border-t border-gray-100">
+                Showing first {CATEGORY_FETCH_LIMIT} — type to search more
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ProductFilters: React.FC<ProductFiltersProps> = ({
   initialFilters,
   onFilterChange,
-  categories,
   isMobile = false,
   onCloseMobile,
 }) => {
@@ -132,15 +282,6 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
     });
     if (isMobile && onCloseMobile) onCloseMobile();
   };
-
-  // Format categories for dropdown
-  const categoryOptions = [
-    { label: "All Categories", value: "" },
-    ...categories.map((category) => ({
-      label: category.name,
-      value: category.id,
-    })),
-  ];
 
   const sortOptions = [
     { label: "Relevance", value: "RELEVANCE" },
@@ -261,11 +402,9 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
               name="categoryId"
               control={control}
               render={({ field }) => (
-                <Dropdown
-                  options={categoryOptions}
-                  value={field.value || ""}
-                  onChange={(val) => field.onChange(val || undefined)}
-                  className="w-full"
+                <CategorySearchDropdown
+                  value={field.value}
+                  onChange={(id) => field.onChange(id)}
                 />
               )}
             />

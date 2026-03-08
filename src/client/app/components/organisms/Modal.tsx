@@ -2,37 +2,58 @@
 
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 
 interface ModalProps {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  contentClassName?: string;
 }
 
-const Modal: React.FC<ModalProps> = ({ open, onClose, children }) => {
+const Modal: React.FC<ModalProps> = ({
+  open,
+  onClose,
+  children,
+  contentClassName = "",
+}) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  const baseContentLayoutClassName =
+    "max-h-[calc(100dvh-2rem)] w-full min-h-0";
+  const resolvedContentLayoutClassName =
+    contentClassName.trim().length > 0
+      ? contentClassName
+      : "max-w-2xl overflow-y-auto p-6";
 
-  // useEffect(() => {
-  //   const handleClickOutside = (event: MouseEvent) => {
-  //     if (
-  //       modalRef.current &&
-  //       !modalRef.current.contains(event.target as Node)
-  //     ) {
-  //       onClose();
-  //     }
-  //   };
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
 
-  //   if (open) {
-  //     document.addEventListener("mousedown", handleClickOutside);
-  //     document.body.style.overflow = "hidden"; // Prevent background scroll
-  //   }
+    const body = document.body;
+    const previousOverflow = body.style.overflow;
+    const previousTouchAction = body.style.touchAction;
+    const currentCount = Number(body.dataset.modalOpenCount || "0");
+    const nextCount = currentCount + 1;
 
-  //   return () => {
-  //     document.removeEventListener("mousedown", handleClickOutside);
-  //     document.body.style.overflow = "auto";
-  //   };
-  // }, [open, onClose]);
+    body.dataset.modalOpenCount = String(nextCount);
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+
+    return () => {
+      const latestCount = Number(body.dataset.modalOpenCount || "1");
+      const decrementedCount = Math.max(0, latestCount - 1);
+
+      if (decrementedCount === 0) {
+        delete body.dataset.modalOpenCount;
+        body.style.overflow = previousOverflow;
+        body.style.touchAction = previousTouchAction;
+        return;
+      }
+
+      body.dataset.modalOpenCount = String(decrementedCount);
+    };
+  }, [open]);
 
   // Animation variants for the backdrop
   const backdropVariants = {
@@ -72,7 +93,12 @@ const Modal: React.FC<ModalProps> = ({ open, onClose, children }) => {
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 bg-opacity-70 backdrop-blur-md flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-contain bg-black/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              onClose();
+            }
+          }}
           variants={backdropVariants}
           initial="hidden"
           animate="visible"
@@ -80,7 +106,7 @@ const Modal: React.FC<ModalProps> = ({ open, onClose, children }) => {
         >
           <motion.div
             ref={modalRef}
-            className="relative bg-gradient-to-br from-white to-gray-50 rounded-xl p-8 w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl border border-gray-100/20"
+            className={`relative flex min-h-0 flex-col rounded-xl border border-gray-200 bg-white shadow-xl ${baseContentLayoutClassName} ${resolvedContentLayoutClassName}`}
             variants={modalVariants}
             initial="hidden"
             animate="visible"
@@ -89,7 +115,7 @@ const Modal: React.FC<ModalProps> = ({ open, onClose, children }) => {
             {/* Close button with hover animation */}
             <motion.button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-all duration-200 group"
+              className="absolute right-4 top-4 z-20 rounded-full bg-gray-100 p-2 text-gray-600 transition-all duration-200 group hover:bg-gray-200 hover:text-gray-900"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
             >
@@ -99,11 +125,8 @@ const Modal: React.FC<ModalProps> = ({ open, onClose, children }) => {
               />
             </motion.button>
 
-            {/* Content container with subtle gradient border */}
-            <div className="relative z-10">{children}</div>
-
-            {/* Decorative glow effect */}
-            <div className="absolute inset-0 -z-10 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-xl blur-3xl opacity-50" />
+            {/* Content container */}
+            <div className="relative z-10 min-h-0 flex-1">{children}</div>
           </motion.div>
         </motion.div>
       )}

@@ -183,7 +183,7 @@ const Navbar = () => {
         <div className="flex h-16 items-center justify-between gap-3">
           <Link
             href={brandHref}
-            className="flex items-center gap-2 text-gray-900 font-semibold text-lg"
+            className="flex items-center gap-2 text-gray-900 font-semibold text-base sm:text-lg"
           >
             <span className="rounded-lg bg-teal-700 text-white p-1.5">
               <Store size={18} />
