@@ -320,7 +320,6 @@ model Order {
   orderItems  OrderItem[]
   payment     Payment?     @relation("OrderPayment")
   address     OrderAddressSnapshot? @relation("OrderAddress")
-  shipment    Shipment?    @relation("OrderShipment")
   transaction Transaction? @relation("OrderTransaction")
   reservation OrderReservation?
   quotationLogs OrderQuotationLog[]
@@ -448,20 +447,6 @@ model DeliveryStateRate {
   updatedAt     DateTime @updatedAt
 
   @@index([isServiceable])
-}
-
-model Shipment {
-  id             String    @id @default(uuid())
-  carrier        String
-  trackingNumber String
-  shippedDate    DateTime
-  deliveryDate   DateTime?
-  order          Order     @relation("OrderShipment", fields: [orderId], references: [id], onDelete: Cascade)
-  orderId        String    @unique
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@index([orderId])
 }
 
 model Transaction {

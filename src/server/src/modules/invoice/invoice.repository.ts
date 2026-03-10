@@ -15,7 +15,6 @@ const invoiceWithDetailsInclude = {
       },
       payment: true,
       address: true,
-      shipment: true,
       transaction: true,
     },
   },

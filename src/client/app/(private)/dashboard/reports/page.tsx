@@ -4,25 +4,39 @@ import { Loader2 } from "lucide-react";
 import { useLazyGenerateReportQuery } from "@/app/store/apis/ReportsApi";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import DateRangePicker from "@/app/components/molecules/DateRangePicker";
+import { useForm } from "react-hook-form";
 
 interface DropdownOption {
   label: string;
   value: string;
 }
 
+interface ReportsFormData {
+  startDate?: string;
+  endDate?: string;
+}
+
 const ReportsDashboard: React.FC = () => {
   const currentYear = new Date().getFullYear();
   const todayIso = new Date().toISOString().split("T")[0];
+  const { control, watch, setValue } = useForm<ReportsFormData>({
+    defaultValues: {
+      startDate: "",
+      endDate: "",
+    },
+  });
 
   const [generateReport, { isLoading }] = useLazyGenerateReportQuery();
   const [reportType, setReportType] = useState<string | null>("sales");
   const [format, setFormat] = useState<string | null>("pdf");
   const [timePeriod, setTimePeriod] = useState<string | null>("allTime");
   const [year, setYear] = useState<string | null>(String(currentYear));
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const startDate = watch("startDate") || "";
+  const endDate = watch("endDate") || "";
 
   // Dropdown options
   const reportTypeOptions: DropdownOption[] = [
@@ -131,14 +145,18 @@ const ReportsDashboard: React.FC = () => {
   // Clear custom dates when timePeriod changes
   useEffect(() => {
     if (timePeriod !== "custom") {
-      setStartDate("");
-      setEndDate("");
+      setValue("startDate", "");
+      setValue("endDate", "");
     }
-  }, [timePeriod]);
+  }, [setValue, timePeriod]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-8">
+      <div
+        className={`mx-auto rounded-lg bg-white p-8 shadow-lg transition-[max-width] duration-300 ${
+          isCalendarOpen ? "max-w-5xl" : "max-w-4xl"
+        }`}
+      >
         <h1 className="type-h2 text-gray-800 mb-6">
           Reports Dashboard
         </h1>
@@ -203,49 +221,14 @@ const ReportsDashboard: React.FC = () => {
 
           {/* Custom Date Range (visible only for custom) */}
           {timePeriod === "custom" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="startDate"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  id="startDate"
-                  value={startDate}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    setStartDate(nextValue);
-                    if (endDate && nextValue > endDate) {
-                      setEndDate(nextValue);
-                    }
-                  }}
-                  max={endDate || todayIso}
-                  className="mt-1 block h-11 w-full rounded-md border border-gray-300 px-3 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  required={timePeriod === "custom"}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="endDate"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  id="endDate"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  min={startDate}
-                  max={todayIso}
-                  className="mt-1 block h-11 w-full rounded-md border border-gray-300 px-3 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  required={timePeriod === "custom"}
-                />
-              </div>
-            </div>
+            <DateRangePicker
+              label="Custom Date Range"
+              control={control}
+              startName="startDate"
+              endName="endDate"
+              inlinePanel
+              onOpenChange={setIsCalendarOpen}
+            />
           )}
 
           {/* Error/Success Messages */}
@@ -257,7 +240,7 @@ const ReportsDashboard: React.FC = () => {
           )}
 
           {/* Submit Button */}
-          <div>
+          <div className="sticky bottom-0 z-10 -mx-8 border-t border-gray-100 bg-white/95 px-8 pt-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
             <button
               type="submit"
               disabled={isLoading}

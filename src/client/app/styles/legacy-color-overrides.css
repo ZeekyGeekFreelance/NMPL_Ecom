@@ -97,8 +97,10 @@
 [class~="disabled:bg-blue-300"]:disabled { background-color: var(--color-primary-muted) !important; }
 [class~="disabled:bg-blue-400"]:disabled { background-color: var(--color-primary-muted) !important; }
 [class~="disabled:bg-indigo-300"]:disabled { background-color: var(--color-primary-muted) !important; }
-[class~="disabled:hover:bg-blue-600"]:disabled:hover { background-color: var(--color-primary-hover) !important; }
-[class~="disabled:hover:bg-green-600"]:disabled:hover { background-color: var(--color-success-hover) !important; }
+[class~="disabled:hover:bg-blue-600"]:disabled,
+[class~="disabled:hover:bg-blue-600"]:disabled:hover { background-color: var(--color-primary) !important; }
+[class~="disabled:hover:bg-green-600"]:disabled,
+[class~="disabled:hover:bg-green-600"]:disabled:hover { background-color: var(--color-success) !important; }
 [class~="disabled:text-blue-300"]:disabled { color: var(--color-primary-muted) !important; }
 [class~="focus:border-indigo-500"]:focus { border-color: var(--color-primary) !important; }
 [class~="focus:border-red-500"]:focus { border-color: var(--color-error) !important; }

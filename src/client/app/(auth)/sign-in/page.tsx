@@ -64,7 +64,7 @@ const SignIn = () => {
         role === "ADMIN" || role === "SUPERADMIN"
           ? "/dashboard"
           : role === "DEALER"
-            ? nextPath || "/orders"
+            ? nextPath || "/"
             : nextPath || "/";
       router.push(destination);
     } catch {

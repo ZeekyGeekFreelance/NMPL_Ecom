@@ -90,8 +90,27 @@ input[type="reset"] {
 
 button:disabled,
 input:disabled,
+textarea:disabled,
+select:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
+}
+
+/* Prevent disabled controls from showing hover/active visual feedback. */
+button:disabled,
+[role="button"][aria-disabled="true"],
+[aria-disabled="true"] {
+  pointer-events: none;
+}
+
+button:disabled,
+button:disabled *,
+[aria-disabled="true"],
+[aria-disabled="true"] * {
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-decoration: none !important;
 }
 
 .ui-select {

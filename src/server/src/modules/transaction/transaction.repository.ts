@@ -149,7 +149,6 @@ export class TransactionRepository {
           include: {
             payment: true,
             reservation: true,
-            shipment: true,
             user: {
               select: {
                 id: true,

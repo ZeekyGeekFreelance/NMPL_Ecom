@@ -47,36 +47,53 @@ const TextArea: React.FC<TextAreaProps> = ({
         name={name}
         control={control}
         rules={validation}
-        render={({ field }) => (
-          <textarea
-            {...field}
-            placeholder={placeholder}
-            className={`p-[14px] pl-3 pr-10 w-full border border-gray-300 text-gray-800 placeholder:text-black 
-              rounded focus:outline-none focus:ring-[2px] focus:ring-lime-700 resize-none ${className}`}
-            rows={rows}
-            cols={cols}
-            onChange={(event) => {
-              const fieldHint =
-                normalizeFieldHint || name || label || placeholder || "";
+        render={({ field }) => {
+          const fieldHint =
+            normalizeFieldHint || name || label || placeholder || "";
 
-              let nextValue = event.target.value;
-              if (normalizeMode !== "off") {
-                nextValue =
-                  normalizeMode === "title"
-                    ? toTitleCaseWordsForTyping(nextValue)
-                    : normalizeHumanTextForField(nextValue, fieldHint, {
-                        typing: true,
-                      });
-              }
+          const normalizeValueForField = (value: string): string => {
+            if (normalizeMode === "off") {
+              return value;
+            }
 
-              if (nextValue !== event.target.value) {
-                event.target.value = nextValue;
-              }
+            return normalizeMode === "title"
+              ? toTitleCaseWordsForTyping(value)
+              : normalizeHumanTextForField(value, fieldHint, { typing: true });
+          };
 
-              field.onChange(nextValue);
-            }}
-          />
-        )}
+          return (
+            <textarea
+              {...field}
+              placeholder={placeholder}
+              className={`p-[14px] pl-3 pr-10 w-full border border-gray-300 text-gray-800 placeholder:text-black 
+                rounded focus:outline-none focus:ring-[2px] focus:ring-lime-700 resize-none ${className}`}
+              rows={rows}
+              cols={cols}
+              onChange={(event) => {
+                const nextValue = normalizeValueForField(event.target.value);
+
+                if (nextValue !== event.target.value) {
+                  event.target.value = nextValue;
+                }
+
+                field.onChange(nextValue);
+              }}
+              onKeyUp={(event) => {
+                if (event.key !== "Backspace" && event.key !== "Delete") {
+                  return;
+                }
+
+                const nextValue = normalizeValueForField(event.currentTarget.value);
+                if (nextValue !== event.currentTarget.value) {
+                  event.currentTarget.value = nextValue;
+                }
+
+                // Ensure deletion-only edits are always reflected in form dirty state.
+                field.onChange(nextValue);
+              }}
+            />
+          );
+        }}
       />
 
       {Icon && (

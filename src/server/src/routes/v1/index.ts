@@ -11,7 +11,6 @@ import reportRoutes from "@/modules/reports/reports.routes";
 import analyticsRoutes from "@/modules/analytics/analytics.routes";
 import paymentRoutes from "@/modules/payment/payment.routes";
 import addressRoutes from "@/modules/address/address.routes";
-import shipmentRoutes from "@/modules/shipment/shipment.routes";
 import transactionRoutes from "@/modules/transaction/transaction.routes";
 import logRoutes from "@/modules/logs/logs.routes";
 import sectionRoutes from "@/modules/section/section.routes";
@@ -39,7 +38,6 @@ export const configureV1Routes = (io: SocketIOServer) => {
   router.use("/analytics", analyticsRoutes);
   router.use("/logs", logRoutes);
   router.use("/orders", orderRoutes);
-  router.use("/shipment", shipmentRoutes);
   router.use("/payments", paymentRoutes);
   router.use("/addresses", addressRoutes);
   router.use("/sections", sectionRoutes);

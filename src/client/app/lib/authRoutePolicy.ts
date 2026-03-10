@@ -2,6 +2,7 @@ const EXACT_AUTH_OPTIONAL_PATHS = new Set<string>(["/"]);
 const PREFIX_AUTH_OPTIONAL_PATHS = [
   "/about-us",
   "/brands",
+  "/dot-tm",
   "/cart",
   "/product",
   "/products",

@@ -15,7 +15,6 @@ async function cleanup() {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
   await prisma.transaction.deleteMany();
-  await prisma.shipment.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.address.deleteMany();
   await prisma.orderItem.deleteMany();

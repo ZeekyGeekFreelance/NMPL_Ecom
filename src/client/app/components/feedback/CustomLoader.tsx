@@ -1,19 +1,12 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { ShoppingBag, Package, Truck, Zap } from "lucide-react";
 import { PLATFORM_NAME } from "@/app/lib/constants/config";
 
 const CustomLoader = () => {
-  const platformInitials =
-    PLATFORM_NAME.split(/\s+/)
-      .filter(Boolean)
-      .map((word) => word[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "WP";
-
   const loadingSteps = [
     { icon: ShoppingBag, text: "Preparing your experience", delay: 0 },
     { icon: Package, text: "Loading products", delay: 1 },
@@ -74,10 +67,20 @@ const CustomLoader = () => {
               className="absolute inset-0 rounded-full opacity-10"
               style={{ backgroundColor: 'var(--color-primary)' }}
             />
-            <div className="relative bg-white rounded-full p-6 shadow-lg inline-block" style={{ border: '1px solid var(--color-border)' }}>
-              <span className="text-3xl font-bold" style={{ color: 'var(--color-primary)' }}>
-                {platformInitials}
-              </span>
+            <div
+              className="relative bg-white rounded-full p-3 shadow-lg inline-flex h-24 w-24 items-center justify-center"
+              style={{ border: "1px solid var(--color-border)" }}
+            >
+              <div className="relative h-14 w-14">
+                <Image
+                  src="/images/branding/logo.jpg"
+                  alt={`${PLATFORM_NAME} logo`}
+                  fill
+                  quality={100}
+                  sizes="56px"
+                  className="object-contain"
+                />
+              </div>
             </div>
           </div>
         </motion.div>
@@ -188,4 +191,3 @@ const CustomLoader = () => {
 };
 
 export default CustomLoader;
-

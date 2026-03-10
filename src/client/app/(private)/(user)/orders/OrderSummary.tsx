@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "framer-motion";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import formatDate from "@/app/utils/formatDate";
-import { Calendar, Download, Package, ShoppingBag } from "lucide-react";
+import { Calendar, Download, ShoppingBag } from "lucide-react";
 import ToggleableText from "@/app/components/atoms/ToggleableText";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import useToast from "@/app/hooks/ui/useToast";
@@ -372,16 +372,6 @@ const OrderSummary = ({
       <div className="border-b border-gray-100 pb-4 mb-4">
         <div className="space-y-2.5">
           <div className="flex items-center gap-2 text-sm text-gray-700">
-            <Package size={14} className="shrink-0 text-gray-400" />
-            <span className="text-gray-500">Tracking:</span>
-            <span className="font-medium text-gray-800">
-              <ToggleableText
-                content={order?.shipment?.trackingNumber || "Not available"}
-                truncateLength={10}
-              />
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-700">
             <ShoppingBag size={14} className="shrink-0 text-gray-400" />
             <span className="text-gray-500">Order ID:</span>
             <span className="font-medium text-gray-800">
@@ -446,4 +436,3 @@ const OrderSummary = ({
 };
 
 export default OrderSummary;
-

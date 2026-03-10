@@ -52,6 +52,18 @@ const Input: React.FC<InputProps> = ({
         rules={validation}
         render={({ field, fieldState }) => {
           const resolvedError = error || fieldState.error?.message;
+          const supportsTextNormalization = type === "text" || type === "search";
+          const fieldHint = normalizeFieldHint || name || label || placeholder || "";
+
+          const normalizeValueForField = (value: string): string => {
+            if (!supportsTextNormalization || normalizeMode === "off") {
+              return value;
+            }
+
+            return normalizeMode === "title"
+              ? toTitleCaseWordsForTyping(value)
+              : normalizeHumanTextForField(value, fieldHint, { typing: true });
+          };
 
           return (
             <>
@@ -67,19 +79,7 @@ const Input: React.FC<InputProps> = ({
                       : "border-gray-300 focus:border-gray-700"
                   } focus:outline-none ${className}`}
                   onChange={(e) => {
-                    const supportsTextNormalization = type === "text" || type === "search";
-                    const fieldHint =
-                      normalizeFieldHint || name || label || placeholder || "";
-
-                    let nextValue = e.target.value;
-                    if (supportsTextNormalization && normalizeMode !== "off") {
-                      nextValue =
-                        normalizeMode === "title"
-                          ? toTitleCaseWordsForTyping(nextValue)
-                          : normalizeHumanTextForField(nextValue, fieldHint, {
-                              typing: true,
-                            });
-                    }
+                    const nextValue = normalizeValueForField(e.target.value);
 
                     if (nextValue !== e.target.value) {
                       e.target.value = nextValue;
@@ -87,6 +87,19 @@ const Input: React.FC<InputProps> = ({
 
                     field.onChange(nextValue);
                     if (onChange) onChange(e);
+                  }}
+                  onKeyUp={(event) => {
+                    if (event.key !== "Backspace" && event.key !== "Delete") {
+                      return;
+                    }
+
+                    const nextValue = normalizeValueForField(event.currentTarget.value);
+                    if (nextValue !== event.currentTarget.value) {
+                      event.currentTarget.value = nextValue;
+                    }
+
+                    // Ensure deletion-only edits are always reflected in form dirty state.
+                    field.onChange(nextValue);
                   }}
                   onBlur={(e) => {
                     field.onBlur();

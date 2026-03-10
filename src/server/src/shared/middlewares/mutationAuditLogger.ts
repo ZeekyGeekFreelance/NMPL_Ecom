@@ -192,7 +192,6 @@ const fetchPreviousState = async (
             orderItems: true,
             transaction: true,
             payment: true,
-            shipment: true,
             quotationLogs: true,
           },
         });
@@ -200,8 +199,6 @@ const fetchPreviousState = async (
         return prisma.address.findUnique({ where: { id: entityId } });
       case "payments":
         return prisma.payment.findUnique({ where: { id: entityId } });
-      case "shipment":
-        return prisma.shipment.findUnique({ where: { id: entityId } });
       case "logs":
         return prisma.log.findUnique({ where: { id: entityId } });
       case "cart":

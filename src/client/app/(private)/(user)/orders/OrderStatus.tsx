@@ -31,7 +31,7 @@ const stepIndexByStatus: Record<OrderLifecycleStatus, number> = {
 
 const OrderStatus = ({ order }) => {
   const currentStatus = normalizeOrderStatus(
-    order?.transaction?.status || order?.status
+    order?.transaction?.status || order?.status,
   );
 
   const getStatusIcon = (status: OrderLifecycleStatus) => {
@@ -67,7 +67,10 @@ const OrderStatus = ({ order }) => {
     }
 
     if (status === "AWAITING_PAYMENT") {
-      if (currentStatus !== "PENDING_VERIFICATION" && currentStatus !== "WAITLISTED") {
+      if (
+        currentStatus !== "PENDING_VERIFICATION" &&
+        currentStatus !== "WAITLISTED"
+      ) {
         return formatDate(order.transaction?.updatedAt || order.updatedAt);
       }
       return "Pending";
@@ -127,13 +130,11 @@ const OrderStatus = ({ order }) => {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <p
             className={`text-sm font-medium px-3 py-1 rounded-full flex items-center gap-1.5 ${getOrderStatusColor(
-              currentStatus
+              currentStatus,
             )}`}
           >
             {getStatusIcon(currentStatus)}
-            <span>
-              {getCustomerOrderStatusLabel(currentStatus)}
-            </span>
+            <span>{getCustomerOrderStatusLabel(currentStatus)}</span>
           </p>
         </div>
       </div>
@@ -186,10 +187,11 @@ const OrderStatus = ({ order }) => {
                     getStatusIcon(status)
                   )}
                 </div>
-                <span className="text-[10px] sm:text-xs font-medium leading-tight">
+                <span className="text-xs sm:text-sm md:text-base font-medium leading-tight">
                   {getCustomerOrderStatusLabel(status)}
                 </span>
-                <span className="text-[9px] sm:type-caption text-gray-400 mt-0.5 leading-tight">
+
+                <span className="text-[10px] sm:text-xs md:text-sm text-gray-400 mt-0.5 leading-tight">
                   {getStatusDate(status)}
                 </span>
               </motion.div>

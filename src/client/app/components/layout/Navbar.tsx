@@ -10,7 +10,6 @@ import {
   Menu,
   Search,
   ShoppingCart,
-  Store,
   X,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -44,7 +43,7 @@ const STORE_LINKS: NavLink[] = [
   { href: "/", label: "Home", hideForAdmin: true },
   { href: "/shop", label: "Shop", hideForAdmin: true },
   { href: "/products", label: "Products", hideForAdmin: true },
-  { href: "/brands", label: "Brands", hideForAdmin: true },
+  { href: "/dot-tm", label: "Dot \u2122", hideForAdmin: true },
   { href: "/about-us", label: "About Us", hideForAdmin: true },
   { href: "/cart", label: "Cart", authOnly: true, hideForAdmin: true },
   { href: "/orders", label: "Orders", authOnly: true, hideForAdmin: true },
@@ -56,13 +55,41 @@ const STORE_LINKS: NavLink[] = [
 
 const ADMIN_LINKS: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", roles: ["ADMIN", "SUPERADMIN"] },
-  { href: "/dashboard/products", label: "Products", roles: ["ADMIN", "SUPERADMIN"] },
-  { href: "/dashboard/categories", label: "Categories", roles: ["ADMIN", "SUPERADMIN"] },
-  { href: "/dashboard/inventory", label: "Inventory", roles: ["ADMIN", "SUPERADMIN"] },
-  { href: "/dashboard/transactions", label: "Transactions", roles: ["ADMIN", "SUPERADMIN"] },
-  { href: "/dashboard/dealers", label: "Dealers", roles: ["ADMIN", "SUPERADMIN"] },
-  { href: "/dashboard/analytics", label: "Analytics", roles: ["ADMIN", "SUPERADMIN"] },
-  { href: "/dashboard/reports", label: "Reports", roles: ["ADMIN", "SUPERADMIN"] },
+  {
+    href: "/dashboard/products",
+    label: "Products",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
+  {
+    href: "/dashboard/categories",
+    label: "Categories",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
+  {
+    href: "/dashboard/inventory",
+    label: "Inventory",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
+  {
+    href: "/dashboard/transactions",
+    label: "Transactions",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
+  {
+    href: "/dashboard/dealers",
+    label: "Dealers",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
+  {
+    href: "/dashboard/analytics",
+    label: "Analytics",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
+  {
+    href: "/dashboard/reports",
+    label: "Reports",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
   { href: "/dashboard/users", label: "Users", roles: ["SUPERADMIN"] },
   { href: "/dashboard/logs", label: "Logs", roles: ["SUPERADMIN"] },
 ];
@@ -95,7 +122,7 @@ const Navbar = () => {
 
   const categories = useMemo(
     () => (categoriesData?.categories || []).slice(0, 8),
-    [categoriesData?.categories]
+    [categoriesData?.categories],
   );
   const cartCount = cartData?.cartCount || 0;
   const brandHref = isAdmin ? "/dashboard" : "/";
@@ -161,34 +188,24 @@ const Navbar = () => {
         scrolled ? "bg-white/95 backdrop-blur-xl shadow-md" : "bg-white"
       }`}
     >
-      <div className="bg-slate-900 text-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between text-xs">
-          <p className="truncate">
-            No online payment enabled. Every order requires explicit confirmation.
-          </p>
-          {!isAdmin && (
-            <div className="hidden md:flex items-center gap-4">
-              <Link href="/shop?isNew=true" className="hover:text-white">
-                New Arrivals
-              </Link>
-              <Link href="/shop?isTrending=true" className="hover:text-white">
-                Trending
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
-
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-3">
           <Link
             href={brandHref}
-            className="flex items-center gap-2 text-gray-900 font-semibold text-base sm:text-lg"
+            className="flex items-center"
+            aria-label={`${PLATFORM_NAME} home`}
           >
-            <span className="rounded-lg text-white p-1.5" style={{ backgroundColor: 'var(--color-primary)' }}>
-              <Store size={18} />
-            </span>
-            <span>{PLATFORM_NAME}</span>
+            <div className="relative aspect-[825/243] w-[clamp(110px,24vw,188px)]">
+              <Image
+                src="/images/branding/logo.jpg"
+                alt={`${PLATFORM_NAME} logo`}
+                fill
+                priority
+                quality={100}
+                sizes="(max-width: 480px) 110px, (max-width: 768px) 140px, (max-width: 1024px) 170px, 188px"
+                className="object-contain"
+              />
+            </div>
           </Link>
 
           <div className="hidden lg:flex flex-1 max-w-xl mx-4">
@@ -198,7 +215,8 @@ const Navbar = () => {
           <div className="flex items-center space-x-1 sm:space-x-2">
             <button
               onClick={() => setMobileSearchOpen((prev) => !prev)}
-              className="lg:hidden p-2 text-gray-700 transition-colors" style={{ ['--tw-text-opacity' as any]: 1 }}
+              className="lg:hidden p-2 text-gray-700 transition-colors"
+              style={{ ["--tw-text-opacity" as any]: 1 }}
               aria-label="Search"
             >
               <Search size={20} />
@@ -212,7 +230,10 @@ const Navbar = () => {
               >
                 <ShoppingCart className="text-[20px] sm:text-[22px]" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 text-white text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1" style={{ backgroundColor: 'var(--color-secondary)' }}>
+                  <span
+                    className="absolute -top-1 -right-1 text-white text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
+                    style={{ backgroundColor: "var(--color-secondary)" }}
+                  >
                     {cartCount > 99 ? "99+" : cartCount}
                   </span>
                 )}
@@ -238,7 +259,7 @@ const Navbar = () => {
                         className="rounded-full object-cover w-full h-full"
                         onError={(event) => {
                           event.currentTarget.src = generateUserAvatar(
-                            user.name
+                            user.name,
                           );
                         }}
                       />
@@ -276,7 +297,7 @@ const Navbar = () => {
                   <Link
                     href="/sign-up"
                     className="px-3 py-2 text-sm font-medium text-white rounded-md transition-colors"
-                    style={{ backgroundColor: 'var(--color-primary)' }}
+                    style={{ backgroundColor: "var(--color-primary)" }}
                   >
                     Sign up
                   </Link>
@@ -300,20 +321,27 @@ const Navbar = () => {
           </div>
         )}
 
-        <div className="hidden md:flex items-center justify-between border-t border-gray-100 py-2">
+        <div className="hidden md:flex items-center justify-between border-t border-gray-100 mt-2 pt-3 pb-2">
           <div className="flex items-center gap-1 flex-wrap">
             {visibleStoreLinks
-              .filter((link) => link.label !== "Sign in" && link.label !== "Create account")
+              .filter(
+                (link) =>
+                  link.label !== "Sign in" && link.label !== "Create account",
+              )
               .map((link) => (
                 <React.Fragment key={link.href}>
                   <Link
                     href={link.href}
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    isRouteActive(link.href)
-                    ? "text-white"
-                    : "text-gray-700 hover:bg-gray-50"
+                      isRouteActive(link.href)
+                        ? "text-white"
+                        : "text-gray-700 hover:bg-gray-50"
                     }`}
-                      style={isRouteActive(link.href) ? { backgroundColor: 'var(--color-primary)' } : {}}
+                    style={
+                      isRouteActive(link.href)
+                        ? { backgroundColor: "var(--color-primary)" }
+                        : {}
+                    }
                   >
                     {link.label}
                   </Link>
@@ -345,7 +373,8 @@ const Navbar = () => {
                           <Link
                             href="/shop"
                             onClick={() => setCategoriesOpen(false)}
-                            className="mt-3 block text-center rounded-md text-white py-2 text-sm" style={{ backgroundColor: 'var(--color-primary)' }}
+                            className="mt-3 block text-center rounded-md text-white py-2 text-sm"
+                            style={{ backgroundColor: "var(--color-primary)" }}
                           >
                             View All Categories
                           </Link>
@@ -361,7 +390,8 @@ const Navbar = () => {
             <div className="flex items-center gap-2">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-white" style={{ backgroundColor: 'var(--color-primary)' }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium text-white"
+                style={{ backgroundColor: "var(--color-primary)" }}
               >
                 <LayoutDashboard size={14} />
                 Admin Dashboard
@@ -386,7 +416,11 @@ const Navbar = () => {
                           ? "font-medium text-white"
                           : "text-gray-800 hover:bg-gray-100"
                       }`}
-                      style={isRouteActive(link.href) ? { backgroundColor: 'var(--color-primary)' } : {}}
+                      style={
+                        isRouteActive(link.href)
+                          ? { backgroundColor: "var(--color-primary)" }
+                          : {}
+                      }
                       onClick={() => {
                         setMobileMenuOpen(false);
                         setMobileCategoriesOpen(false);
@@ -395,42 +429,44 @@ const Navbar = () => {
                       {link.label}
                     </Link>
 
-                    {!isAdmin && link.href === "/shop" && categories.length > 0 && (
-                      <div className="px-1">
-                        <button
-                          onClick={() =>
-                            setMobileCategoriesOpen((prev) => !prev)
-                          }
-                          className="w-full px-2 py-2 rounded-md text-left text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 inline-flex items-center justify-between"
-                        >
-                          Categories
-                          <ChevronDown
-                            size={15}
-                            className={`transition-transform ${
-                              mobileCategoriesOpen ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
+                    {!isAdmin &&
+                      link.href === "/shop" &&
+                      categories.length > 0 && (
+                        <div className="px-1">
+                          <button
+                            onClick={() =>
+                              setMobileCategoriesOpen((prev) => !prev)
+                            }
+                            className="w-full px-2 py-2 rounded-md text-left text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 inline-flex items-center justify-between"
+                          >
+                            Categories
+                            <ChevronDown
+                              size={15}
+                              className={`transition-transform ${
+                                mobileCategoriesOpen ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
 
-                        {mobileCategoriesOpen && (
-                          <div className="mt-2 grid grid-cols-2 gap-2">
-                            {categories.map((category: any) => (
-                              <Link
-                                key={category.id}
-                                href={`/shop?categoryId=${category.id}`}
-                                className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-50 hover:bg-gray-100"
-                                onClick={() => {
-                                  setMobileMenuOpen(false);
-                                  setMobileCategoriesOpen(false);
-                                }}
-                              >
-                                {category.name}
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          {mobileCategoriesOpen && (
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              {categories.map((category: any) => (
+                                <Link
+                                  key={category.id}
+                                  href={`/shop?categoryId=${category.id}`}
+                                  className="px-3 py-2 text-sm rounded-md text-gray-700 bg-gray-50 hover:bg-gray-100"
+                                  onClick={() => {
+                                    setMobileMenuOpen(false);
+                                    setMobileCategoriesOpen(false);
+                                  }}
+                                >
+                                  {category.name}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                   </React.Fragment>
                 ))}
               </div>

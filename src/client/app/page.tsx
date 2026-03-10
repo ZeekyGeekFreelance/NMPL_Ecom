@@ -26,8 +26,8 @@ export default async function Home() {
   return (
     <MainLayout>
       <HeroSection />
-      <HydratedCategoryBar categories={categories} />
       <StoreHighlights />
+      <HydratedCategoryBar categories={categories} />
       <HydratedProductSection
         title="Featured"
         initialProducts={featured}

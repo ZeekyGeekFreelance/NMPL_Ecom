@@ -1,94 +1,122 @@
 "use client";
 
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useRef, type TouchEvent } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Play,
-  Pause,
-  ArrowRight,
-  Shield,
-} from "lucide-react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type TouchEvent,
+} from "react";
 
 interface HeroSectionProps {
   isPreview?: boolean;
 }
 
-// Royalty-free images via Unsplash (free to use under Unsplash License)
 const sliderData = [
   {
-    image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1600&q=80&fit=crop",
-    title: "Precision-Engineered for Garment Manufacturing",
-    subtitle: "Industrial-grade sewing needles built for high-volume production lines",
-    ctaText: "Browse Catalog",
-    ctaLink: "/shop",
-    badge: "B2B Platform",
+    image: "/images/hero/HeroSlide.png",
+    focus: {
+      mobile: "52% 84%",
+      tablet: "56% 66%",
+      desktop: "62% 48%",
+      mobileZoom: "1.14",
+      mobileShift: "7%",
+    },
+    eyebrow: "Industrial Supply",
+    overlayTag: "Supply Backbone",
+    overlayTitle: "Precision stock for uninterrupted production cycles.",
+    overlayNote:
+      "Calibrated quality, predictable availability, and repeat-ready fulfillment for industrial teams.",
+    title: "One trusted store for high-volume sewing production",
+    subtitle:
+      "Source quality needles, keep ordering simple, and manage every confirmed order from one place.",
+    primaryCtaText: "Browse Catalog",
+    primaryCtaLink: "/shop",
+    secondaryCtaText: "Become a Dealer",
+    secondaryCtaLink: "/dealer/register",
   },
   {
-    image: "https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=1600&q=80&fit=crop",
-    title: "Supplying the Backbone of Global Apparel",
-    subtitle: "Consistent quality, reliable supply chain, confirmation-first ordering",
-    ctaText: "Request Dealer Access",
-    ctaLink: "/dealer/register",
-    badge: "Dealer Network",
+    image: "/images/hero/HeroSlide3.jpg",
+    focus: {
+      mobile: "53% 84%",
+      tablet: "58% 64%",
+      desktop: "63% 46%",
+      mobileZoom: "1.14",
+      mobileShift: "7%",
+    },
+    eyebrow: "Dealer Network",
+    overlayTag: "Dealer Program",
+    overlayTitle: "Reliable restock cadence with confirmation-first processing.",
+    overlayNote:
+      "Built for teams that need recurring procurement without last-minute uncertainty.",
+    title: "Built for garment units that need reliable repeat supply",
+    subtitle:
+      "Clear B2B pricing, confirmation-first processing, and dependable dispatch timelines for every cycle.",
+    primaryCtaText: "Request Dealer Access",
+    primaryCtaLink: "/dealer/register",
+    secondaryCtaText: "View Products",
+    secondaryCtaLink: "/shop",
   },
   {
-    image: "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=1600&q=80&fit=crop",
-    title: "Manufacturing Reliability You Can Count On",
-    subtitle: "Every order verified before dispatch — zero payment until confirmation",
-    ctaText: "How It Works",
-    ctaLink: "/about-us",
-    badge: "Verified Process",
-  },
-  {
-    image: "https://images.unsplash.com/photo-1605217613423-0aca4253c04e?w=1600&q=80&fit=crop",
-    title: "From Needle to Finished Garment",
-    subtitle: "Serving manufacturers, exporters and garment units across India",
-    ctaText: "View All Products",
-    ctaLink: "/shop",
-    badge: "NMPL",
+    image: "/images/hero/HeroSlide2.png",
+    focus: {
+      mobile: "52% 86%",
+      tablet: "57% 65%",
+      desktop: "62% 47%",
+      mobileZoom: "1.16",
+      mobileShift: "8%",
+    },
+    eyebrow: "Order Confidence",
+    overlayTag: "Operational Clarity",
+    overlayTitle: "From approval to dispatch, every step stays visible.",
+    overlayNote:
+      "Structured order states reduce follow-up overhead and keep production planning stable.",
+    title: "From approval to dispatch, your order lifecycle stays transparent",
+    subtitle:
+      "Track confirmed workflows clearly and reduce back-and-forth with a structured ordering process.",
+    primaryCtaText: "How It Works",
+    primaryCtaLink: "/about-us",
+    secondaryCtaText: "Shop Now",
+    secondaryCtaLink: "/shop",
   },
 ];
 
+const slideVariants = {
+  enter: { opacity: 0, scale: 1.02 },
+  center: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.99 },
+};
+
 const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (!isPreview && isPlaying) {
-      const interval = setInterval(() => {
-        setDirection(1);
-        setCurrentImageIndex((prev) =>
-          prev === sliderData.length - 1 ? 0 : prev + 1
-        );
-      }, 6000);
-
-      return () => clearInterval(interval);
+    if (isPreview) {
+      return;
     }
-  }, [isPreview, isPlaying]);
+
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % sliderData.length);
+    }, 7000);
+
+    return () => clearInterval(interval);
+  }, [isPreview]);
+
+  const goToSlide = (index: number) => {
+    setCurrentIndex(index);
+  };
 
   const nextSlide = () => {
-    setDirection(1);
-    setCurrentImageIndex((prev) =>
-      prev === sliderData.length - 1 ? 0 : prev + 1
-    );
+    setCurrentIndex((prev) => (prev + 1) % sliderData.length);
   };
 
   const prevSlide = () => {
-    setDirection(-1);
-    setCurrentImageIndex((prev) =>
-      prev === 0 ? sliderData.length - 1 : prev - 1
-    );
-  };
-
-  const goToSlide = (index: number) => {
-    setDirection(index > currentImageIndex ? 1 : -1);
-    setCurrentImageIndex(index);
+    setCurrentIndex((prev) => (prev - 1 + sliderData.length) % sliderData.length);
   };
 
   const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
@@ -129,137 +157,122 @@ const HeroSection = ({ isPreview = false }: HeroSectionProps) => {
     nextSlide();
   };
 
-  const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? 80 : -80,
-      opacity: 0,
-      scale: 1.02,
-    }),
-    center: {
-      x: 0,
-      opacity: 1,
-      scale: 1,
-    },
-    exit: (direction: number) => ({
-      x: direction > 0 ? -80 : 80,
-      opacity: 0,
-      scale: 0.98,
-    }),
-  };
-
-  const currentSlide = sliderData[currentImageIndex];
+  const currentSlide = sliderData[currentIndex];
+  const imageFocusVars = {
+    "--hero-focus-mobile": currentSlide.focus.mobile,
+    "--hero-focus-tablet": currentSlide.focus.tablet,
+    "--hero-focus-desktop": currentSlide.focus.desktop,
+    "--hero-mobile-zoom": currentSlide.focus.mobileZoom,
+    "--hero-mobile-shift": currentSlide.focus.mobileShift,
+  } as CSSProperties;
 
   return (
     <section
       className={`relative w-full ${
-        isPreview ? "scale-90 my-2" : "my-2 sm:my-4 lg:my-6"
+        isPreview ? "my-2 scale-90" : "my-4 sm:my-6 lg:my-8"
       }`}
     >
       <div
-        className="relative w-full overflow-hidden rounded-2xl shadow-2xl"
+        className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-sm"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="aspect-[16/9] sm:aspect-[16/7] lg:aspect-[16/6] relative">
-          <AnimatePresence initial={false} custom={direction}>
+        <div className="relative aspect-[16/11] sm:aspect-[16/9] lg:aspect-[16/7] overflow-hidden">
+          <AnimatePresence mode="wait">
             <motion.div
-              key={currentImageIndex}
-              custom={direction}
+              key={currentIndex}
               variants={slideVariants}
               initial="enter"
               animate="center"
               exit="exit"
-              transition={{
-                duration: 1.2,
-                ease: [0.22, 1, 0.36, 1],
-              }}
-              className="absolute inset-0 w-full h-full"
+              transition={{ duration: 0.75, ease: "easeOut" }}
+              className="absolute inset-0"
             >
               <Image
                 src={currentSlide.image}
                 alt={currentSlide.title}
                 fill
-                priority={currentImageIndex === 0}
-                className="object-cover"
+                priority={currentIndex === 0}
+                className="object-cover [object-position:var(--hero-focus-mobile)] sm:[object-position:var(--hero-focus-tablet)] lg:[object-position:var(--hero-focus-desktop)] [transform:translateY(var(--hero-mobile-shift))_scale(var(--hero-mobile-zoom))] sm:[transform:none]"
                 sizes="100vw"
                 unoptimized
+                style={imageFocusVars}
               />
-
-              {/* Gradient */}
-              <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
-
-              {/* Content */}
-              <div className="absolute inset-0 flex items-center">
-                <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-                  <div className="max-w-2xl text-white">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-6 text-xs font-semibold uppercase tracking-wider text-white" style={{ backgroundColor: 'var(--color-secondary)' }}>
-                      <Shield size={13} />
-                      <span>{currentSlide.badge}</span>
-                    </div>
-
-                    <h1 className="type-h1 font-bold mb-4 text-white" style={{ fontSize: 'clamp(1.75rem, 5vw, 3.5rem)' }}>
-                      {currentSlide.title}
-                    </h1>
-
-                    <p className="type-body text-white/90 mb-8 max-w-lg" style={{ fontSize: 'clamp(1rem, 2vw, 1.25rem)' }}>
-                      {currentSlide.subtitle}
-                    </p>
-
-                    <Link
-                      href={currentSlide.ctaLink}
-                      className="inline-flex items-center gap-3 text-white px-7 py-3.5 rounded-md font-semibold transition-all duration-300 hover:scale-105 shadow-lg text-sm uppercase tracking-wide"
-                      style={{ backgroundColor: 'var(--color-secondary)' }}
-                    >
-                      {currentSlide.ctaText}
-                      <ArrowRight size={16} />
-                    </Link>
-                  </div>
+              <div className="absolute inset-0 bg-gradient-to-r from-white/55 via-white/15 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-white/60 to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-[44%] items-center pl-10 lg:flex xl:pl-14">
+                <div className="max-w-md text-left">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-700/85">
+                    {currentSlide.overlayTag}
+                  </p>
+                  <p className="mt-3 text-[clamp(1.35rem,2vw,2.2rem)] font-semibold leading-tight text-slate-900/65">
+                    {currentSlide.overlayTitle}
+                  </p>
+                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-slate-700/75">
+                    {currentSlide.overlayNote}
+                  </p>
                 </div>
               </div>
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* Arrows */}
-        <button
-          onClick={prevSlide}
-          className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white p-3 rounded-full transition hover:scale-110 hidden sm:flex"
-        >
-          <ChevronLeft size={24} />
-        </button>
+        <div className="px-5 py-8 text-center sm:px-8 sm:py-10 lg:px-12 lg:py-12">
+          <p
+            className="text-xs font-semibold uppercase tracking-[0.18em]"
+            style={{ color: "var(--color-secondary)" }}
+          >
+            {currentSlide.eyebrow}
+          </p>
+          <h1 className="type-h1 mx-auto mt-3 max-w-3xl text-slate-900">
+            {currentSlide.title}
+          </h1>
+          <p className="type-body mx-auto mt-4 max-w-2xl text-slate-600">
+            {currentSlide.subtitle}
+          </p>
 
-        <button
-          onClick={nextSlide}
-          className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white p-3 rounded-full transition hover:scale-110 hidden sm:flex"
-        >
-          <ChevronRight size={24} />
-        </button>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href={currentSlide.primaryCtaLink}
+              className="btn-cta !h-11 !rounded-lg !px-5 text-sm font-semibold"
+            >
+              {currentSlide.primaryCtaText}
+              <ArrowRight size={16} />
+            </Link>
+            <Link
+              href={currentSlide.secondaryCtaLink}
+              className="btn-secondary !h-11 !rounded-lg !px-5 text-sm font-semibold"
+            >
+              {currentSlide.secondaryCtaText}
+            </Link>
+          </div>
 
-        {/* Dots */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-          {sliderData.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => goToSlide(index)}
-              className={`w-3 h-3 rounded-full transition ${
-                index === currentImageIndex
-                  ? "bg-white scale-125"
-                  : "bg-white/50 hover:bg-white/80"
-              }`}
-            />
-          ))}
+          <div className="mt-7 flex items-center justify-center gap-2">
+            {sliderData.map((slide, index) => (
+              <button
+                key={slide.title}
+                type="button"
+                onClick={() => goToSlide(index)}
+                aria-label={`Show slide ${index + 1}`}
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  index === currentIndex
+                    ? "w-8"
+                    : "w-2 hover:opacity-80"
+                }`}
+                style={{
+                  backgroundColor:
+                    index === currentIndex
+                      ? "var(--color-primary)"
+                      : "rgba(29, 52, 97, 0.35)",
+                }}
+              />
+            ))}
+          </div>
         </div>
-
-        {/* Play / Pause */}
-        <button
-          onClick={() => setIsPlaying((prev) => !prev)}
-          className="absolute top-4 right-4 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white p-2 rounded-full transition hover:scale-110"
-        >
-          {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-        </button>
       </div>
     </section>
   );
 };
 
 export default HeroSection;
+

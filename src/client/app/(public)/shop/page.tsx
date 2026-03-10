@@ -367,7 +367,7 @@ const ShopPage: React.FC = () => {
   return (
     <MainLayout>
       <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 pt-0 pb-6 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="container mx-auto px-4 pt-0 pb-6 sm:px-6 sm:pt-0 sm:pb-6 lg:px-8 lg:pt-0 lg:pb-8">
           <div className="flex gap-6 lg:gap-8">
             <div className="hidden lg:block lg:w-[320px] lg:self-stretch xl:w-[360px]">
               <ProductFilters
@@ -378,7 +378,7 @@ const ShopPage: React.FC = () => {
             </div>
 
             <section className="min-w-0 flex-1">
-              <div className="sticky top-24 z-20 -mx-6 mb-5 rounded-lg border border-gray-200 bg-white p-3 shadow-sm sm:mx-0 sm:top-[9.125rem] sm:rounded-xl sm:p-4">
+              <div className="sticky top-16 z-20 -mx-6 mb-5 rounded-lg border border-gray-200 bg-white p-3 shadow-sm sm:mx-0 md:top-[7rem] sm:rounded-xl sm:p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <button

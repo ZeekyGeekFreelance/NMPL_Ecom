@@ -653,25 +653,6 @@ const DealersDashboard = () => {
 
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">Filter by status</p>
-              <div className="flex flex-wrap gap-2">
-                {filterButtons.map((filter) => (
-                  <button
-                    key={filter.value}
-                    type="button"
-                    onClick={() => setStatusFilter(filter.value)}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-                      statusFilter === filter.value
-                        ? "border-indigo-600 bg-indigo-600 text-white"
-                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                    }`}
-                  >
-                    {filter.label} ({filter.count})
-                  </button>
-                ))}
-              </div>
-            </div>
             <div className="w-full lg:w-80">
               <label className="mb-2 block text-sm font-medium text-gray-700">
                 Search dealers
@@ -688,6 +669,25 @@ const DealersDashboard = () => {
                   placeholder="Name, email, reference, business, phone"
                   className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm"
                 />
+              </div>
+            </div>
+            <div className="lg:text-right">
+              <p className="mb-3 text-sm font-medium text-gray-700">Filter by status</p>
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                {filterButtons.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setStatusFilter(filter.value)}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      statusFilter === filter.value
+                        ? "border-indigo-600 bg-indigo-600 text-white"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {filter.label} ({filter.count})
+                  </button>
+                ))}
               </div>
             </div>
           </div>

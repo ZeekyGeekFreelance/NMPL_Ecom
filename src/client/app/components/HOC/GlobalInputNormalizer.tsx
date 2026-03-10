@@ -52,10 +52,12 @@ const isTextEntryTarget = (
   return true;
 };
 
-const applyNormalizedValue = (target: HTMLInputElement | HTMLTextAreaElement) => {
+const applyNormalizedValue = (
+  target: HTMLInputElement | HTMLTextAreaElement
+): boolean => {
   const currentValue = target.value;
   if (!currentValue) {
-    return;
+    return false;
   }
 
   const nextValue = normalizeHumanTextForField(
@@ -64,7 +66,7 @@ const applyNormalizedValue = (target: HTMLInputElement | HTMLTextAreaElement) =>
     { typing: true }
   );
   if (nextValue === currentValue) {
-    return;
+    return false;
   }
 
   const selectionStart = target.selectionStart;
@@ -78,18 +80,19 @@ const applyNormalizedValue = (target: HTMLInputElement | HTMLTextAreaElement) =>
   target.value = nextValue;
 
   if (selectionStart === null || selectionEnd === null) {
-    return;
+    return true;
   }
 
   if (isCursorAtEnd) {
     target.setSelectionRange(nextValue.length, nextValue.length);
-    return;
+    return true;
   }
 
   const lengthDelta = nextValue.length - currentValue.length;
   const nextSelectionStart = Math.max(0, selectionStart + lengthDelta);
   const nextSelectionEnd = Math.max(0, selectionEnd + lengthDelta);
   target.setSelectionRange(nextSelectionStart, nextSelectionEnd);
+  return true;
 };
 
 const GlobalInputNormalizer = () => {
@@ -105,7 +108,13 @@ const GlobalInputNormalizer = () => {
         return;
       }
 
-      applyNormalizedValue(target);
+      const normalized = applyNormalizedValue(target);
+      if (!normalized || event.type !== "change") {
+        return;
+      }
+
+      // Keep React/controlled state in sync when normalization runs on blur.
+      target.dispatchEvent(new Event("input", { bubbles: true }));
     };
 
     document.addEventListener("input", handleInputEvent, true);

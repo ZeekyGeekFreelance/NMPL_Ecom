@@ -80,7 +80,6 @@ export class OrderRepository {
         orderItems: { include: { variant: { include: { product: true } } } },
         payment: true,
         address: true,
-        shipment: true,
         transaction: true,
         reservation: true,
         quotationLogs: {

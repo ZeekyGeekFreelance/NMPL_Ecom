@@ -365,17 +365,23 @@ const ProductFilters: React.FC<ProductFiltersProps> = ({
               name="search"
               control={control}
               render={({ field }) => (
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  className="w-full border border-gray-200 rounded-xl p-3.5 text-sm focus:ring-2 transition-all duration-200 bg-gray-50 focus:bg-white"
-                  style={{ ['--tw-ring-color' as any]: 'var(--color-primary-muted)' }}
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    handleSearchChange(e.target.value);
-                  }}
-                />
+                <div className="relative">
+                  <Search
+                    size={16}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-10 pr-3.5 text-sm transition-all duration-200 focus:bg-white focus:ring-2"
+                    style={{ ['--tw-ring-color' as any]: 'var(--color-primary-muted)' }}
+                    {...field}
+                    onChange={(e) => {
+                      field.onChange(e);
+                      handleSearchChange(e.target.value);
+                    }}
+                  />
+                </div>
               )}
             />
           </div>

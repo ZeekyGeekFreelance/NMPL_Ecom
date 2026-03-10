@@ -20,6 +20,12 @@ const formatVariantName = (item: any) => {
 const OrderItems = ({ order }) => {
   const formatPrice = useFormatPrice();
 
+  const getVariantParts = (item: any) => {
+    const sku = String(item?.variant?.sku || "");
+    const parts = sku ? sku.split("-").slice(1) : [];
+    return parts.join(", ");
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -32,47 +38,57 @@ const OrderItems = ({ order }) => {
         <h2 className="text-sm sm:text-base font-semibold text-gray-800">Order Items</h2>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {order.orderItems.map((item) => {
           const productSlug = item?.variant?.product?.slug;
           const productHref = productSlug ? `/product/${productSlug}` : "/shop";
+          const unitPrice = Number(item?.price ?? item?.variant?.price ?? 0);
+          const quantity = Number(item?.quantity ?? 0);
+          const lineTotal = unitPrice * quantity;
+          const productName = item?.variant?.product?.name || "Product";
+          const variantDetails = getVariantParts(item);
 
           return (
             <div
               key={item.id}
-              className="flex items-center border-b border-gray-100 pb-4 last:border-0 last:pb-0"
+              className="flex items-start gap-4 border-b border-gray-100 pb-4 last:border-0 last:pb-0"
             >
               {/* Variant Image */}
               <Link
                 href={productHref}
-                className="flex items-center justify-center mr-4 overflow-hidden shadow-sm"
+                className="flex items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-gray-50 shadow-sm"
               >
                 <Image
                   src={item.variant.images[0]}
                   alt={formatVariantName(item)}
-                  width={50}
-                  height={50}
-                  className="object-cover"
+                  width={56}
+                  height={56}
+                  className="h-14 w-14 object-cover"
                 />
               </Link>
 
               {/* Variant Details */}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <Link
                   href={productHref}
-                  className="font-semibold text-gray-800 text-sm hover:text-indigo-600 transition-colors"
+                  className="font-semibold text-gray-900 text-sm hover:text-indigo-600 transition-colors"
                 >
-                  {formatVariantName(item)}
+                  <span className="block truncate">{productName}</span>
                 </Link>
+                {variantDetails ? (
+                  <p className="mt-1 text-xs text-gray-500 truncate">
+                    {variantDetails}
+                  </p>
+                ) : null}
               </div>
 
               {/* Price */}
-              <div className="text-right">
-                <p className="font-medium text-gray-800">
-                  {formatPrice(item.variant.price * item.quantity)}
+              <div className="text-right shrink-0">
+                <p className="font-semibold text-gray-900">
+                  {formatPrice(lineTotal)}
                 </p>
-                <p className="text-xs text-gray-500">
-                  {item.quantity} x {formatPrice(item.variant.price)}
+                <p className="text-[11px] text-gray-500">
+                  {quantity} × {formatPrice(unitPrice)}
                 </p>
               </div>
             </div>

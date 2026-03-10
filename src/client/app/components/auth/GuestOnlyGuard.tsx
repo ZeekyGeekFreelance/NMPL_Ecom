@@ -21,10 +21,6 @@ const GuestOnlyGuard = ({ children }: GuestOnlyGuardProps) => {
       router.replace("/dashboard");
       return;
     }
-    if (resolvedRole === "DEALER") {
-      router.replace("/orders");
-      return;
-    }
     router.replace("/");
   }, [
     isAuthenticated,

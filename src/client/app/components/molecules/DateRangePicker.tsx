@@ -29,6 +29,8 @@ interface DateRangePickerProps {
   startName: string;
   endName: string;
   className?: string;
+  inlinePanel?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 const DAYS_OF_WEEK = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -59,6 +61,8 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
   startName,
   endName,
   className = "",
+  inlinePanel = false,
+  onOpenChange,
 }) => {
   const { field: startField } = useController({ name: startName, control });
   const { field: endField } = useController({ name: endName, control });
@@ -132,6 +136,16 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
+
+  useEffect(() => {
+    return () => {
+      onOpenChange?.(false);
+    };
+  }, [onOpenChange]);
 
   useEffect(() => {
     if (isOpen) {
@@ -255,7 +269,11 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.16 }}
-            className="absolute left-1/2 z-20 mt-2 w-[min(94vw,420px)] -translate-x-1/2 rounded-xl border border-gray-200 bg-white shadow-xl md:left-0 md:translate-x-0"
+            className={
+              inlinePanel
+                ? "relative z-10 mt-3 w-[min(94vw,420px)] max-w-full rounded-xl border border-gray-200 bg-white shadow-xl"
+                : "absolute left-1/2 z-20 mt-2 w-[min(94vw,420px)] -translate-x-1/2 rounded-xl border border-gray-200 bg-white shadow-xl md:left-0 md:translate-x-0"
+            }
           >
             <div className="p-5">
               <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">

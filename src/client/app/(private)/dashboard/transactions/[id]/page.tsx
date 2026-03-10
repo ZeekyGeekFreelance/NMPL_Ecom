@@ -16,7 +16,6 @@ import TransactionOverview from "../TransactionOverview";
 import OrderInformation from "../OrderInformation";
 import CustomerInformation from "../CustomerInformation";
 import PaymentInformation from "../PaymentInformation";
-import ShipmentInformation from "../ShipmentInformation";
 import ShippingAddress from "../ShippingAddress";
 import TransactionTimeline from "../TransactionTimeline";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
@@ -461,10 +460,7 @@ const TransactionDetailsPage = () => {
         <CustomerInformation user={order?.user} customerType={order?.customerType} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PaymentInformation payment={order?.payment} />
-        <ShipmentInformation shipment={order?.shipment} order={order} />
-      </div>
+      <PaymentInformation payment={order?.payment} />
 
       <ShippingAddress address={order?.address} />
 

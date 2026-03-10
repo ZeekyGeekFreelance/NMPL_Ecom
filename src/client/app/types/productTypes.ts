@@ -50,7 +50,6 @@ export interface Order {
   user: User;
   userId: string;
   products: Product[];
-  tracking?: TrackingDetail | null;
   orderItems: OrderItem[];
 }
 
@@ -78,13 +77,6 @@ export interface Address {
   country: string;
   user: User;
   userId: string;
-}
-
-export interface TrackingDetail {
-  id: string;
-  status: string;
-  order: Order;
-  order_no: string;
 }
 
 export interface Cart {

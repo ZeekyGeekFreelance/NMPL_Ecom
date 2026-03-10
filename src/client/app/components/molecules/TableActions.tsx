@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, Search } from "lucide-react";
 import DropdownMultiSelect from "./DropdownMultiSelect";
 import {
   buildCsv,
@@ -15,7 +15,6 @@ import {
   toOrderReference,
   toPaymentReference,
   toProductReference,
-  toShipmentReference,
   toTransactionReference,
 } from "@/app/lib/utils/accountReference";
 
@@ -149,13 +148,6 @@ const TableActions: React.FC<TableActionsProps> = ({
     }
 
     if (
-      normalizedKey.includes("shipmentid") ||
-      normalizedLabel.includes("shipmentid")
-    ) {
-      return toShipmentReference(raw);
-    }
-
-    if (
       normalizedKey.includes("addressid") ||
       normalizedLabel.includes("addressid")
     ) {
@@ -177,9 +169,6 @@ const TableActions: React.FC<TableActionsProps> = ({
       }
       if (normalizedLabel.includes("product")) {
         return toProductReference(raw);
-      }
-      if (normalizedLabel.includes("shipment")) {
-        return toShipmentReference(raw);
       }
       if (normalizedLabel.includes("address")) {
         return toAddressReference(raw);
@@ -259,13 +248,19 @@ const TableActions: React.FC<TableActionsProps> = ({
     <div className="p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
       <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
         {showSearchBar && (
-          <input
-            type="text"
-            placeholder="Search records by keyword"
-            value={searchValue}
-            onChange={(e) => onSearch({ searchQuery: e.target.value })}
-            className="h-11 w-full rounded-lg border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-auto"
-          />
+          <div className="relative w-full sm:w-auto">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <input
+              type="text"
+              placeholder="Search records by keyword"
+              value={searchValue}
+              onChange={(e) => onSearch({ searchQuery: e.target.value })}
+              className="h-11 w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-[280px]"
+            />
+          </div>
         )}
         <DropdownMultiSelect
           label="Select Columns"

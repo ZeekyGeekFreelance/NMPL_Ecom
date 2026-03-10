@@ -89,7 +89,6 @@ const cleanupDevData = async (): Promise<void> => {
   await prisma.orderAddressSnapshot.deleteMany();
   await prisma.orderReservation.deleteMany();
   await prisma.transaction.deleteMany();
-  await prisma.shipment.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.orderItem.deleteMany();
