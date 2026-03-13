@@ -6,17 +6,13 @@ import {
   useSendMessageMutation,
   useUpdateChatStatusMutation,
 } from "@/app/store/apis/ChatApi";
-import { useSocketConnection } from "./useSocketConnection";
 import { useChatMessages } from "./useChatMessages";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import ChatStatus from "./ChatStatus";
 import ChatInput from "./ChatInput";
-import CallConnectingScreen from "./CallConnectingScreen";
-import CallInProgressScreen from "./CallInProgressScreen";
 import CustomLoader from "@/app/components/feedback/CustomLoader";
 import { useGetMeQuery } from "@/app/store/apis/UserApi";
-import { useWebRTCCall } from "./useWebRTCCall";
 
 interface ChatProps {
   chatId: string;
@@ -32,12 +28,8 @@ const ChatContainer: React.FC<ChatProps> = ({ chatId }) => {
   const [sendMessage] = useSendMessageMutation();
   const [updateChatStatus] = useUpdateChatStatusMutation();
 
-  const socket = useSocketConnection(chatId);
-
   const { messages, message, setMessage, handleSendMessage, isTyping } =
-    useChatMessages(chatId, user, chat, socket, sendMessage);
-
-  const { callStatus, endCall } = useWebRTCCall({ chatId, socket });
+    useChatMessages(chatId, chat, sendMessage);
 
   const handleResolveChat = async () => {
     try {
@@ -84,19 +76,6 @@ const ChatContainer: React.FC<ChatProps> = ({ chatId }) => {
           Start Call
         </button>
       )} */}
-      {callStatus === "calling" && (
-        <CallConnectingScreen chat={chat} onCancel={endCall} />
-      )}
-      {callStatus === "in-call" && (
-        <CallInProgressScreen
-          // localVideoRef={localVideoRef}
-          // remoteVideoRef={remoteVideoRef}
-          onEndCall={endCall}
-        />
-      )}
-      {callStatus === "ended" && (
-        <div className="p-4 text-gray-600 bg-gray-50">Call ended</div>
-      )}
       {chat?.status === "OPEN" && (
         <ChatInput
           message={message}

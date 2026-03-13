@@ -5,9 +5,8 @@ import {
   toTransactionReference,
 } from "@/app/lib/utils/accountReference";
 import {
-  getOrderStatusColor,
-  getOrderStatusLabel,
-  normalizeOrderStatus,
+  getPaymentAwareOrderStatusColor,
+  getPaymentAwareOrderStatusLabel,
 } from "@/app/lib/orderLifecycle";
 
 const IST_TIMEZONE = "Asia/Kolkata";
@@ -43,9 +42,22 @@ const formatDateParts = (
 };
 
 const TransactionOverview = ({ transaction }) => {
-  const normalizedStatus = normalizeOrderStatus(transaction.status);
   const transactionDate = formatDateParts(transaction.transactionDate);
   const updatedAt = formatDateParts(transaction.updatedAt);
+  const paymentAwareStatusLabel = getPaymentAwareOrderStatusLabel({
+    status: transaction?.status,
+    isPayLater: transaction?.order?.isPayLater,
+    paymentDueDate: transaction?.order?.paymentDueDate,
+    paymentTransactions: transaction?.order?.paymentTransactions,
+    payment: transaction?.order?.payment,
+  });
+  const paymentAwareStatusColor = getPaymentAwareOrderStatusColor({
+    status: transaction?.status,
+    isPayLater: transaction?.order?.isPayLater,
+    paymentDueDate: transaction?.order?.paymentDueDate,
+    paymentTransactions: transaction?.order?.paymentTransactions,
+    payment: transaction?.order?.payment,
+  });
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6 transition-all duration-200 hover:shadow-md">
@@ -88,11 +100,9 @@ const TransactionOverview = ({ transaction }) => {
         <div className="flex flex-col items-end">
           <p className="text-sm text-gray-500 mb-1">Current Status</p>
           <span
-            className={`px-3 py-1 rounded-full text-sm font-medium ${getOrderStatusColor(
-              normalizedStatus
-            )}`}
+            className={`px-3 py-1 rounded-full text-sm font-medium ${paymentAwareStatusColor}`}
           >
-            {getOrderStatusLabel(transaction.status)}
+            {paymentAwareStatusLabel}
           </span>
         </div>
       </div>
@@ -101,4 +111,3 @@ const TransactionOverview = ({ transaction }) => {
 };
 
 export default TransactionOverview;
-

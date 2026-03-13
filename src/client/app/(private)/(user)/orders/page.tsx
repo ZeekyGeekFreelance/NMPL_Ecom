@@ -15,51 +15,84 @@ import {
   XCircle,
   ArrowRight,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import OrderCardSkeleton from "@/app/components/feedback/OrderCardSkeleton";
 import OrderFilters from "@/app/components/molecules/OrderFilters";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import useToast from "@/app/hooks/ui/useToast";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
 import {
   canDownloadInvoiceForStatus,
   getCustomerOrderStatusLabel,
+  getPaymentStateColor,
+  getPaymentStateLabel,
   normalizeOrderStatus,
+  resolvePaymentState,
 } from "@/app/lib/orderLifecycle";
 import { toOrderReference } from "@/app/lib/utils/accountReference";
 import formatDate from "@/app/utils/formatDate";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import { useAcceptQuotationMutation } from "@/app/store/apis/OrderApi";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import { usePayLaterPayment } from "@/app/hooks/payment/usePayLaterPayment";
 
 // Status badge component
-const StatusBadge = ({ status }: { status: string }) => {
-  const getStatusConfig = (status: string) => {
-    const normalizedStatus = normalizeOrderStatus(status);
-    const configs = {
-      PENDING_VERIFICATION: {
-        color: "bg-amber-100 text-amber-800",
-        icon: Clock,
-      },
-      WAITLISTED: { color: "bg-orange-100 text-orange-800", icon: Clock },
-      AWAITING_PAYMENT: { color: "bg-blue-100 text-blue-800", icon: Truck },
-      QUOTATION_REJECTED: { color: "bg-red-100 text-red-800", icon: XCircle },
-      QUOTATION_EXPIRED: { color: "bg-red-100 text-red-800", icon: XCircle },
-      CONFIRMED: { color: "bg-green-100 text-green-800", icon: CheckCircle },
-      DELIVERED: { color: "bg-emerald-100 text-emerald-800", icon: CheckCircle },
-    };
-    return (
-      configs[normalizedStatus as keyof typeof configs] ||
-      configs.PENDING_VERIFICATION
-    );
+const StatusBadge = ({
+  order,
+}: {
+  order: any;
+}) => {
+  const normalizedStatus = normalizeOrderStatus(order?.status);
+  const paymentState = resolvePaymentState({
+    isPayLater: order?.isPayLater,
+    paymentDueDate: order?.paymentDueDate,
+    paymentTransactions: order?.paymentTransactions,
+    payment: order?.payment,
+  });
+  const hasDueDate = !!order?.paymentDueDate;
+  let statusLabel = getCustomerOrderStatusLabel(normalizedStatus);
+  let color = "bg-amber-100 text-amber-800";
+  let IconComponent: React.ElementType = Clock;
+
+  const configs = {
+    PENDING_VERIFICATION: {
+      color: "bg-amber-100 text-amber-800",
+      icon: Clock,
+    },
+    WAITLISTED: { color: "bg-orange-100 text-orange-800", icon: Clock },
+    AWAITING_PAYMENT: { color: "bg-blue-100 text-blue-800", icon: Truck },
+    QUOTATION_REJECTED: { color: "bg-red-100 text-red-800", icon: XCircle },
+    QUOTATION_EXPIRED: { color: "bg-red-100 text-red-800", icon: XCircle },
+    CONFIRMED: { color: "bg-green-100 text-green-800", icon: CheckCircle },
+    DELIVERED: { color: "bg-emerald-100 text-emerald-800", icon: CheckCircle },
   };
 
-  const statusLabel = getCustomerOrderStatusLabel(status);
-  const config = getStatusConfig(status);
-  const IconComponent = config.icon;
+  const baseConfig =
+    configs[normalizedStatus as keyof typeof configs] ||
+    configs.PENDING_VERIFICATION;
+  color = baseConfig.color;
+  IconComponent = baseConfig.icon;
+
+  if (order?.isPayLater && (normalizedStatus === "DELIVERED" || normalizedStatus === "CONFIRMED")) {
+    if (normalizedStatus === "DELIVERED" && !hasDueDate && !paymentState.isPaid) {
+      statusLabel = "Delivered - Due Date Missing";
+      color = "bg-red-100 text-red-800";
+      IconComponent = AlertTriangle;
+    } else {
+      statusLabel = `${getCustomerOrderStatusLabel(normalizedStatus)} - ${getPaymentStateLabel(
+        paymentState.state
+      )}`;
+      color = getPaymentStateColor(paymentState.state);
+      IconComponent = paymentState.state === "PAID" ? CheckCircle : Clock;
+    }
+  }
 
   return (
     <div
-      className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${config.color}`}
+      className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${color}`}
     >
       <IconComponent size={12} className="sm:w-3 sm:h-3 mr-1" />
       <span className="hidden sm:inline">{statusLabel}</span>
@@ -79,6 +112,10 @@ const OrderCard = ({
   onDownloadInvoice: (orderId: string) => void;
 }) => {
   const formatPrice = useFormatPrice();
+  const { showToast } = useToast();
+  const [acceptQuotation, { isLoading: isAcceptingQuotation }] =
+    useAcceptQuotationMutation();
+  const [isProceedConfirmOpen, setIsProceedConfirmOpen] = React.useState(false);
 
   const getItemCount = (orderItems: any[]) => {
     return (
@@ -90,7 +127,78 @@ const OrderCard = ({
   };
 
   const orderReference = toOrderReference(order.id);
+  const normalizedStatus = normalizeOrderStatus(order.status);
+  const paymentState = resolvePaymentState({
+    isPayLater: order?.isPayLater,
+    paymentDueDate: order?.paymentDueDate,
+    paymentTransactions: order?.paymentTransactions,
+    payment: order?.payment,
+  });
+  const canProceedToPayment = normalizedStatus === "AWAITING_PAYMENT";
+  const isPayLaterDue =
+    order?.isPayLater &&
+    normalizedStatus === "DELIVERED" &&
+    !!order?.paymentDueDate &&
+    !paymentState.isPaid;
   const canDownloadInvoice = canDownloadInvoiceForStatus(order.status);
+  const payLaterPayment = usePayLaterPayment(order);
+
+  const handleProceedToPayment = React.useCallback(async () => {
+    try {
+      const response = await acceptQuotation(order.id).unwrap();
+      const checkoutUrl =
+        response?.checkoutUrl ||
+        response?.data?.checkoutUrl ||
+        response?.data?.data?.checkoutUrl;
+      const isPayLater =
+        response?.isPayLater ||
+        response?.data?.isPayLater ||
+        response?.data?.data?.isPayLater;
+
+      if (!checkoutUrl && isPayLater) {
+        showToast(
+          "Order confirmed under pay-later terms. Payment will be due after delivery.",
+          "success"
+        );
+        return;
+      }
+
+      if (!checkoutUrl) {
+        showToast(
+          "Payment link is unavailable. Please refresh and try again.",
+          "error"
+        );
+        return;
+      }
+
+      window.location.assign(checkoutUrl);
+    } catch (error: unknown) {
+      showToast(
+        getApiErrorMessage(
+          error,
+          "Unable to start payment for this quotation."
+        ),
+        "error"
+      );
+    }
+  }, [acceptQuotation, order.id, showToast]);
+
+  const requestProceedToPayment = React.useCallback(() => {
+    if (isAcceptingQuotation || payLaterPayment.isLoading) {
+      return;
+    }
+    setIsProceedConfirmOpen(true);
+  }, [isAcceptingQuotation, payLaterPayment.isLoading]);
+
+  const handleConfirmProceedToPayment = React.useCallback(async () => {
+    setIsProceedConfirmOpen(false);
+    await handleProceedToPayment();
+  }, [handleProceedToPayment]);
+
+  const handleConfirmPayDue = React.useCallback(async () => {
+    setIsProceedConfirmOpen(false);
+    await payLaterPayment.startPayment();
+  }, [payLaterPayment]);
 
   return (
     <motion.div
@@ -122,7 +230,7 @@ const OrderCard = ({
               </span>
             </div>
           </div>
-          <StatusBadge status={order.status} />
+          <StatusBadge order={order} />
         </div>
       </div>
 
@@ -154,6 +262,13 @@ const OrderCard = ({
             </div>
           </div>
         </div>
+
+        {isPayLaterDue && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Payment due by {formatDate(order.paymentDueDate, { withTime: false })}
+            . Amount due: {formatPrice(order.amount)}.
+          </div>
+        )}
 
         {/* Order Items Preview */}
         {order.orderItems && order.orderItems.length > 0 && (
@@ -205,18 +320,69 @@ const OrderCard = ({
               {canDownloadInvoice ? "Invoice PDF" : "Invoice after Confirmation"}
             </span>
           </button>
-          <Link
-            href={`/orders/${toOrderReference(order.id)}`}
-            className="w-full flex items-center justify-center space-x-1 sm:space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-all duration-200 group text-sm sm:text-base"
-          >
-            <span>Track Order</span>
-            <ArrowRight
-              size={14}
-              className="sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform duration-200"
-            />
-          </Link>
+          {canProceedToPayment || isPayLaterDue ? (
+            <button
+              type="button"
+              onClick={requestProceedToPayment}
+              disabled={isAcceptingQuotation || payLaterPayment.isLoading}
+              className={`w-full flex items-center justify-center space-x-1 sm:space-x-2 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-semibold transition-all duration-200 text-sm sm:text-base disabled:cursor-not-allowed ${
+                isPayLaterDue
+                  ? "bg-amber-600 hover:bg-amber-700 text-white disabled:bg-amber-300"
+                  : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-blue-300"
+              }`}
+            >
+              <span>
+                {isAcceptingQuotation || payLaterPayment.isLoading
+                  ? "Redirecting..."
+                  : isPayLaterDue
+                  ? "Pay Due Amount"
+                  : "Proceed to Payment"}
+              </span>
+            </button>
+          ) : (
+            <Link
+              href={`/orders/${toOrderReference(order.id)}`}
+              className="w-full flex items-center justify-center space-x-1 sm:space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-all duration-200 group text-sm sm:text-base"
+            >
+              <span>Track Order</span>
+              <ArrowRight
+                size={14}
+                className="sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform duration-200"
+              />
+            </Link>
+          )}
+          {canProceedToPayment || isPayLaterDue ? (
+            <Link
+              href={`/orders/${toOrderReference(order.id)}`}
+              className="w-full sm:col-span-2 flex items-center justify-center space-x-1 sm:space-x-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-all duration-200 group text-sm sm:text-base"
+            >
+              <span>Track Order</span>
+              <ArrowRight
+                size={14}
+                className="sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform duration-200"
+              />
+            </Link>
+          ) : null}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isProceedConfirmOpen}
+        title={isPayLaterDue ? "Pay Due Amount?" : "Proceed to Payment?"}
+        message={
+          isPayLaterDue
+            ? `You are about to settle the due amount of ${formatPrice(
+                Number(order?.amount ?? 0)
+              )}. You will be redirected to the payment gateway.`
+            : "You are proceeding with payment for this quotation. You will be redirected to the payment gateway."
+        }
+        type="warning"
+        confirmLabel={isPayLaterDue ? "Pay Due Amount" : "Proceed to Payment"}
+        onConfirm={isPayLaterDue ? handleConfirmPayDue : handleConfirmProceedToPayment}
+        onCancel={() => setIsProceedConfirmOpen(false)}
+        isConfirming={isAcceptingQuotation || payLaterPayment.isLoading}
+        disableCancelWhileConfirming
+      />
     </motion.div>
   );
 };
@@ -269,10 +435,26 @@ const UserOrders = () => {
     // Apply status filter
     if (statusFilter) {
       const normalizedFilterStatus = normalizeOrderStatus(statusFilter);
-      filtered = filtered.filter(
-        (order: any) =>
-          normalizeOrderStatus(order.status) === normalizedFilterStatus
-      );
+      filtered = filtered.filter((order: any) => {
+        const orderStatus = normalizeOrderStatus(order.status);
+        const paymentState = resolvePaymentState({
+          isPayLater: order?.isPayLater,
+          paymentDueDate: order?.paymentDueDate,
+          paymentTransactions: order?.paymentTransactions,
+          payment: order?.payment,
+        });
+        const isPayLaterDue =
+          order?.isPayLater &&
+          orderStatus === "DELIVERED" &&
+          !!order?.paymentDueDate &&
+          !paymentState.isPaid;
+
+        if (normalizedFilterStatus === "AWAITING_PAYMENT") {
+          return orderStatus === "AWAITING_PAYMENT" || isPayLaterDue;
+        }
+
+        return orderStatus === normalizedFilterStatus;
+      });
     }
 
     // Apply sort order
@@ -345,9 +527,26 @@ const UserOrders = () => {
           </div>
         ) : error ? (
           <div className="text-center py-12">
+            <Package size={48} className="mx-auto text-gray-400 mb-4" />
             <p className="text-lg text-red-500">
-              Error loading orders: {"Unknown error"}
+              Error loading orders
             </p>
+            <p className="text-sm text-gray-600 mt-2">
+              {(() => {
+                const err = error as any;
+                if (err?.data?.message) return err.data.message;
+                if (err?.error) return err.error;
+                if (err?.message) return err.message;
+                if (err?.status) return `Server error: ${err.status}`;
+                return "Please refresh and try again.";
+              })()}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 inline-block text-indigo-500 hover:text-indigo-600 font-medium transition-colors duration-200"
+            >
+              Retry
+            </button>
           </div>
         ) : orders.length === 0 ? (
           <div className="text-center py-12">
@@ -393,4 +592,3 @@ const UserOrders = () => {
 };
 
 export default withAuth(UserOrders, { allowedRoles: ["USER", "DEALER"] });
-

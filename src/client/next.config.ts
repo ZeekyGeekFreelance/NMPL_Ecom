@@ -28,6 +28,19 @@ const nextConfig: NextConfig = {
       hostname,
     })),
   },
+
+  // Expose INTERNAL_API_URL to the Next.js server runtime (SSR) only.
+  // This is NOT exposed to the browser — it is used by server-side fetch calls
+  // so SSR hits the private Railway network instead of the public API URL.
+  serverRuntimeConfig: {
+    internalApiUrl: process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "",
+  },
+
+  // Expose the public API URL as a build-time environment variable so it is
+  // baked into the client bundle. Required in addition to the NEXT_PUBLIC_ prefix.
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "",
+  },
 };
 
 export default nextConfig;

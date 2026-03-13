@@ -1,32 +1,15 @@
 "use client";
 import { useState } from "react";
 import { useGetAllChatsQuery } from "@/app/store/apis/ChatApi";
-import { useAdminSocketEvents } from "../../(chat)/useAdminSocketEvents";
 import ChatContainer from "../../(chat)";
-import useToast from "@/app/hooks/ui/useToast";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import { toPrefixedReference } from "@/app/lib/utils/accountReference";
 
 const AdminChatsPage = () => {
-  const { showToast } = useToast();
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const { data: chats, isLoading, refetch } = useGetAllChatsQuery("OPEN");
+  const { data: chats, isLoading } = useGetAllChatsQuery("OPEN");
   console.log("chats => ", chats);
   const formatChatReference = (id: string) => toPrefixedReference("CHT", id);
-
-  // Listen for admin socket events
-  useAdminSocketEvents(
-    () => {
-      showToast("New chat created", "success");
-      console.log("chat created");
-      refetch();
-    },
-    () => {
-      showToast("Chat status updated", "success");
-      console.log("chat status updated");
-      refetch();
-    }
-  );
 
   return (
     <div className="flex h-screen bg-gray-100">

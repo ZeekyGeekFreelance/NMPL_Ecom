@@ -6,7 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@apollo/client";
+import { useQuery, NetworkStatus } from "@apollo/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Package, Filter, Loader2 } from "lucide-react";
 import { GET_PRODUCTS } from "@/app/gql/Product";
@@ -20,6 +20,7 @@ import ProductFilters, {
 } from "./ProductFilters";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 import { useMediaQuery } from "@/app/hooks/useMediaQuery";
+import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 
 const DEFAULT_SORT: SortByOption = "RELEVANCE";
 const BASE_PAGE_SIZE = 12;
@@ -37,6 +38,15 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ");
+
+const toFiniteNumber = (value: string | null): number | undefined => {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const normalizeFiniteNumber = (value: number | undefined): number | undefined =>
+  Number.isFinite(value) ? value : undefined;
 
 const getVariantMinPrice = (product: Product) => {
   const listingDealerMinPrice = Number(product.dealerMinPrice);
@@ -67,8 +77,7 @@ const buildSearchHaystack = (product: Product) => {
   const category = product.category?.name || "";
   const description = product.description || "";
   return normalizeText(
-    `${product.name} ${product.slug || ""} ${description} ${category} ${skus} ${
-      product.isBestSeller ? "best seller" : ""
+    `${product.name} ${product.slug || ""} ${description} ${category} ${skus} ${product.isBestSeller ? "best seller" : ""
     }`
   );
 };
@@ -103,6 +112,9 @@ const ShopPage: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
+  // Gate the first product fetch until the backend /health reports ready.
+  // This prevents the "Failed to fetch products" flash on cold container start.
+  const backendReady = useBackendReady();
 
   const initialFilters = useMemo<FilterValues>(
     () => ({
@@ -113,12 +125,8 @@ const ShopPage: React.FC = () => {
       isFeatured: searchParams.get("isFeatured") === "true" || undefined,
       isTrending: searchParams.get("isTrending") === "true" || undefined,
       isBestSeller: searchParams.get("isBestSeller") === "true" || undefined,
-      minPrice: searchParams.get("minPrice")
-        ? parseFloat(searchParams.get("minPrice")!)
-        : undefined,
-      maxPrice: searchParams.get("maxPrice")
-        ? parseFloat(searchParams.get("maxPrice")!)
-        : undefined,
+      minPrice: toFiniteNumber(searchParams.get("minPrice")),
+      maxPrice: toFiniteNumber(searchParams.get("maxPrice")),
       categoryId: searchParams.get("categoryId") || undefined,
     }),
     [searchParams]
@@ -142,8 +150,8 @@ const ShopPage: React.FC = () => {
     () => ({
       search: filters.search?.trim() || undefined,
       categoryId: filters.categoryId,
-      minPrice: filters.minPrice,
-      maxPrice: filters.maxPrice,
+      minPrice: normalizeFiniteNumber(filters.minPrice),
+      maxPrice: normalizeFiniteNumber(filters.maxPrice),
       isNew: filters.isNew,
       isFeatured: filters.isFeatured,
       isTrending: filters.isTrending,
@@ -174,12 +182,28 @@ const ShopPage: React.FC = () => {
     error,
     data: queryData,
     fetchMore,
+    refetch,
+    networkStatus,
   } = useQuery(GET_PRODUCTS, {
     variables: { first: requestPageSize, skip: 0, filters: serverFilters },
     fetchPolicy: "cache-and-network",
     nextFetchPolicy: "cache-first",
     pollInterval: dealerCatalogPollInterval,
+    notifyOnNetworkStatusChange: false,
+    // Do not fire until backend has confirmed healthy to avoid cold-start errors.
+    skip: !backendReady,
   });
+
+  // Only surface the error banner when:
+  //   1. The query has truly FAILED (NetworkStatus.error === 8). A poll or
+  //      refetch in-progress is NOT an error — don't show a banner mid-retry.
+  //   2. We genuinely have nothing to show. If displayedProducts already has
+  //      data (from cache or a previous fetch), keep showing it silently while
+  //      the background retry resolves — the banner would be misleading.
+  const isRealNetworkError = networkStatus === NetworkStatus.error;
+  const displayError = error && displayedProducts.length === 0 && isRealNetworkError && backendReady
+    ? error
+    : undefined;
 
   // Sync query results into display state.  Using a useEffect instead of
   // onCompleted avoids stale-closure issues when filters change rapidly and
@@ -230,11 +254,11 @@ const ShopPage: React.FC = () => {
       if (nextFilters.isFeatured) query.set("isFeatured", "true");
       if (nextFilters.isTrending) query.set("isTrending", "true");
       if (nextFilters.isBestSeller) query.set("isBestSeller", "true");
-      if (nextFilters.minPrice) {
-        query.set("minPrice", nextFilters.minPrice.toString());
+      if (Number.isFinite(nextFilters.minPrice)) {
+        query.set("minPrice", String(nextFilters.minPrice));
       }
-      if (nextFilters.maxPrice) {
-        query.set("maxPrice", nextFilters.maxPrice.toString());
+      if (Number.isFinite(nextFilters.maxPrice)) {
+        query.set("maxPrice", String(nextFilters.maxPrice));
       }
       if (nextFilters.categoryId) {
         query.set("categoryId", nextFilters.categoryId);
@@ -362,7 +386,10 @@ const ShopPage: React.FC = () => {
   }, [currentSortBy, displayedProducts, filters.search]);
 
   const noProductsFound =
-    rankedAndSortedProducts.length === 0 && !loading && !error;
+    backendReady &&
+    rankedAndSortedProducts.length === 0 &&
+    !loading &&
+    !displayError;
 
   return (
     <MainLayout>
@@ -427,7 +454,7 @@ const ShopPage: React.FC = () => {
                 </div>
               </div>
 
-              {loading && !displayedProducts.length && (
+              {(!backendReady || (loading && !displayedProducts.length)) && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 lg:gap-8">
                   {[...Array(8)].map((_, index) => (
                     <div
@@ -445,7 +472,7 @@ const ShopPage: React.FC = () => {
                 </div>
               )}
 
-              {error && (
+              {displayError && (
                 <div className="rounded-2xl border border-gray-100 bg-white py-16 text-center shadow-sm">
                   <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
                     <Package size={32} className="text-red-500" />
@@ -453,11 +480,20 @@ const ShopPage: React.FC = () => {
                   <h3 className="mb-2 type-h4 text-gray-900">
                     Error loading products
                   </h3>
-                  <p className="mb-6 text-gray-600">
+                  <p className="mb-2 text-gray-600">
+                    {(() => {
+                      const err = displayError as any;
+                      if (err?.message) return err.message;
+                      if (err?.networkError?.message) return err.networkError.message;
+                      if (err?.graphQLErrors?.[0]?.message) return err.graphQLErrors[0].message;
+                      return "Unable to load products";
+                    })()}
+                  </p>
+                  <p className="mb-6 text-sm text-gray-500">
                     Please try again or adjust your filters.
                   </p>
                   <button
-                    onClick={() => window.location.reload()}
+                    onClick={() => void refetch()}
                     className="btn-primary"
                   >
                     Try Again

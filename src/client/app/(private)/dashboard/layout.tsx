@@ -14,6 +14,7 @@ import useClickOutside from "@/app/hooks/dom/useClickOutside";
 import { useGetDealersQuery } from "@/app/store/apis/UserApi";
 import { useGetAllTransactionsQuery } from "@/app/store/apis/TransactionApi";
 import { normalizeOrderStatus } from "@/app/lib/orderLifecycle";
+import { resolveDisplayRole } from "@/app/lib/userRole";
 
 type ActionMessage = {
   id: string;
@@ -39,8 +40,8 @@ export default function DashboardLayout({
   const menuRef = useRef<HTMLDivElement>(null);
   const messageCenterRef = useRef<HTMLDivElement>(null);
 
-  const isDashboardUser =
-    user?.role === "ADMIN" || user?.role === "SUPERADMIN";
+  const resolvedRole = resolveDisplayRole(user);
+  const isDashboardUser = resolvedRole === "ADMIN" || resolvedRole === "SUPERADMIN";
 
   const { data: pendingDealersData } = useGetDealersQuery(
     { status: "PENDING" },

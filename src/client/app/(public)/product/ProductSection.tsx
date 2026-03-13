@@ -156,7 +156,7 @@ const ProductSection: React.FC<ProductSectionProps> = ({
     goToNextSlide();
   };
 
-  if (error) {
+  if (error && products.length === 0) {
     const friendlyErrorMessage =
       "We couldn't load products right now. Please refresh and try again.";
 
@@ -289,11 +289,10 @@ const ProductSection: React.FC<ProductSectionProps> = ({
                   type="button"
                   aria-label={`Go to slide ${guideItem + 1}`}
                   onClick={() => setCurrentSlide(guideItem)}
-                  className={`h-2.5 rounded-full transition-all duration-200 ${
-                    isActive
+                  className={`h-2.5 rounded-full transition-all duration-200 ${isActive
                       ? "w-7 bg-indigo-600"
                       : "w-2.5 bg-gray-300 hover:bg-gray-400"
-                  }`}
+                    }`}
                 />
               );
             })}

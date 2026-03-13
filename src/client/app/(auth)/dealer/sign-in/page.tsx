@@ -47,6 +47,16 @@ const DealerSignIn = () => {
         email: normalizeEmailValue(formData.email),
         portal: "DEALER_PORTAL",
       }).unwrap();
+      
+      // Check if legacy dealer needs to change password
+      if ((response as any).requiresPasswordChange) {
+        // Store email and password temporarily for password change
+        sessionStorage.setItem('dealer_temp_email', formData.email);
+        sessionStorage.setItem('dealer_temp_password', formData.password);
+        router.push('/dealer/change-password');
+        return;
+      }
+      
       const requestedNextPath = searchParams.get("next");
       const nextPath =
         requestedNextPath && requestedNextPath.startsWith("/")

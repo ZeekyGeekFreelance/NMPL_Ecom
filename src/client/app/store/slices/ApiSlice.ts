@@ -321,7 +321,12 @@ export const apiSlice = createApi({
     "Attribute",
     "Variant",
     "DeliveryRate",
+    // Payment-related tags (used by paymentApiSlice which injects into this slice)
+    "OutstandingPayments",
+    "CreditLedger",
+    "PaymentAudit",
+    "Dealers",
+    "DealerPrices",
   ],
   endpoints: () => ({}),
 });
-

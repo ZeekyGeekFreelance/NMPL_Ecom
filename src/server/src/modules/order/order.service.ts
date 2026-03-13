@@ -120,31 +120,65 @@ export class OrderService {
       throw new AppError(400, "Order ID is required");
     }
 
-    if (!normalized.toUpperCase().startsWith("ORD-")) {
-      return normalized;
+    // If it looks like a reference (ORD-XXX), resolve it
+    if (normalized.toUpperCase().startsWith("ORD-")) {
+      const orderId = await this.orderRepository.findOrderIdByReferenceForUser(
+        normalized,
+        userId
+      );
+
+      if (!orderId) {
+        throw new AppError(404, "Order not found");
+      }
+
+      return orderId;
     }
 
-    const orderId = await this.orderRepository.findOrderIdByReferenceForUser(
-      normalized,
-      userId
-    );
-
-    if (!orderId) {
+    // Otherwise assume it's a raw UUID - verify the user owns it
+    const order = await this.orderRepository.findOrderById(normalized);
+    if (!order || order.userId !== userId) {
       throw new AppError(404, "Order not found");
     }
 
-    return orderId;
+    return normalized;
   }
 
-  async getOrderDetails(orderId: string, userId: string) {
-    const resolvedOrderId = await this.resolveOrderIdForUser(orderId, userId);
+  async getOrderDetails(orderId: string, userId: string, userRole?: string) {
+    const isAdmin = userRole === "ADMIN" || userRole === "SUPERADMIN";
+    const normalizedOrderId = String(orderId || "").trim();
+    
+    // Admins can access orders by raw UUID or reference.
+    // Regular users must use references and can only see their own orders.
+    let resolvedOrderId: string;
+    
+    if (isAdmin) {
+      // Admin provided a reference like "ORD-ABC123" - resolve it
+      if (normalizedOrderId.toUpperCase().startsWith("ORD-")) {
+        // Try to resolve as reference first (works for any user's order)
+        const allOrders = await this.orderRepository.findAllOrders({ skip: 0, take: 200 });
+        const match = allOrders.find(
+          (order) => toOrderReference(order.id).toUpperCase() === normalizedOrderId.toUpperCase()
+        );
+        resolvedOrderId = match?.id || normalizedOrderId;
+      } else {
+        // Admin provided raw UUID - use it directly
+        resolvedOrderId = normalizedOrderId;
+      }
+    } else {
+      // Regular users must resolve through their own orders only
+      resolvedOrderId = await this.resolveOrderIdForUser(normalizedOrderId, userId);
+    }
+    
     const order = await this.orderRepository.findOrderById(resolvedOrderId);
     if (!order) {
       throw new AppError(404, "Order not found");
     }
-    if (order.userId !== userId) {
+    
+    // Regular users may only view their own orders.
+    if (!isAdmin && order.userId !== userId) {
       throw new AppError(403, "You are not authorized to view this order");
     }
+    
     return order;
   }
 
@@ -201,6 +235,47 @@ export class OrderService {
         409,
         "Quoted amount is invalid for online payment processing."
       );
+    }
+
+    // ── Pay-later bypass ─────────────────────────────────────────────────────
+    // Legacy dealers with payLaterEnabled bypass the payment gateway entirely.
+    // The order was marked isPayLater at placement time; we honour that flag here.
+    // Stock is already reserved (set when admin issued the quotation).
+    if ((order as any).isPayLater) {
+      const orderReference = toOrderReference(order.id);
+
+      // Directly confirm the order via SYSTEM actor (bypasses the admin-actor guard).
+      await this.transactionService.updateTransactionStatus(order.transaction.id, {
+        status: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+        actorUserId: userId,
+        actorRole: "PAY_LATER_BYPASS",
+      });
+
+      await this.createQuotationLog({
+        orderId: order.id,
+        event: ORDER_QUOTATION_LOG_EVENT.CUSTOMER_ACCEPTED,
+        previousTotal: Number(order.amount),
+        updatedTotal: Number(order.amount),
+        actorUserId: userId,
+        actorRole: order.customerRoleSnapshot,
+        message:
+          "Pay-later dealer accepted quotation. Order confirmed without upfront payment. Invoice will be issued on delivery.",
+        lineItems: this.buildQuotationLogLineItems(order.orderItems),
+      });
+
+      await this.logsService.info("Pay-later order confirmed without payment", {
+        orderId: order.id,
+        orderReference,
+        userId,
+      });
+
+      return {
+        orderId: order.id,
+        orderReference,
+        isPayLater: true,
+        paymentDue: true,
+        reservationExpiresAt: reservationExpiry,
+      };
     }
 
     const mockPaymentEnabled = this.isMockPaymentEnabled();
@@ -431,6 +506,7 @@ export class OrderService {
         dealerProfile: {
           select: {
             status: true,
+            payLaterEnabled: true,
           },
         },
       },
@@ -503,12 +579,16 @@ export class OrderService {
       deliveryQuote,
     });
 
+    // Pay-later flag: stamped at order creation time and immutable for the order's lifetime.
+    const isPayLater = orderingUser.dealerProfile?.payLaterEnabled === true;
+
     return {
       cart,
       customerRoleSnapshot,
       orderItems,
       selectedAddress,
       pricing,
+      isPayLater,
     };
   }
 
@@ -579,6 +659,7 @@ export class OrderService {
       customerRoleSnapshot: draft.customerRoleSnapshot,
       cartId: draft.cart.id,
       orderItems: draft.orderItems,
+      isPayLater: draft.isPayLater,
       pricing: {
         subtotalAmount: draft.pricing.subtotalAmount,
         deliveryCharge: draft.pricing.deliveryCharge,

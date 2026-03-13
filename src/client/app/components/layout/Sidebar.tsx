@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/hooks/useAuth";
+import { resolveDisplayRole } from "@/app/lib/userRole";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -17,6 +18,7 @@ import {
   Section,
   ChartArea,
   Truck,
+  CreditCard,
 } from "lucide-react";
 
 type SidebarNotificationKey =
@@ -27,6 +29,7 @@ type SidebarNotificationKey =
   | "categories"
   | "deliveryFees"
   | "transactions"
+  | "payments"
   | "dealers"
   | "chats"
   | "users"
@@ -104,6 +107,13 @@ const Sidebar = ({ notifications = {} }: SidebarProps) => {
             roles: ["ADMIN", "SUPERADMIN"],
           },
           {
+            id: "payments" as SidebarNotificationKey,
+            name: "Payments",
+            href: "/payments",
+            icon: CreditCard,
+            roles: ["ADMIN", "SUPERADMIN"],
+          },
+          {
             id: "dealers" as SidebarNotificationKey,
             name: "Dealers",
             href: "/dealers",
@@ -157,7 +167,7 @@ const Sidebar = ({ notifications = {} }: SidebarProps) => {
   );
 
   const visibleSections = useMemo(() => {
-    const currentRole = user?.role || "";
+    const currentRole = resolveDisplayRole(user);
 
     return sections
       .map((section) => ({

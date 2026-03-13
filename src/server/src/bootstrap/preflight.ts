@@ -64,30 +64,39 @@ const probeTcpPort = (host: string, port: number, timeoutMs: number): Promise<bo
   });
 
 export const assertPortAvailable = async (): Promise<void> => {
+  // In production (Railway, Docker, etc.) port collision detection via TCP probe
+  // is unreliable: the platform assigns the port, old processes release it before
+  // the new container starts, and probing can race.  Skip in production — if the
+  // port is genuinely in use, httpServer.listen() will throw EADDRINUSE anyway.
+  if (config.isProduction) {
+    return;
+  }
+
   const inUse = await probeTcpPort("127.0.0.1", config.server.port, 750);
   if (!inUse) {
     return;
   }
 
-  const message = `[preflight] Port collision detected on ${config.server.port}. ${config.isProduction
-      ? "Production boot blocked."
-      : "Development boot blocked. Stop existing process or change PORT."
-    }`;
+  const message = `[preflight] Port collision detected on ${config.server.port}. Development boot blocked. Stop existing process or change PORT.`;
   throw new Error(message);
 };
 
 export const assertMigrationsApplied = (): void => {
+  // In production, `prisma migrate deploy` already ran in the container CMD
+  // before this function is called, so re-running `prisma migrate status`
+  // is redundant and risks a race (DB still initializing, spawnSync timeout).
+  // Trust the CMD step in production and skip this check.
+  if (config.isProduction) {
+    console.log("[preflight] Skipping migration status check in production (migrate deploy ran in CMD).");
+    return;
+  }
+
   const migrationStatus = runPrismaMigrateStatus();
   if (migrationStatus.ok) {
     return;
   }
 
   const message = `[preflight] Migration check failed.\n${migrationStatus.output}`;
-
-  if (config.isProduction) {
-    // Hard failure in production — a schema mismatch is a deployment error.
-    throw new Error(`${message}\nBoot aborted.`);
-  }
 
   // Development: warn and continue.
   // The developer may intentionally be ahead of the DB (pending migration apply)

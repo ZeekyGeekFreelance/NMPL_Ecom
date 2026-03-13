@@ -41,6 +41,8 @@ export class AuthRepository {
         email: true,
         phone: true,
         avatar: true,
+        /** Checked immediately after sign-in to gate token issuance. */
+        mustChangePassword: true,
       },
     });
   }
@@ -160,6 +162,17 @@ export class AuthRepository {
         resetPasswordToken: hashedToken,
         resetPasswordTokenExpiresAt: { gt: new Date() },
       },
+    });
+  }
+
+  /**
+   * Clears the mustChangePassword flag after a successful first-login
+   * password change.  Called only from changePasswordOnFirstLogin.
+   */
+  async clearMustChangePassword(userId: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mustChangePassword: false },
     });
   }
 

@@ -45,8 +45,8 @@ const getErrorStatusCode = (error: unknown): number | undefined => {
     typeof typedError.statusCode === "number"
       ? typedError.statusCode
       : typeof typedError.status === "number"
-      ? typedError.status
-      : undefined;
+        ? typedError.status
+        : undefined;
 
   if (typeof directStatus === "number") {
     return directStatus;
@@ -104,7 +104,12 @@ const createApolloClient = (initialState: any = null) => {
 
   const retryLink = new RetryLink({
     attempts: {
-      max: 4,
+      // 12 retries with exponential backoff covers the full server cold-start
+      // window including the 5-min useBackendReady timeout. If the health gate
+      // releases after the full 5-min timeout (worst case), Apollo still has
+      // retries remaining so the query recovers without showing an error banner.
+      // Total cumulative wait: ~5-6 minutes before surfacing an error.
+      max: 12,
       retryIf: (error) => {
         if (!error) return false;
 
@@ -115,7 +120,8 @@ const createApolloClient = (initialState: any = null) => {
         const statusCode = getErrorStatusCode(error);
         if (typeof statusCode !== "number") return false;
 
-        // Retry server errors and rate-limit responses.
+        // Retry server errors (5xx) and rate-limit (429) responses.
+        // 503 is returned while the server is still in its startup health-gate.
         return statusCode === 429 || statusCode >= 500;
       },
     },
@@ -133,10 +139,13 @@ const createApolloClient = (initialState: any = null) => {
         return Math.random() * ceiling;
       }
 
-      // For transient network errors use shorter fixed jitter window.
-      const initial = 500;
-      const max = 3000;
-      return initial + Math.random() * (max - initial);
+      // For cold-start / transient network errors use exponential backoff so
+      // retries spread across the full server startup window.
+      // Attempt 1→~1s, 2→~2s, 3→~4s, 4→~8s, 5→~16s, 6→~30s, 7→~30s, 8→~30s.
+      const baseColdStart = 1_000;
+      const capColdStart = 30_000;
+      const ceiling = Math.min(capColdStart, baseColdStart * Math.pow(2, count - 1));
+      return ceiling * (0.5 + Math.random() * 0.5); // 50-100% of ceiling for jitter
     },
   });
 

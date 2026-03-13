@@ -12,6 +12,28 @@ interface InvoicePdfItem {
   subtotal: number;
 }
 
+interface InvoicePaymentTransaction {
+  id: string;
+  amount: number;
+  paymentMethod: string;
+  paymentSource?: string | null;
+  paymentReceivedAt: Date;
+  utrNumber?: string | null;
+  bankName?: string | null;
+  transferDate?: Date | null;
+  chequeNumber?: string | null;
+  chequeDate?: Date | null;
+  chequeClearingDate?: Date | null;
+  gatewayPaymentId?: string | null;
+  gatewayName?: string | null;
+  notes?: string | null;
+  recordedBy?: {
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+}
+
 interface InvoiceAddress {
   fullName?: string;
   phoneNumber?: string;
@@ -38,6 +60,10 @@ interface InvoicePdfInput {
   deliveryCharge: number;
   deliveryMode: string;
   totalAmount: number;
+  paymentStatus?: string | null;
+  paymentTerms?: string | null;
+  paymentDueDate?: Date | null;
+  paymentTransactions?: InvoicePaymentTransaction[];
   locationLabel: string;
   locationAddress?: InvoiceAddress | null;
 }
@@ -184,6 +210,20 @@ const drawItemsTable = (
   });
 };
 
+const buildPaymentReference = (txn: InvoicePaymentTransaction): string | null => {
+  if (txn.utrNumber) {
+    return `UTR: ${txn.utrNumber}`;
+  }
+  if (txn.chequeNumber) {
+    return `Cheque: ${txn.chequeNumber}`;
+  }
+  if (txn.gatewayPaymentId) {
+    const gateway = txn.gatewayName ? `${txn.gatewayName} ` : "";
+    return `${gateway}ID: ${txn.gatewayPaymentId}`;
+  }
+  return null;
+};
+
 export default function generateInvoicePdf(
   invoice: InvoicePdfInput
 ): Promise<Buffer> {
@@ -280,6 +320,84 @@ export default function generateInvoicePdf(
       doc.text(`Total: ${formatCurrency(invoice.totalAmount)}`, 50, doc.y, {
         align: "right",
       });
+
+      const normalizedPaymentStatus = String(invoice.paymentStatus || "PAID")
+        .trim()
+        .toUpperCase();
+      const isPaymentDue =
+        normalizedPaymentStatus === "PAYMENT_DUE" ||
+        normalizedPaymentStatus === "OVERDUE";
+      const isOverdue = normalizedPaymentStatus === "OVERDUE";
+      const paymentTransactions = Array.isArray(invoice.paymentTransactions)
+        ? invoice.paymentTransactions
+        : [];
+      const totalPaid = paymentTransactions.reduce(
+        (sum, txn) => sum + Number(txn.amount || 0),
+        0
+      );
+      const amountDue = Math.max(0, Number(invoice.totalAmount) - totalPaid);
+
+      doc.moveDown(1);
+      drawSectionTitle(doc, "Payment Summary", fonts);
+      doc.font(fonts.regular).fontSize(10);
+      doc.text(
+        `Payment Status: ${
+          isPaymentDue
+            ? isOverdue
+              ? "OVERDUE"
+              : "PAYMENT DUE"
+            : "PAID"
+        }`
+      );
+      if (invoice.paymentTerms) {
+        doc.text(`Payment Terms: ${toSafeText(invoice.paymentTerms)}`);
+      }
+      if (invoice.paymentDueDate) {
+        doc.text(
+          `Payment Due Date (IST): ${formatDateTimeInIST(invoice.paymentDueDate)}`
+        );
+      }
+      if (totalPaid > 0) {
+        doc.text(`Amount Paid: ${formatCurrency(totalPaid)}`);
+      }
+      if (amountDue > 0) {
+        doc.text(`Amount Due: ${formatCurrency(amountDue)}`);
+      }
+
+      if (paymentTransactions.length > 0) {
+        drawSectionTitle(doc, "Payment Records", fonts);
+        doc.font(fonts.regular).fontSize(9.5);
+        paymentTransactions.forEach((txn, index) => {
+          const reference = buildPaymentReference(txn);
+          const receivedAt = txn.paymentReceivedAt
+            ? formatDateTimeInIST(txn.paymentReceivedAt)
+            : "N/A";
+          const method = toSafeText(txn.paymentMethod, "PAYMENT");
+          const source = txn.paymentSource
+            ? ` (${txn.paymentSource})`
+            : "";
+          const line = `${index + 1}. ${method}${source} | ${formatCurrency(
+            Number(txn.amount || 0)
+          )} | ${receivedAt}${reference ? ` | ${reference}` : ""}`;
+          doc.text(line);
+          if (txn.bankName) {
+            doc.text(`   Bank: ${txn.bankName}`);
+          }
+          if (txn.transferDate) {
+            doc.text(
+              `   Transfer Date: ${formatDateTimeInIST(txn.transferDate)}`
+            );
+          }
+          if (txn.chequeDate) {
+            doc.text(`   Cheque Date: ${formatDateTimeInIST(txn.chequeDate)}`);
+          }
+          if (txn.chequeClearingDate) {
+            doc.text(
+              `   Cheque Clearing: ${formatDateTimeInIST(txn.chequeClearingDate)}`
+            );
+          }
+        });
+      }
 
       doc.moveDown(1);
       doc

@@ -221,8 +221,42 @@ const buildCatalogCacheKey = (options: {
     filters: options.filters,
   })}`;
 
+const normalizeProductFilters = (
+  filters: ProductFilters | null | undefined
+): ProductFilters => {
+  const safe = filters && typeof filters === "object" ? filters : {};
+  const normalizeText = (value: unknown): string | undefined =>
+    typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+  const normalizeNumber = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  const normalizeBoolean = (value: unknown): boolean | undefined =>
+    typeof value === "boolean" ? value : undefined;
+  const normalizeFlags = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) return undefined;
+    const cleaned = value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return cleaned.length > 0 ? cleaned : undefined;
+  };
+
+  return {
+    search: normalizeText(safe.search),
+    categoryId: normalizeText(safe.categoryId),
+    minPrice: normalizeNumber(safe.minPrice),
+    maxPrice: normalizeNumber(safe.maxPrice),
+    isNew: normalizeBoolean(safe.isNew),
+    isFeatured: normalizeBoolean(safe.isFeatured),
+    isTrending: normalizeBoolean(safe.isTrending),
+    isBestSeller: normalizeBoolean(safe.isBestSeller),
+    flags: normalizeFlags(safe.flags),
+  };
+};
+
 const buildProductWhere = (filters: ProductFilters) => {
-  const where: any = {};
+  const where: any = {
+    isDeleted: false, // Exclude soft-deleted products
+  };
 
   const searchQuery = filters.search?.trim();
   if (searchQuery) {
@@ -523,16 +557,17 @@ export const productResolvers = {
       }: {
         first?: number;
         skip?: number;
-        filters?: ProductFilters;
+        filters?: ProductFilters | null;
       },
       context: Context,
       info: any
     ) => {
-      const where = buildProductWhere(filters);
+      const normalizedFilters = normalizeProductFilters(filters);
+      const where = buildProductWhere(normalizedFilters);
       return resolveProductConnection(context, {
         scope: "products",
         where,
-        cacheFilters: filters,
+        cacheFilters: normalizedFilters,
         first,
         skip,
         // Only fire COUNT(*) when the client actually selects totalCount.

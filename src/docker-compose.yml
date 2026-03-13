@@ -1,4 +1,111 @@
 services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: jhaecom
+      POSTGRES_PASSWORD: jhaecom27
+      POSTGRES_DB: b2c_ecommerce
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready is built into the official postgres image — no wget needed.
+      test: ["CMD-SHELL", "pg_isready -U jhaecom -d b2c_ecommerce"]
+      interval: 5s
+      timeout: 5s
+      retries: 20        # up to 100 s of retries before giving up
+      start_period: 15s  # allow init scripts to complete first
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    env_file:
+      - ./server/.env
+    environment:
+      NODE_ENV: development
+      DOCKER_MODE: "true"
+      PORT: "5000"
+      PUBLIC_API_BASE_URL: http://${HOST_MACHINE_IP:-localhost}:5000
+      CLIENT_URL_DEV: http://${HOST_MACHINE_IP:-localhost}:3000
+      ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://${HOST_MACHINE_IP:-localhost}:3000
+      COOKIE_DOMAIN: ""
+      DATABASE_URL: postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable&connection_limit=20&pool_timeout=20
+      DIRECT_URL: postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "5000:5000"
+    # Server waits for DB + Redis to be HEALTHY (not just started).
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    # Startup sequence:
+    #   1. Override URLs so Prisma CLI uses db:5432 (Docker network), not .env localhost.
+    #   2. prisma migrate deploy — apply all pending migrations (idempotent, safe to re-run).
+    #   3. prisma generate      — regenerate the TypeScript client from schema.
+    #   4. nodemon              — start the dev server with hot-reload.
+    command: >-
+      sh -c "
+        export DATABASE_URL='postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable&connection_limit=20&pool_timeout=20' &&
+        export DIRECT_URL='postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable' &&
+        npx prisma migrate deploy &&
+        npx prisma generate &&
+        npx nodemon
+      "
+    # ── Readiness probe ──────────────────────────────────────────────────────
+    # Uses Node.js built-in http module — more reliable than wget on Alpine
+    # because it correctly handles 503 responses during the startup phase
+    # (db connecting) without falling back to the pipe-grep approach which
+    # can silently succeed on an empty stdout.
+    #
+    # The probe checks: server is listening + DB is connected + serverReady=true.
+    # The client container will NOT start until this probe succeeds.
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - |
+          const http = require('http');
+          const req = http.get('http://localhost:5000/health', (res) => {
+            let body = '';
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => {
+              try {
+                const json = JSON.parse(body);
+                process.exit(json.healthy === true ? 0 : 1);
+              } catch (e) {
+                process.exit(1);
+              }
+            });
+          });
+          req.on('error', () => process.exit(1));
+          req.setTimeout(5000, () => { req.destroy(); process.exit(1); });
+      interval: 10s
+      timeout: 8s
+      retries: 30         # 30 × 10 s = 300 s window — covers migrate + generate + cold-start
+      start_period: 60s   # suppress failures during the initial migrate/generate phase
+    restart: on-failure:5
+
   client:
     build:
       context: ./client
@@ -16,54 +123,16 @@ services:
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "3000:3000"
+    # Client does NOT start until server reports healthy.
+    # By that point: DB connected, migrations applied, GraphQL serving.
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     volumes:
       - ./client:/app
       - /app/node_modules
     command: npm run dev
-
-  server:
-    build: ./server
-    env_file:
-      - ./server/.env
-    environment:
-      NODE_ENV: development
-      DOCKER_MODE: "true"
-      PORT: "5000"
-      PUBLIC_API_BASE_URL: http://${HOST_MACHINE_IP:-localhost}:5000
-      CLIENT_URL_DEV: http://${HOST_MACHINE_IP:-localhost}:3000
-      ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://${HOST_MACHINE_IP:-localhost}:3000
-      COOKIE_DOMAIN: ""
-      DATABASE_URL: postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable&connection_limit=20&pool_timeout=20
-      REDIS_ENABLED: "true"
-      REDIS_URL: redis://redis:6379
-      CHOKIDAR_USEPOLLING: "true"
-    ports:
-      - "5000:5000"
-    depends_on:
-      - db
-      - redis
-    volumes:
-      - ./server:/app
-      - /app/node_modules
-    command: npm run dev -- --legacy-watch
-
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: jhaecom
-      POSTGRES_PASSWORD: jhaecom27
-      POSTGRES_DB: b2c_ecommerce
-    ports:
-      - "5433:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
+    restart: on-failure:5
 
 volumes:
   pgdata:

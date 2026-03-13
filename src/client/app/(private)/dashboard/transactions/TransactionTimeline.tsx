@@ -2,7 +2,11 @@
 
 import formatDate from "@/app/utils/formatDate";
 import { Clock } from "lucide-react";
-import { normalizeOrderStatus } from "@/app/lib/orderLifecycle";
+import {
+  getPaymentAwareOrderStatusLabel,
+  normalizeOrderStatus,
+} from "@/app/lib/orderLifecycle";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 const TimelineEvent = ({ date, title, description, isActive }) => {
   return (
@@ -19,11 +23,25 @@ const TimelineEvent = ({ date, title, description, isActive }) => {
   );
 };
 
-const TransactionTimeline = ({ transaction, payment }) => {
+const TransactionTimeline = ({ transaction, payment, order }) => {
+  const formatPrice = useFormatPrice();
   const currentStatus = normalizeOrderStatus(
     transaction?.status || "PENDING_VERIFICATION"
   );
   const isPendingVerification = currentStatus === "PENDING_VERIFICATION";
+  const paymentAwareStatusLabel = getPaymentAwareOrderStatusLabel({
+    status: transaction?.status,
+    isPayLater: order?.isPayLater,
+    paymentDueDate: order?.paymentDueDate,
+    paymentTransactions: order?.paymentTransactions,
+    payment: order?.payment,
+  });
+  const paymentTransactions = Array.isArray(order?.paymentTransactions)
+    ? order.paymentTransactions
+    : [];
+  const latestPayment = paymentTransactions.find(
+    (transaction: any) => transaction.status === "CONFIRMED"
+  );
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
@@ -39,7 +57,16 @@ const TransactionTimeline = ({ transaction, payment }) => {
           isActive={true}
         />
 
-        {payment ? (
+        {latestPayment ? (
+          <TimelineEvent
+            date={formatDate(latestPayment.paymentReceivedAt)}
+            title="Payment received"
+            description={`${latestPayment.paymentMethod} - ${formatPrice(
+              Number(latestPayment.amount || 0)
+            )}`}
+            isActive={false}
+          />
+        ) : payment ? (
           <TimelineEvent
             date={formatDate(payment.createdAt)}
             title={payment.status === "PAID" ? "Payment processed" : "Payment pending"}
@@ -57,12 +84,12 @@ const TransactionTimeline = ({ transaction, payment }) => {
 
         {!isPendingVerification && (
           <TimelineEvent
-            date={formatDate(transaction.updatedAt)}
-            title="Status updated"
-            description={`Current status: ${currentStatus}`}
-            isActive={false}
-          />
-        )}
+          date={formatDate(transaction.updatedAt)}
+          title="Status updated"
+          description={`Current status: ${paymentAwareStatusLabel}`}
+          isActive={false}
+        />
+      )}
       </div>
     </div>
   );

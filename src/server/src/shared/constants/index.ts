@@ -7,5 +7,8 @@ export const cookieOptions = {
   secure: config.isProduction,
   sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
   path: "/",
-  domain: config.security.cookieDomain,
+  maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+  // Only set domain if explicitly configured (production)
+  // Leave undefined for localhost to work correctly
+  ...(config.security.cookieDomain ? { domain: config.security.cookieDomain } : {}),
 };

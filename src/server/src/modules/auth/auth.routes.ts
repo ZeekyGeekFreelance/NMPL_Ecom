@@ -16,6 +16,7 @@ import {
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
   ApplyDealerAccessDto,
+  ChangePasswordOnFirstLoginDto,
   RegisterDto,
   RequestRegistrationOtpDto,
   ForgotPasswordDto,
@@ -401,6 +402,20 @@ router.post(
   passwordResetLimiter,
   validateDto(ResetPasswordDto),
   authController.resetPassword
+);
+
+/**
+ * POST /change-password
+ * Forced first-login password change for legacy dealer accounts.
+ * No auth required — the user provides their email + temporary password for
+ * re-verification, and the new password they want to set.
+ * On success, full session cookies are issued so the dealer can proceed.
+ */
+router.post(
+  "/change-password",
+  authRateLimiter,
+  validateDto(ChangePasswordOnFirstLoginDto),
+  authController.changePasswordOnFirstLogin
 );
 
 /**

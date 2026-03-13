@@ -145,18 +145,42 @@ class InMemoryRedisShim {
   }
 
   multi() {
-    const keysToDelete: string[] = [];
-    const command = {
-      del: (key: string) => {
-        keysToDelete.push(key);
-        return command;
+    // Full pipeline: collects all queued operations and executes them in order.
+    // Supports set (with EX/NX), setex, del, incr, expire — enough to cover
+    // registrationOtp and token-blacklist flows without real Redis.
+    const ops: Array<() => Promise<any>> = [];
+
+    const chain = {
+      set: (key: string, value: string, ...args: Array<string | number>) => {
+        ops.push(() => this.set(key, value, ...args));
+        return chain;
       },
-      exec: async () => {
-        await this.del(...keysToDelete);
-        return [] as any[];
+      setex: (key: string, ttl: number, value: string) => {
+        ops.push(() => this.setex(key, ttl, value));
+        return chain;
+      },
+      del: (...keys: string[]) => {
+        ops.push(() => this.del(...keys));
+        return chain;
+      },
+      incr: (key: string) => {
+        ops.push(() => this.incr(key));
+        return chain;
+      },
+      expire: (key: string, ttl: number) => {
+        ops.push(() => this.expire(key, ttl));
+        return chain;
+      },
+      exec: async (): Promise<any[]> => {
+        const results: any[] = [];
+        for (const op of ops) {
+          results.push(await op());
+        }
+        return results;
       },
     };
-    return command;
+
+    return chain;
   }
 }
 

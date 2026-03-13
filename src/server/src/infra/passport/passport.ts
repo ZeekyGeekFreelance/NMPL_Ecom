@@ -14,6 +14,32 @@ const isConfigured = (...values: Array<string | undefined>): boolean =>
   values.every((value) => typeof value === "string" && value.trim().length > 0);
 
 export default function configurePassport() {
+  // Serialize user ID into session
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  // Deserialize user from session
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          avatar: true,
+          phone: true,
+          tokenVersion: true,
+        },
+      });
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+
   const googleClientId = config.raw.GOOGLE_CLIENT_ID;
   const googleClientSecret = config.raw.GOOGLE_CLIENT_SECRET;
   const googleCallback = config.isProduction

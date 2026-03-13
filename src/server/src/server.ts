@@ -11,8 +11,8 @@ addAlias("@", runtimeRoot);
 
 const { createApp } = require("./app") as typeof import("./app");
 const { config } = require("./config") as typeof import("./config");
-const { disconnectDB } = require("./infra/database/database.config") as typeof import("./infra/database/database.config");
-const { disconnectRedis } = require("./infra/cache/redis") as typeof import("./infra/cache/redis");
+const { connectDB, disconnectDB } = require("./infra/database/database.config") as typeof import("./infra/database/database.config");
+const { connectRedis, disconnectRedis } = require("./infra/cache/redis") as typeof import("./infra/cache/redis");
 const {
   assertApiPortParity,
   assertClusterParity,
@@ -70,8 +70,9 @@ const gracefulShutdown = async (
 
 async function bootstrap() {
   const bootStartedAt = Date.now();
-  // Register signal handlers immediately so no boot window is left unguarded.
-  // httpServer is captured by reference once createApp resolves.
+
+  // Register signal handlers immediately — no boot window is left unguarded.
+  // httpServer is captured by reference once the server starts listening.
   let httpServer: import("http").Server | undefined;
 
   process.on("SIGTERM", () => {
@@ -89,6 +90,8 @@ async function bootstrap() {
     void gracefulShutdown("unhandledRejection", httpServer);
   });
 
+  // ── PHASE 1: Config validation & preflight assertions ───────────────────
+  console.log("\n[boot] SERVER STARTING");
   bootState.configValidated = true;
   assertApiPortParity();
   await assertPortAvailable();
@@ -97,16 +100,19 @@ async function bootstrap() {
   assertMigrationsApplied();
   bootState.migrationsApplied = true;
 
+  // ── PHASE 2: Build express app + HTTP server ─────────────────────────────
+  // createApp() sets up all middleware and routes but does NOT connect to the
+  // database.  The readiness gate inside createApp() returns 503 for all API
+  // traffic until bootState.serverReady is set to true in Phase 4 below.
   const app = await createApp();
   httpServer = app.httpServer;
-  await assertClusterParity();
-  printStartupDiagnostics();
 
   httpServer.on("error", (err) => {
     const nodeError = err as NodeJS.ErrnoException;
     if (nodeError.code === "EADDRINUSE") {
       console.error(
-        `[boot] Port ${config.server.port} is already in use. Update PORT and client API env consistently.`
+        `[boot] Port ${config.server.port} is already in use. ` +
+        `Update PORT and client API env consistently.`
       );
     } else {
       console.error("[boot] Server error:", err);
@@ -114,19 +120,73 @@ async function bootstrap() {
     process.exit(1);
   });
 
-  httpServer.listen(config.server.port, () => {
+  // ── PHASE 3: START LISTENING (health checks available immediately) ───────
+  // The server begins accepting connections NOW, before the DB is connected.
+  // /health returns {"healthy":false} during Phase 4 — that is correct and
+  // expected.  Docker's start_period + retries window covers the full DB
+  // startup time.  The frontend useBackendReady hook polls /health and gates
+  // data fetches behind it.
+  await new Promise<void>((resolve) => {
+    httpServer!.listen(config.server.port, () => {
+      console.log(`[boot] ✅ SERVER LISTENING on :${config.server.port}`);
+      resolve();
+    });
+  });
+
+  printStartupDiagnostics();
+
+  // ── PHASE 4: Connect to DB and Redis (runs after server is already live) ─
+  // This task runs asynchronously relative to the HTTP server — the server
+  // continues handling health probes while this resolves.
+  // On success: sets bootState.serverReady = true → API routes open.
+  // On fatal failure: triggers graceful shutdown.
+  const connectionTask = async (): Promise<void> => {
+    await connectDB();
+
+    if (config.redis.enabled) {
+      await connectRedis();
+    }
+
+    // Cluster parity check requires a live Redis connection.
+    await assertClusterParity();
+
+    // ── SERVER IS NOW FULLY READY ─────────────────────────────────────────
+    bootState.serverReady = true;
+
     const bootDurationMs = Date.now() - bootStartedAt;
-    console.log(`[boot] Server is running on port ${config.server.port}`);
+    console.log("\n╔══════════════════════════════════════════╗");
+    console.log(`║  ✅ DATABASE CONNECTED                   ║`);
+    console.log(`║  ✅ CACHE INITIALIZED                    ║`);
+    console.log(`║  ✅ SERVER READY — accepting API traffic ║`);
+    console.log(`║  ⏱  Boot time: ${String(bootDurationMs + "ms").padEnd(25)}║`);
+    console.log("╚══════════════════════════════════════════╝\n");
     console.log(`[perf] boot-summary ${JSON.stringify({ bootDurationMs })}`);
 
+    // Start background workers after the data layer is fully ready.
     setTimeout(() => {
       startQuotationExpiryWorker();
+      
+      // Start data cleanup cron job
+      try {
+        require("./workers/cron");
+        console.log("[boot] ✅ Data cleanup cron job registered");
+      } catch (error) {
+        console.error("[boot] ⚠️  Failed to register cleanup cron:", error);
+      }
     }, 0).unref();
+  };
+
+  connectionTask().catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[boot] ❌ FATAL: Failed to establish database/cache connections: ${msg}`);
+    // Trigger graceful shutdown — the container restart policy will
+    // bring the server back up once the DB becomes reachable.
+    void gracefulShutdown("uncaughtException", httpServer);
   });
 }
 
 bootstrap().catch((error) => {
   const errorMessage = error instanceof Error ? error.message : String(error);
-  console.error(`Failed to bootstrap server: ${errorMessage}`);
+  console.error(`[boot] Failed to bootstrap server: ${errorMessage}`);
   process.exit(1);
 });

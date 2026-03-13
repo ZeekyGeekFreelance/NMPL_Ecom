@@ -15,7 +15,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "seed": "ts-node seeds/seed.ts",
-    "data:normalize:titlecase": "ts-node scripts/normalize-title-case-data.ts"
+    "data:normalize:titlecase": "ts-node scripts/normalize-title-case-data.ts",
+    "test:cleanup": "node -r ./scripts/load-env.js -r module-alias/register -r ts-node/register test-cleanup.ts"
   },
   "engines": {
     "node": ">=22 <23"
@@ -61,6 +62,7 @@
     "module-alias": "^2.2.3",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^6.10.0",
     "npm": "^11.2.0",
     "passport": "^0.7.0",
@@ -68,7 +70,6 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-twitter": "^1.0.4",
     "pdfkit": "^0.17.0",
-    "socket.io": "^4.8.1",
     "stripe": "^18.0.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
@@ -93,6 +94,7 @@
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.15.3",
+    "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^6.4.17",
     "@types/passport": "^1.0.17",
     "@types/passport-facebook": "^3.0.3",

@@ -61,7 +61,7 @@ import {
 
 type Role = "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
 type AccountKind = Role | "DEALER";
-type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
+type DealerStatus = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED";
 
 type DealerProfile = {
   businessName?: string | null;
@@ -209,11 +209,12 @@ const ACTIONS_BY_ACCOUNT: Record<
 const statusClassMap: Record<DealerStatus, string> = {
   PENDING: "bg-amber-100 text-amber-800 border-amber-200",
   APPROVED: "bg-green-100 text-green-800 border-green-200",
+  LEGACY: "bg-purple-100 text-purple-800 border-purple-200",
   REJECTED: "bg-red-100 text-red-800 border-red-200",
 };
 
 const DEALER_STATUS_COPY: Record<
-  DealerStatus,
+  DealerStatus | "LEGACY",
   { title: string; description: string; className: string }
 > = {
   PENDING: {
@@ -227,6 +228,12 @@ const DEALER_STATUS_COPY: Record<
     description:
       "Your assigned dealer pricing is active and resolved securely on the server.",
     className: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  },
+  LEGACY: {
+    title: "Legacy dealer account (approved)",
+    description:
+      "Your legacy dealer pricing is active with pay-later terms enabled.",
+    className: "border-purple-200 bg-purple-50 text-purple-900",
   },
   REJECTED: {
     title: "Dealer request was rejected",

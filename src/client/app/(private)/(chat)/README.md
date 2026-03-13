@@ -5,11 +5,10 @@ A modern, responsive customer support chat application with enhanced features an
 ## 🚀 Features
 
 ### Core Features
-- **Real-time messaging** with WebSocket integration
+- **Message history** with server-backed persistence
 - **File sharing** (images, documents, audio)
 - **Voice messages** with recording capabilities
 - **Emoji picker** for enhanced communication
-- **Typing indicators** to show when someone is typing
 - **Message grouping** for better conversation flow
 - **Auto-scroll** to latest messages
 - **Push notifications** for new messages
@@ -85,7 +84,6 @@ src/client/app/(private)/(chat)/
 - **Styling**: Tailwind CSS
 - **Animations**: Framer Motion
 - **State Management**: RTK Query
-- **Real-time**: WebSocket
 - **TypeScript**: Full type safety
 
 ## 🚀 Getting Started

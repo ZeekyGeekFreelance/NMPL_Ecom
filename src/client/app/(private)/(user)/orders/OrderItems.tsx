@@ -6,15 +6,16 @@ import Image from "next/image";
 import Link from "next/link";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { ShoppingCart } from "lucide-react";
+import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 
 // Helper function to format variant name from SKU
 const formatVariantName = (item: any) => {
-  const { name } = item.variant.product;
-  const sku = item.variant.sku;
+  const name = item?.variant?.product?.name || "Product";
+  const sku = item?.variant?.sku || "";
   // Parse SKU (e.g., "TSH-BLUE-L" -> "Blue, Large")
   const parts = sku.split("-").slice(1); // Remove prefix (e.g., "TSH")
   const variantDetails = parts.join(", "); // Join color and size
-  return `${name} - ${variantDetails}`;
+  return variantDetails ? `${name} - ${variantDetails}` : name;
 };
 
 const OrderItems = ({ order }) => {
@@ -39,7 +40,7 @@ const OrderItems = ({ order }) => {
       </div>
 
       <div className="space-y-4">
-        {order.orderItems.map((item) => {
+        {(Array.isArray(order?.orderItems) ? order.orderItems : []).map((item) => {
           const productSlug = item?.variant?.product?.slug;
           const productHref = productSlug ? `/product/${productSlug}` : "/shop";
           const unitPrice = Number(item?.price ?? item?.variant?.price ?? 0);
@@ -47,6 +48,8 @@ const OrderItems = ({ order }) => {
           const lineTotal = unitPrice * quantity;
           const productName = item?.variant?.product?.name || "Product";
           const variantDetails = getVariantParts(item);
+          const imageSrc =
+            item?.variant?.images?.[0] || generateProductPlaceholder(productName);
 
           return (
             <div
@@ -59,7 +62,7 @@ const OrderItems = ({ order }) => {
                 className="flex items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-gray-50 shadow-sm"
               >
                 <Image
-                  src={item.variant.images[0]}
+                  src={imageSrc}
                   alt={formatVariantName(item)}
                   width={56}
                   height={56}

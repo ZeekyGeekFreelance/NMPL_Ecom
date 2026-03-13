@@ -26,6 +26,31 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+const patchDockerDbUrl = (key) => {
+  const raw = process.env[key];
+  if (!raw) return;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+      url.hostname = "db";
+      if (!url.port || url.port === "5433") {
+        url.port = "5432";
+      }
+      process.env[key] = url.toString();
+    }
+  } catch {
+    // Ignore malformed URLs; config validation will surface it later.
+  }
+};
+
+// In Docker, ensure DATABASE_URL points at the service name even if .env
+// contains localhost values (Prisma CLI reads .env by default).
+if (process.env.DOCKER_MODE === "true") {
+  patchDockerDbUrl("DATABASE_URL");
+  patchDockerDbUrl("DIRECT_URL");
+}
+
 if (process.env.NODE_ENV !== "production") {
   const dbUrl = process.env.DATABASE_URL || "(not set)";
   const host  = (() => { try { return new URL(dbUrl).hostname; } catch { return dbUrl; } })();

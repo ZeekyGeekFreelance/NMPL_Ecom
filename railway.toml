@@ -1,0 +1,98 @@
+# railway.toml
+# ─────────────────────────────────────────────────────────────────────────────
+# Commit this file to the repository root.
+# Railway reads it automatically on every push.
+#
+# How to deploy:
+#   1. Create a new Railway project.
+#   2. Add a Redis plugin from the Railway dashboard (or use Upstash).
+#   3. Set all secret variables listed in RAILWAY_ENV_REFERENCE.md in each
+#      service's Variables tab.
+#   4. Push to main → Railway builds and deploys both services automatically.
+#
+# Database: use Neon (external) — set DATABASE_URL + DIRECT_URL as variables.
+# Do NOT use Railway's built-in Postgres for this stack (Neon pooler handles
+# connection management better for Prisma).
+# ─────────────────────────────────────────────────────────────────────────────
+
+[build]
+  builder = "DOCKERFILE"
+
+# ── Server service ────────────────────────────────────────────────────────────
+[[services]]
+  name = "server"
+  source = "src/server"
+  dockerfile = "Dockerfile.production"
+
+  [services.deploy]
+    # prisma migrate deploy runs before the server starts.
+    # This is idempotent — already-applied migrations are skipped.
+    startCommand = "sh -c 'npx prisma migrate deploy && node -r ./scripts/load-env.js -r module-alias/register dist/server.js'"
+
+    # Railway polls /health to decide when the deployment is live.
+    # Our /health endpoint returns {"healthy":true} only after DB, Redis,
+    # migrations, and all middleware are confirmed ready.
+    healthcheckPath = "/health"
+
+    # 5-minute timeout covers:
+    #   - prisma migrate deploy (~5-30s depending on pending migrations)
+    #   - Neon DB cold-start (up to 30s on free tier)
+    #   - Server boot + DB connection retry (up to 60s with backoff)
+    # Railway will retry the health check every 10s within this window.
+    healthcheckTimeout = 300
+
+    restartPolicyType = "ON_FAILURE"
+    restartPolicyMaxRetries = 5
+
+  # Non-secret env vars — set here so they are tracked in version control.
+  # SECRET vars (DATABASE_URL, SESSION_SECRET, etc.) must be set ONLY in the
+  # Railway dashboard Variables tab. Never commit secrets to this file.
+  [services.variables]
+    NODE_ENV                     = "production"
+    PORT                         = "5000"
+    DB_ENV                       = "production"
+    DB_SSL_REQUIRED              = "true"
+    REDIS_ENABLED                = "true"
+    TRUST_PROXY                  = "true"
+    HELMET_ENABLED               = "true"
+    RATE_LIMIT_ENABLED           = "true"
+    SMS_PROVIDER                 = "LOG"
+    ENABLE_MOCK_PAYMENT          = "false"
+    STRIPE_CURRENCY              = "inr"
+    STRICT_BUILD_CHECKS          = "false"
+    CLUSTER_PARITY_CHECK_ENABLED = "false"
+    MIXED_MODE_GUARD_ENABLED     = "false"
+    DOCKER_MODE                  = "false"
+    COOKIE_SAMESITE              = "none"
+    COOKIE_DOMAIN                = ""
+
+# ── Client service ────────────────────────────────────────────────────────────
+[[services]]
+  name = "client"
+  source = "src/client"
+  dockerfile = "Dockerfile.production"
+
+  [services.deploy]
+    startCommand = "node server.js"
+
+    # Next.js standalone server starts fast — 30s is plenty.
+    healthcheckPath = "/"
+    healthcheckTimeout = 120
+
+    restartPolicyType = "ON_FAILURE"
+    restartPolicyMaxRetries = 5
+
+  [services.variables]
+    NODE_ENV                 = "production"
+    PORT                     = "3000"
+    HOSTNAME                 = "0.0.0.0"
+    NEXT_TELEMETRY_DISABLED  = "1"
+    # NEXT_PUBLIC_API_URL, NEXT_PUBLIC_PLATFORM_NAME, NEXT_PUBLIC_SUPPORT_EMAIL
+    # must be set in the Railway dashboard. Railway automatically passes
+    # service variables as Docker build args, so they will be baked into the
+    # Next.js bundle at build time — no extra configuration needed.
+    #
+    # INTERNAL_API_URL should be set to Railway's private domain:
+    #   http://server.railway.internal:5000/api/v1
+    # This lets Next.js SSR call the API over Railway's private network instead
+    # of the public internet, which is faster and free of egress charges.

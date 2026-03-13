@@ -55,6 +55,8 @@ type OrderSnapshot = {
   verificationQueuedAt: Date | null;
   status: string;
   reservationExpiresAt: Date | null;
+  /** True when the order belongs to a legacy pay-later dealer. Set at order creation. */
+  isPayLater: boolean;
   orderItems: OrderItemSnapshot[];
   reservation: {
     id: string;
@@ -120,6 +122,25 @@ export class TransactionRepository {
   async findMany(params?: { skip?: number; take?: number }) {
     if (!params) {
       return prisma.transaction.findMany({
+        include: {
+          order: {
+            select: {
+              id: true,
+              isPayLater: true,
+              paymentDueDate: true,
+              payment: {
+                select: {
+                  status: true,
+                },
+              },
+              paymentTransactions: {
+                select: {
+                  status: true,
+                },
+              },
+            },
+          },
+        },
         orderBy: {
           transactionDate: "desc",
         },
@@ -131,6 +152,25 @@ export class TransactionRepository {
     return prisma.transaction.findMany({
       skip,
       take,
+      include: {
+        order: {
+          select: {
+            id: true,
+            isPayLater: true,
+            paymentDueDate: true,
+            payment: {
+              select: {
+                status: true,
+              },
+            },
+            paymentTransactions: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: {
         transactionDate: "desc",
       },
@@ -142,17 +182,32 @@ export class TransactionRepository {
   }
 
   async findById(id: string) {
-    return prisma.transaction.findUnique({
-      where: { id },
-      include: {
-        order: {
-          include: {
-            payment: true,
-            reservation: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
+      return prisma.transaction.findUnique({
+        where: { id },
+        include: {
+          order: {
+            include: {
+              payment: true,
+              paymentTransactions: {
+                orderBy: {
+                  paymentReceivedAt: "desc",
+                },
+                include: {
+                  recordedBy: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                      role: true,
+                    },
+                  },
+                },
+              },
+              reservation: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
                 email: true,
                 phone: true,
                 role: true,
@@ -348,6 +403,7 @@ export class TransactionRepository {
         verificationQueuedAt: true,
         status: true,
         reservationExpiresAt: true,
+        isPayLater: true,
         reservation: {
           select: {
             id: true,
@@ -718,6 +774,60 @@ export class TransactionRepository {
     });
   }
 
+  private async finalizePayLaterOrder(params: {
+    tx: Prisma.TransactionClient;
+    order: OrderSnapshot;
+    reason: string;
+  }) {
+    if (params.order.reservation?.status !== RESERVATION_STATUS.ACTIVE) {
+      throw new AppError(
+        409,
+        "Order cannot be confirmed without an active reservation."
+      );
+    }
+
+    for (const item of params.order.orderItems) {
+      const deductedCount = await params.tx.$executeRaw`
+          UPDATE "ProductVariant"
+          SET "stock" = "stock" - ${item.quantity},
+              "reservedStock" = GREATEST(0, "reservedStock" - ${item.quantity}),
+              "updatedAt" = NOW()
+          WHERE "id" = ${item.variantId}
+            AND "stock" >= ${item.quantity}
+            AND "reservedStock" >= ${item.quantity}
+        `;
+
+      if (deductedCount === 0) {
+        throw new AppError(
+          409,
+          `Unable to confirm order. Reserved stock is inconsistent for variant ${item.variantId}.`
+        );
+      }
+
+      await params.tx.product.update({
+        where: {
+          id: item.variant.productId,
+        },
+        data: {
+          salesCount: {
+            increment: item.quantity,
+          },
+        },
+      });
+    }
+
+    await params.tx.orderReservation.update({
+      where: {
+        id: params.order.reservation.id,
+      },
+      data: {
+        status: RESERVATION_STATUS.CONSUMED,
+        consumedAt: new Date(),
+        reason: params.reason,
+      },
+    });
+  }
+
   private async ensurePaymentRecord(params: {
     tx: Prisma.TransactionClient;
     order: {
@@ -1078,63 +1188,153 @@ export class TransactionRepository {
           variantIds: affectedVariantIds,
           reservationExpiryHours: data.reservationExpiryHours,
         });
-      } else if (effectiveStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED) {
-        await this.finalizePaidOrder({
-          tx,
-          order,
-        });
-        await this.ensurePaymentRecord({
-          tx,
-          order: {
-            id: order.id,
-            userId: order.userId,
-            amount: order.amount,
-            payment: order.payment,
-          },
-          status: PAYMENT_STATUS.PAID,
-        });
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            status: ORDER_LIFECYCLE_STATUS.CONFIRMED,
-            reservationExpiresAt: null,
-          },
-        });
+        } else if (effectiveStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED) {
+          const isPayLaterBypass = order.isPayLater;
 
-        await this.appendQuotationLog({
-          tx,
-          orderId: order.id,
-          event: ORDER_QUOTATION_LOG_EVENT.PAYMENT_CONFIRMED,
-          previousTotal: Number(order.amount),
-          updatedTotal: Number(order.amount),
-          actorUserId: data.actorUserId,
-          actorRole: data.actorRole || "SYSTEM",
-          message: "Payment confirmed at accepted quotation price.",
-          lineItems: this.buildQuotationLineItems(order.orderItems),
-        });
-      } else {
-        await tx.order.update({
+          if (isPayLaterBypass) {
+            await this.finalizePayLaterOrder({
+              tx,
+              order,
+              reason: "PAY_LATER_CONFIRMED",
+            });
+
+            const paymentStatus =
+              order.payment?.status === PAYMENT_STATUS.PAID
+                ? PAYMENT_STATUS.PAID
+                : PAYMENT_STATUS.PENDING;
+
+            await this.ensurePaymentRecord({
+              tx,
+              order: {
+                id: order.id,
+                userId: order.userId,
+                amount: order.amount,
+                payment: order.payment,
+              },
+              status: paymentStatus,
+            });
+
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                status: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+                reservationExpiresAt: null,
+              },
+            });
+
+            if (String(data.actorRole || "").trim().toUpperCase() !== "PAY_LATER_BYPASS") {
+              await this.appendQuotationLog({
+                tx,
+                orderId: order.id,
+                event: ORDER_QUOTATION_LOG_EVENT.CUSTOMER_ACCEPTED,
+                previousTotal: Number(order.amount),
+                updatedTotal: Number(order.amount),
+                actorUserId: data.actorUserId,
+                actorRole: data.actorRole || "SYSTEM",
+                message: "Pay-later order confirmed without upfront payment.",
+                lineItems: this.buildQuotationLineItems(order.orderItems),
+              });
+            }
+          } else {
+            await this.finalizePaidOrder({
+              tx,
+              order,
+            });
+            await this.ensurePaymentRecord({
+              tx,
+              order: {
+                id: order.id,
+                userId: order.userId,
+                amount: order.amount,
+                payment: order.payment,
+              },
+              status: PAYMENT_STATUS.PAID,
+            });
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                status: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+                reservationExpiresAt: null,
+              },
+            });
+
+            await this.appendQuotationLog({
+              tx,
+              orderId: order.id,
+              event: ORDER_QUOTATION_LOG_EVENT.PAYMENT_CONFIRMED,
+              previousTotal: Number(order.amount),
+              updatedTotal: Number(order.amount),
+              actorUserId: data.actorUserId,
+              actorRole: data.actorRole || "SYSTEM",
+              message: "Payment confirmed at accepted quotation price.",
+              lineItems: this.buildQuotationLineItems(order.orderItems),
+            });
+          }
+        } else {
+          // Generic order status update (covers DELIVERED and any future statuses).
+          const statusUpdateData: Record<string, unknown> = { status: effectiveStatus };
+
+          // Pay-later DELIVERED: stamp the 30-day payment due date onto the order.
+          // creditTermDays defaults to 30 for all LEGACY dealers (set at account creation).
+          if (
+            effectiveStatus === ORDER_LIFECYCLE_STATUS.DELIVERED &&
+            order.isPayLater
+          ) {
+            if (order.reservation?.status === RESERVATION_STATUS.ACTIVE) {
+              await this.finalizePayLaterOrder({
+                tx,
+                order,
+                reason: "DELIVERED",
+              });
+            } else if (
+              this.normalizeStatusValue(String(order.status)) ===
+              ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT
+            ) {
+              throw new AppError(
+                409,
+                "Pay-later orders must have an active reservation before delivery."
+              );
+            }
+
+            const CREDIT_TERM_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+            statusUpdateData.paymentDueDate = new Date(now.getTime() + CREDIT_TERM_MS);
+          }
+
+          await tx.order.update({
           where: { id: order.id },
-          data: {
-            status: effectiveStatus,
-          },
+          data: statusUpdateData as any,
         });
       }
 
-      const updatedTransaction = await tx.transaction.update({
-        where: { id },
-        data: {
-          status: statusToPrismaEnum[effectiveStatus],
-        },
-        include: {
-          order: {
-            include: {
-              payment: true,
-              reservation: true,
-              address: true,
-              quotationLogs: {
-                orderBy: {
-                  createdAt: "desc",
+        const updatedTransaction = await tx.transaction.update({
+          where: { id },
+          data: {
+            status: statusToPrismaEnum[effectiveStatus],
+          },
+          include: {
+            order: {
+              include: {
+                payment: true,
+                paymentTransactions: {
+                  orderBy: {
+                    paymentReceivedAt: "desc",
+                  },
+                  include: {
+                    recordedBy: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                      },
+                    },
+                  },
+                },
+                reservation: true,
+                address: true,
+                quotationLogs: {
+                  orderBy: {
+                    createdAt: "desc",
                 },
               },
               orderItems: {

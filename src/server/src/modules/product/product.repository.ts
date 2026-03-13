@@ -23,6 +23,7 @@ export class ProductRepository {
 
     const finalWhere: Prisma.ProductWhereInput = {
       ...restWhere,
+      isDeleted: false, // Exclude soft-deleted products
       ...(categorySlug
         ? {
             category: {
@@ -74,7 +75,12 @@ export class ProductRepository {
 
   async countProducts(params: { where?: Prisma.ProductWhereInput }) {
     const { where = {} } = params;
-    return prisma.product.count({ where });
+    return prisma.product.count({ 
+      where: { 
+        ...where, 
+        isDeleted: false 
+      } 
+    });
   }
 
   async findProductById(id: string) {

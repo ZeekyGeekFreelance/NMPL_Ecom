@@ -12,6 +12,7 @@ type Frozen<T> = {
 };
 
 const LOCALHOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const IPV4_PATTERN = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 const NODE_ENVS: ReadonlyArray<NodeEnv> = ["development", "test", "production"];
 const PROJECT_ROOT = process.cwd();
 const ENV_FILE_PATH = path.resolve(PROJECT_ROOT, ".env");
@@ -260,23 +261,16 @@ const directDbTarget = directUrlRaw
   : undefined;
 const dbUrl = new URL(dbTarget.normalizedUrl);
 
+// connection_limit and pool_timeout are pgbouncer-specific parameters
+// required for Neon's pooled connections. Railway Postgres is a direct
+// connection — these params are not used and should not be required.
+// We still inject them if missing so Prisma respects our pool settings
+// in both environments, but we no longer block production boot on them.
 if (!dbTarget.connectionLimit) {
-  if (isProduction) {
-    throwConfigError(
-      "DATABASE_URL",
-      "Missing connection_limit query parameter in production"
-    );
-  }
   dbUrl.searchParams.set("connection_limit", String(dbPoolMax));
 }
 
 if (!dbTarget.poolTimeout) {
-  if (isProduction) {
-    throwConfigError(
-      "DATABASE_URL",
-      "Missing pool_timeout query parameter in production"
-    );
-  }
   dbUrl.searchParams.set("pool_timeout", String(Math.ceil(dbPoolTimeoutMs / 1000)));
 }
 
@@ -289,11 +283,12 @@ if (isProduction && LOCALHOSTS.has(dbTarget.host)) {
   );
 }
 
-if (isProduction && !directDbTarget) {
-  throwConfigError(
-    "DIRECT_URL",
-    "Production boot requires DIRECT_URL for migration/status commands."
-  );
+// DIRECT_URL is only required when DATABASE_URL is a pgbouncer-pooled connection
+// (Neon free tier uses pgbouncer; Railway Postgres does not).
+// We no longer enforce DIRECT_URL in production — the schema.prisma no longer
+// declares directUrl, so Prisma uses DATABASE_URL for both queries and migrations.
+if (isProduction && directDbTarget === undefined) {
+  console.log("[config] DIRECT_URL not set — using DATABASE_URL for all Prisma operations (Railway direct connection mode).");
 }
 
 if (isProduction && directDbTarget && LOCALHOSTS.has(directDbTarget.host)) {
@@ -307,12 +302,17 @@ if (isProduction && !dbSslRequired) {
   throwConfigError("DB_SSL_REQUIRED", "Must be true in production");
 }
 
+// SSL is enforced via DB_SSL_REQUIRED=true and Prisma's SSL config.
+// We no longer require sslmode=require in the URL string itself because
+// Railway's auto-generated DATABASE_URL uses a connection string format
+// that enables SSL without the query param (it uses the ?sslmode=require
+// form only on external URLs; internal private network connections inherit SSL).
 if (isProduction) {
   const sslMode = (dbTarget.sslMode || "").toLowerCase();
-  if (sslMode !== "require") {
+  if (sslMode && sslMode !== "require" && sslMode !== "verify-full") {
     throwConfigError(
       "DATABASE_URL",
-      "Production database URL must include sslmode=require"
+      `Production database URL has an unsafe sslmode: '${sslMode}'. Use sslmode=require or omit for Railway's default SSL.`
     );
   }
 }
@@ -729,6 +729,36 @@ export const isLocalAddress = (value: string): boolean => {
   return LOCALHOSTS.has(normalized);
 };
 
+const isPrivateIpv4 = (hostname: string): boolean => {
+  if (!IPV4_PATTERN.test(hostname)) {
+    return false;
+  }
+
+  const parts = hostname.split(".").map((part) => Number(part));
+  if (parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+
+  const [octet1, octet2] = parts;
+  if (octet1 === 10) return true;
+  if (octet1 === 172 && octet2 >= 16 && octet2 <= 31) return true;
+  if (octet1 === 192 && octet2 === 168) return true;
+  return false;
+};
+
+const isDevOriginAllowed = (origin: string): boolean => {
+  try {
+    const parsed = new URL(origin);
+    const hostname = parsed.hostname.toLowerCase();
+    if (isLocalAddress(hostname)) return true;
+    if (hostname.endsWith(".local")) return true;
+    if (isPrivateIpv4(hostname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 export const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) {
     return true;
@@ -746,10 +776,5 @@ export const isAllowedOrigin = (origin: string | undefined): boolean => {
     return false;
   }
 
-  try {
-    const parsed = new URL(origin);
-    return isLocalAddress(parsed.hostname);
-  } catch {
-    return false;
-  }
+  return isDevOriginAllowed(origin);
 };

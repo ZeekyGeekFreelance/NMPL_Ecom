@@ -42,7 +42,7 @@ export const authApi = apiSlice.injectEndpoints({
       }),
     }),
     signIn: builder.mutation<
-      { message: string; user: User },
+      { message: string; user: User; requiresPasswordChange?: boolean },
       {
         email: string;
         password: string;
@@ -57,7 +57,10 @@ export const authApi = apiSlice.injectEndpoints({
       onQueryStarted: async (_, { dispatch, queryFulfilled }) => {
         try {
           const { data } = await queryFulfilled;
-          dispatch(setUser({ user: data.user }));
+          // Only set user if password change is NOT required
+          if (!(data as any).requiresPasswordChange) {
+            dispatch(setUser({ user: data.user }));
+          }
         } catch {
           // Ignore mutation rejection here; components already consume error state.
         }

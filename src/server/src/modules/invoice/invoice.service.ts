@@ -138,6 +138,9 @@ export class InvoiceService {
         deliveryCharge: Number(invoice.order.deliveryCharge || 0),
         deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
+        paymentStatus: invoice.paymentStatus,
+        paymentTerms: invoice.paymentTerms,
+        paymentDueDate: invoice.paymentDueDate,
       });
 
       customerEmailSent = await sendEmail({
@@ -172,6 +175,9 @@ export class InvoiceService {
         deliveryCharge: Number(invoice.order.deliveryCharge || 0),
         deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
+        paymentStatus: invoice.paymentStatus,
+        paymentTerms: invoice.paymentTerms,
+        paymentDueDate: invoice.paymentDueDate,
       });
 
       const internalResults = await Promise.all(
@@ -212,7 +218,13 @@ export class InvoiceService {
 
   private async ensureInvoiceForOrder(
     orderId: string,
-    options?: { sendEmails?: boolean }
+    options?: {
+      sendEmails?: boolean;
+      /** True when the order is a pay-later order; invoice is created with PAYMENT_DUE status. */
+      isPayLater?: boolean;
+      /** Payment due date for pay-later invoices (set by transaction repo at delivery). */
+      paymentDueDate?: Date;
+    }
   ): Promise<InvoiceWithDetails> {
     const order = await this.invoiceRepository.findOrderForInvoice(orderId);
 
@@ -254,6 +266,8 @@ export class InvoiceService {
       );
     }
 
+    // For pay-later orders: create invoice with PAYMENT_DUE status and due date.
+    // For prepaid orders: paymentStatus defaults to PAID (no fields needed).
     const invoice =
       (await this.invoiceRepository.findInvoiceByOrderId(orderId)) ||
       (await this.invoiceRepository.ensureInvoiceRecord({
@@ -261,6 +275,13 @@ export class InvoiceService {
         userId: order.userId,
         customerEmail: order.user.email,
         year: new Date().getFullYear(),
+        ...(options?.isPayLater
+          ? {
+              paymentStatus: "PAYMENT_DUE",
+              paymentDueDate: options.paymentDueDate,
+              paymentTerms: "NET 30 from delivery date",
+            }
+          : {}),
       }));
 
     if (options?.sendEmails !== false) {
@@ -278,6 +299,12 @@ export class InvoiceService {
       unitPrice: item.price,
       subtotal: item.price * item.quantity,
     }));
+
+    const paymentTransactions = Array.isArray(invoice.paymentTransactions)
+      ? invoice.paymentTransactions.filter(
+          (transaction) => transaction.status === "CONFIRMED"
+        )
+      : [];
 
     const customerType = this.resolveCustomerType(invoice);
     const normalizedDeliveryMode = String(
@@ -329,14 +356,23 @@ export class InvoiceService {
       deliveryCharge: Number(invoice.order.deliveryCharge || 0),
       deliveryMode: normalizedDeliveryMode,
       totalAmount: invoice.order.amount,
+      paymentStatus: invoice.paymentStatus,
+      paymentTerms: invoice.paymentTerms,
+      paymentDueDate: invoice.paymentDueDate,
+      paymentTransactions,
       locationLabel: isPickup ? "Pickup Location" : "Delivery To",
       locationAddress,
     });
   }
 
-  async generateAndSendInvoiceForOrder(orderId: string): Promise<InvoiceWithDetails> {
+  async generateAndSendInvoiceForOrder(
+    orderId: string,
+    options?: { isPayLater?: boolean; paymentDueDate?: Date }
+  ): Promise<InvoiceWithDetails> {
     const invoice = await this.ensureInvoiceForOrder(orderId, {
       sendEmails: true,
+      isPayLater: options?.isPayLater,
+      paymentDueDate: options?.paymentDueDate,
     });
 
     await this.logsService.info("Invoice generated successfully", {

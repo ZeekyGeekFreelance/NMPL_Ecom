@@ -1,18 +1,13 @@
 import { ChatRepository } from "./chat.repository";
 import { Chat, ChatMessage } from "@prisma/client";
-import { Server as SocketIOServer } from "socket.io";
 import { v2 as cloudinary } from "cloudinary";
 import { Readable } from "stream";
 
 export class ChatService {
-  constructor(
-    private chatRepository: ChatRepository,
-    private io: SocketIOServer
-  ) {}
+  constructor(private chatRepository: ChatRepository) {}
 
   async createChat(userId: string): Promise<Chat> {
     const chat = await this.chatRepository.createChat(userId);
-    this.io.to("admin").emit("chatCreated", chat);
     return chat;
   }
 
@@ -78,7 +73,6 @@ export class ChatService {
       type,
       url
     );
-    this.io.to(`chat:${chatId}`).emit("newMessage", message);
     return message;
   }
 
@@ -87,7 +81,6 @@ export class ChatService {
     status: "OPEN" | "RESOLVED"
   ): Promise<Chat> {
     const chat = await this.chatRepository.updateChatStatus(chatId, status);
-    this.io.to("admin").emit("chatStatusUpdated", chat);
     return chat;
   }
 }

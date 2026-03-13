@@ -169,3 +169,32 @@ export class ResetPasswordDto {
   })
   newPassword!: string;
 }
+
+/**
+ * Validates the forced first-login password change flow for legacy dealer accounts.
+ * The client re-submits the original temporary password for re-verification alongside
+ * the new password they want to set.
+ */
+export class ChangePasswordOnFirstLoginDto {
+  @IsEmail()
+  @IsNotEmpty({ message: "Email is required" })
+  email!: string;
+
+  @IsNotEmpty({ message: "Current (temporary) password is required" })
+  currentPassword!: string;
+
+  @MinLength(8, { message: "New password must be at least 8 characters long" })
+  @Matches(/[A-Z]/, {
+    message: "New password must contain at least one uppercase letter",
+  })
+  @Matches(/[a-z]/, {
+    message: "New password must contain at least one lowercase letter",
+  })
+  @Matches(/[0-9]/, {
+    message: "New password must contain at least one number",
+  })
+  @Matches(/[!@#$%^&*]/, {
+    message: "New password must contain at least one special character (!@#$%^&*)",
+  })
+  newPassword!: string;
+}

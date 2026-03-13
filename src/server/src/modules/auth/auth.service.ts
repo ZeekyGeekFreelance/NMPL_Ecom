@@ -47,7 +47,7 @@ export class AuthService {
   constructor(
     private authRepository: AuthRepository,
     private dealerNotificationService?: DealerNotificationService
-  ) {}
+  ) { }
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
@@ -212,11 +212,11 @@ export class AuthService {
     return {
       message: phoneOtpEnabled
         ? `OTP sent to your email and phone. It will expire in ${Math.floor(
-            expiresInSeconds / 60
-          )} minutes.`
+          expiresInSeconds / 60
+        )} minutes.`
         : `OTP sent to your email. It will expire in ${Math.floor(
-            expiresInSeconds / 60
-          )} minutes.`,
+          expiresInSeconds / 60
+        )} minutes.`,
       resendAvailableInSeconds,
     };
   }
@@ -278,8 +278,7 @@ export class AuthService {
 
     if (otpVerification.status === "INVALID") {
       throw new BadRequestError(
-        `Invalid registration OTP ${
-          phoneOtpEnabled ? "code(s)" : "code"
+        `Invalid registration OTP ${phoneOtpEnabled ? "code(s)" : "code"
         }. ${otpVerification.attemptsRemaining} attempt(s) remaining.`
       );
     }
@@ -513,6 +512,7 @@ export class AuthService {
     password,
     portal = "USER_PORTAL",
   }: SignInParams): Promise<{
+    requiresPasswordChange?: boolean;
     user: {
       id: string;
       accountReference: string;
@@ -527,8 +527,8 @@ export class AuthService {
       dealerBusinessName?: string | null;
       dealerContactPhone?: string | null;
     };
-    accessToken: string;
-    refreshToken: string;
+    accessToken?: string;
+    refreshToken?: string;
   }> {
     const normalizedEmail = this.normalizeEmail(email);
     const user = await this.authRepository.findUserByEmailWithPassword(
@@ -615,6 +615,32 @@ export class AuthService {
       }
     }
 
+    // ── Forced password change (legacy dealer first login) ─────────────────
+    // If the account has mustChangePassword set, we do NOT issue tokens.
+    // The client receives requiresPasswordChange: true and must redirect the
+    // user to the change-password page before granting access to the portal.
+    if (user.mustChangePassword) {
+      return {
+        requiresPasswordChange: true,
+        user: {
+          accountReference: toAccountReference(user.id),
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone ?? null,
+          role: user.role,
+          effectiveRole,
+          avatar: user.avatar ?? null,
+          isDealer: !!dealerProfile,
+          dealerStatus: dealerProfile?.status ?? null,
+          dealerBusinessName: dealerProfile?.businessName ?? null,
+          dealerContactPhone: dealerProfile?.contactPhone ?? null,
+        },
+        accessToken: undefined,
+        refreshToken: undefined,
+      };
+    }
+
     const accessToken = tokenUtils.generateAccessToken(
       user.id,
       user.tokenVersion
@@ -642,6 +668,120 @@ export class AuthService {
 
   async signout(): Promise<{ message: string }> {
     return { message: "User logged out successfully" };
+  }
+
+  /**
+   * Handles the forced first-login password change for legacy dealer accounts.
+   *
+   * Validates the user's credentials a second time (the client re-submits the
+   * original temp password alongside the new one), updates the password,
+   * clears mustChangePassword, and then issues normal session tokens — so the
+   * dealer lands in the portal immediately after changing their password.
+   */
+  async changePasswordOnFirstLogin(params: {
+    email: string;
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<{
+    user: {
+      id: string;
+      accountReference: string;
+      name: string;
+      email: string;
+      phone: string | null;
+      role: ROLE;
+      effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
+      avatar: string | null;
+      isDealer?: boolean;
+      dealerStatus?: string | null;
+    };
+    accessToken: string;
+    refreshToken: string;
+  }> {
+    const normalizedEmail = this.normalizeEmail(params.email);
+    const user = await this.authRepository.findUserByEmailWithPassword(normalizedEmail);
+
+    if (!user) {
+      throw new BadRequestError("Email or password is incorrect.");
+    }
+
+    if (!user.mustChangePassword) {
+      throw new AppError(
+        400,
+        "No forced password change is required for this account."
+      );
+    }
+
+    if (!user.password) {
+      throw new AppError(400, "Email or password is incorrect.");
+    }
+
+    const isPasswordValid = await this.verifyPassword({
+      userId: user.id,
+      inputPassword: params.currentPassword,
+      storedPassword: user.password,
+    });
+
+    if (!isPasswordValid) {
+      throw new AppError(400, "Current password is incorrect.");
+    }
+
+    const newPasswordValue = String(params.newPassword || "").trim();
+    if (newPasswordValue.length < 8) {
+      throw new AppError(400, "New password must be at least 8 characters long.");
+    }
+
+    if (newPasswordValue === params.currentPassword) {
+      throw new AppError(
+        400,
+        "New password must be different from the current temporary password."
+      );
+    }
+
+    // Update password and clear mustChangePassword in one step.
+    await this.authRepository.updateUserPassword(user.id, newPasswordValue, {
+      invalidateSessions: true,
+    });
+    await this.authRepository.clearMustChangePassword(user.id);
+
+    // Re-fetch the user after token version increment.
+    const refreshedUser = await this.authRepository.findUserById(user.id);
+    if (!refreshedUser) {
+      throw new AppError(500, "User not found after password update.");
+    }
+
+    const dealerProfile = await this.authRepository.findDealerProfileByUserId(user.id);
+    const effectiveRole = resolveEffectiveRole({
+      role: refreshedUser.role,
+      dealerStatus: dealerProfile?.status,
+    });
+
+    const accessToken = tokenUtils.generateAccessToken(
+      refreshedUser.id,
+      refreshedUser.tokenVersion
+    );
+    const refreshToken = tokenUtils.generateRefreshToken(
+      refreshedUser.id,
+      undefined,
+      refreshedUser.tokenVersion
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        accountReference: toAccountReference(refreshedUser.id),
+        id: refreshedUser.id,
+        name: refreshedUser.name,
+        email: refreshedUser.email,
+        phone: refreshedUser.phone ?? null,
+        role: refreshedUser.role,
+        effectiveRole,
+        avatar: refreshedUser.avatar ?? null,
+        isDealer: !!dealerProfile,
+        dealerStatus: dealerProfile?.status ?? null,
+      },
+    };
   }
 
   async requestOwnPasswordResetLink(

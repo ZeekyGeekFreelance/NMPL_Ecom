@@ -64,6 +64,16 @@ export class OrderRepository {
       orderBy: { orderDate: "desc" },
       include: {
         orderItems: { include: { variant: { include: { product: true } } } },
+        payment: true,
+        paymentTransactions: {
+          where: { status: "CONFIRMED" },
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            paymentReceivedAt: true,
+          },
+        },
         quotationLogs: {
           orderBy: {
             createdAt: "desc",
@@ -79,6 +89,22 @@ export class OrderRepository {
       include: {
         orderItems: { include: { variant: { include: { product: true } } } },
         payment: true,
+        paymentTransactions: {
+          orderBy: { paymentReceivedAt: "desc" },
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            paymentMethod: true,
+            paymentSource: true,
+            paymentReceivedAt: true,
+            utrNumber: true,
+            chequeNumber: true,
+            bankName: true,
+            gatewayPaymentId: true,
+            notes: true,
+          },
+        },
         address: true,
         transaction: true,
         reservation: true,
@@ -160,6 +186,11 @@ export class OrderRepository {
       country: string;
       pincode: string;
     };
+    /**
+     * True when the ordering user is a LEGACY pay-later dealer.
+     * Set at order placement time so the flag is immutable for the order's lifetime.
+     */
+    isPayLater?: boolean;
   }) {
     return prisma.$transaction(async (tx) => {
       const computedSubtotal = data.orderItems.reduce(
@@ -204,6 +235,7 @@ export class OrderRepository {
           deliveryMode: data.pricing.deliveryMode,
           amount: computedAmount,
           status: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+          isPayLater: data.isPayLater ?? false,
           address: {
             create: {
               sourceAddressId: data.addressSnapshot.sourceAddressId,

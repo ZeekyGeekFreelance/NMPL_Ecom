@@ -141,6 +141,7 @@ export class UserRepository {
       avatar?: string | null;
       role?: ROLE;
       isBillingSupervisor?: boolean;
+      mustChangePassword?: boolean;
       resetPasswordToken?: string | null;
       resetPasswordTokenExpiresAt?: Date | null;
     }
@@ -230,6 +231,8 @@ export class UserRepository {
     password: string;
     role: string;
     isBillingSupervisor?: boolean;
+    /** When true, the user is forced to change their password on first login. */
+    mustChangePassword?: boolean;
   }) {
     // Hash the password before storing
     const hashedPassword = await passwordUtils.hashPassword(data.password);
@@ -240,6 +243,7 @@ export class UserRepository {
         password: hashedPassword,
         role: data.role as any,
         isBillingSupervisor: data.isBillingSupervisor ?? false,
+        mustChangePassword: data.mustChangePassword ?? false,
       },
       select: {
         id: true,
@@ -259,12 +263,30 @@ export class UserRepository {
     return sharedFindDealerProfileByUserId(userId);
   }
 
+  /**
+   * Upsert a dealer profile.
+   *
+   * payLaterEnabled / creditTermDays are Phase 2 fields used exclusively when
+   * creating or upgrading a LEGACY dealer.  The shared repository handles the
+   * ON CONFLICT COALESCE logic so callers that omit these fields leave the
+   * existing DB values untouched.
+   */
   async upsertDealerProfile(data: {
     userId: string;
     businessName?: string | null;
     contactPhone?: string | null;
     status: DealerStatus;
     approvedBy?: string | null;
+    /**
+     * When true, the dealer receives pay-later access (LEGACY dealers only).
+     * Passed through to the shared repository ON CONFLICT upsert.
+     */
+    payLaterEnabled?: boolean | null;
+    /**
+     * NET payment term in calendar days (e.g. 30 = NET 30).
+     * Defaults to 30 in the DB when not provided.
+     */
+    creditTermDays?: number | null;
   }): Promise<DealerProfile | null> {
     return sharedUpsertDealerProfile(data);
   }

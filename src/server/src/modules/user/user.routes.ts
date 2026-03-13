@@ -227,7 +227,7 @@ router.get(
 router.get(
   "/:id",
   protect,
-  authorizeRole("SUPERADMIN"),
+  authorizeRole("ADMIN", "SUPERADMIN"),
   userController.getUserById
 );
 

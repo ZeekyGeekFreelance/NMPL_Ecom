@@ -1,7 +1,8 @@
 "use client";
 
 import Dropdown from "@/app/components/molecules/Dropdown";
-import { ArrowLeft, Download } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Download, ExternalLink } from "lucide-react";
 
 const PageHeader = ({
   onBack,
@@ -16,6 +17,7 @@ const PageHeader = ({
   newStatus,
   setNewStatus,
   statusOptions,
+  paymentManagementHref,
 }) => {
   return (
     <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center">
@@ -33,6 +35,15 @@ const PageHeader = ({
         </p>
       </div>
       <div className="flex items-center space-x-3 mt-4 md:mt-0">
+        {paymentManagementHref ? (
+          <Link
+            href={paymentManagementHref}
+            className="px-4 py-2 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 transition duration-200 inline-flex items-center gap-2"
+          >
+            <ExternalLink size={16} />
+            Payment Management
+          </Link>
+        ) : null}
         <button
           type="button"
           onClick={onDownloadInvoice}
@@ -79,4 +90,3 @@ const PageHeader = ({
 };
 
 export default PageHeader;
-

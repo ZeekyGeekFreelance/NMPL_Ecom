@@ -32,10 +32,11 @@ export class OrderController {
   getOrderDetails = asyncHandler(async (req: Request, res: Response) => {
     const { orderId } = req.params;
     const userId = req.user?.id;
+    const userRole = req.user?.role;
     if (!userId) {
       throw new AppError(400, "User not found");
     }
-    const order = await this.orderService.getOrderDetails(orderId, userId);
+    const order = await this.orderService.getOrderDetails(orderId, userId, userRole);
     sendResponse(res, 200, {
       data: { order },
       message: "Order details retrieved successfully",

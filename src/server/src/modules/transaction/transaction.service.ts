@@ -484,6 +484,8 @@ export class TransactionService {
     orderId: string;
     previousStatus: OrderLifecycleStatus;
     nextStatus: OrderLifecycleStatus;
+    /** Override the default status instruction message (e.g. for pay-later variants). */
+    customInstruction?: string;
   }) {
     const platformName = getPlatformName();
     const supportEmail = getSupportEmail();
@@ -495,7 +497,7 @@ export class TransactionService {
     const customerEmail = params.recipientEmail?.trim() || null;
     const orderReference = toOrderReference(params.orderId);
     const actionTime = formatDateTimeInIST(new Date());
-    const instruction = statusInstruction[params.nextStatus];
+    const instruction = params.customInstruction ?? statusInstruction[params.nextStatus];
 
     if (customerEmail) {
       notificationPromises.push(
@@ -822,7 +824,15 @@ export class TransactionService {
 
     const previousStatus = this.parseStatus(String(existingTransaction.status));
     const requestedStatus = this.parseStatus(String(data.status));
-    this.assertValidStatusTransition(previousStatus, requestedStatus);
+    const isPayLaterOrder = !!(existingTransaction.order as any)?.isPayLater;
+    const isPayLaterDeliveryOverride =
+      isPayLaterOrder &&
+      previousStatus === ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT &&
+      requestedStatus === ORDER_LIFECYCLE_STATUS.DELIVERED;
+
+    if (!isPayLaterDeliveryOverride) {
+      this.assertValidStatusTransition(previousStatus, requestedStatus);
+    }
     const actorRole = String(data.actorRole || "")
       .trim()
       .toUpperCase();
@@ -832,7 +842,8 @@ export class TransactionService {
 
     if (
       requestedStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED &&
-      isAdminActor
+      isAdminActor &&
+      !isPayLaterOrder
     ) {
       throw new AppError(
         400,
@@ -939,6 +950,12 @@ export class TransactionService {
         });
       });
     } else {
+      // For pay-later orders confirmed without payment, override the default instruction
+      // so the dealer email correctly reflects their credit terms (not "payment received").
+      const isPayLaterConfirm =
+        updateResult.effectiveStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED &&
+        !!(updateResult.transaction?.order as any)?.isPayLater;
+
       await this.notifyOrderStatusChange({
         recipientEmail,
         recipientName,
@@ -947,6 +964,9 @@ export class TransactionService {
         orderId: transaction.orderId,
         previousStatus: updateResult.previousStatus,
         nextStatus: updateResult.effectiveStatus,
+        customInstruction: isPayLaterConfirm
+          ? "Your order is confirmed under your pay-later credit terms. Payment will be due 30 days from the delivery date. An invoice will be sent upon delivery."
+          : undefined,
       }).catch(async (error: unknown) => {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown email error";
@@ -962,8 +982,16 @@ export class TransactionService {
     await this.notifyPromotedWaitlistedOrders(updateResult.promotedOrderIds);
 
     if (updateResult.effectiveStatus === ORDER_LIFECYCLE_STATUS.DELIVERED) {
+      // Pass pay-later context so the invoice is created with PAYMENT_DUE status.
+      const deliveredOrder = updateResult.transaction?.order as any;
+      const isPayLaterOrder = !!(deliveredOrder?.isPayLater);
+      const paymentDueDate = deliveredOrder?.paymentDueDate as Date | undefined;
+
       this.invoiceService
-        .generateAndSendInvoiceForOrder(transaction.orderId)
+        .generateAndSendInvoiceForOrder(transaction.orderId, {
+          isPayLater: isPayLaterOrder,
+          paymentDueDate,
+        })
         .catch(async (error: unknown) => {
           if (this.invoiceService.isInvoiceTableMissing(error)) {
             await this.logsService.warn(

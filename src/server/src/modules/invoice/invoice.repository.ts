@@ -18,6 +18,21 @@ const invoiceWithDetailsInclude = {
       transaction: true,
     },
   },
+  paymentTransactions: {
+    orderBy: {
+      paymentReceivedAt: "desc",
+    },
+    include: {
+      recordedBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  },
   user: {
     include: {
       dealerProfile: true,
@@ -120,8 +135,8 @@ export class InvoiceRepository {
   async findInvoiceByOrderId(
     orderId: string
   ): Promise<InvoiceWithDetails | null> {
-    return prisma.invoice.findUnique({
-      where: { orderId },
+    return prisma.invoice.findFirst({
+      where: { orderId, isLatest: true },
       include: invoiceWithDetailsInclude,
     });
   }
@@ -138,12 +153,21 @@ export class InvoiceRepository {
     userId: string;
     customerEmail: string;
     year: number;
+    /**
+     * PAYMENT_DUE for pay-later orders.
+     * Omit for prepaid orders — the DB column defaults to PAID.
+     */
+    paymentStatus?: string;
+    /** Payment due date for pay-later invoices. */
+    paymentDueDate?: Date;
+    /** Human-readable payment terms (e.g. "NET 30 from delivery date"). */
+    paymentTerms?: string;
   }): Promise<InvoiceWithDetails> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await prisma.$transaction(async (tx) => {
-          const existing = await tx.invoice.findUnique({
-            where: { orderId: data.orderId },
+          const existing = await tx.invoice.findFirst({
+            where: { orderId: data.orderId, isLatest: true },
             include: invoiceWithDetailsInclude,
           });
 
@@ -171,6 +195,17 @@ export class InvoiceRepository {
               userId: data.userId,
               customerEmail: data.customerEmail,
               invoiceNumber,
+              // Pay-later fields: only supplied for LEGACY dealer orders.
+              // Prepaid orders use DB defaults (paymentStatus = PAID).
+              ...(data.paymentStatus
+                ? { paymentStatus: data.paymentStatus as any }
+                : {}),
+              ...(data.paymentDueDate
+                ? { paymentDueDate: data.paymentDueDate }
+                : {}),
+              ...(data.paymentTerms
+                ? { paymentTerms: data.paymentTerms }
+                : {}),
             },
             include: invoiceWithDetailsInclude,
           });

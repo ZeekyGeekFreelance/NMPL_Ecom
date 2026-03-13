@@ -30,7 +30,7 @@ import {
   type OrderLifecycleStatus,
 } from "@/app/lib/orderLifecycle";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
-import { toTransactionReference } from "@/app/lib/utils/accountReference";
+import { toOrderReference, toTransactionReference } from "@/app/lib/utils/accountReference";
 
 const TransactionDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -78,6 +78,22 @@ const TransactionDetailsPage = () => {
 
   const transaction = data?.transaction;
   const order = transaction?.order;
+  const paymentManagementHref = useMemo(() => {
+    if (!transaction) {
+      return "/dashboard/payments";
+    }
+
+    const params = new URLSearchParams();
+    if (transaction.id) {
+      params.set("transaction", toTransactionReference(transaction.id));
+    }
+    if (transaction.orderId) {
+      params.set("order", toOrderReference(transaction.orderId));
+    }
+
+    const query = params.toString();
+    return query ? `/dashboard/payments?${query}` : "/dashboard/payments";
+  }, [transaction?.id, transaction?.orderId]);
   const transactionReferenceForDisplay = transaction?.id
     ? toTransactionReference(transaction.id)
     : id.toUpperCase().startsWith("TXN-")
@@ -89,10 +105,13 @@ const TransactionDetailsPage = () => {
     [transaction?.status]
   );
 
-  const availableNextStatuses = useMemo(
-    () => getAllowedNextOrderStatuses(currentStatus),
-    [currentStatus]
-  );
+  const availableNextStatuses = useMemo(() => {
+    const base = getAllowedNextOrderStatuses(currentStatus);
+    if (order?.isPayLater && currentStatus === "AWAITING_PAYMENT") {
+      return Array.from(new Set([...base, "DELIVERED"]));
+    }
+    return base;
+  }, [currentStatus, order?.isPayLater]);
 
   const statusOptions = useMemo(
     () => {
@@ -451,6 +470,7 @@ const TransactionDetailsPage = () => {
         newStatus={selectedStatus}
         setNewStatus={setNewStatus}
         statusOptions={statusOptions}
+        paymentManagementHref={paymentManagementHref}
       />
 
       <TransactionOverview transaction={transaction} />
@@ -460,11 +480,15 @@ const TransactionDetailsPage = () => {
         <CustomerInformation user={order?.user} customerType={order?.customerType} />
       </div>
 
-      <PaymentInformation payment={order?.payment} />
+      <PaymentInformation payment={order?.payment} order={order} />
 
       <ShippingAddress address={order?.address} />
 
-      <TransactionTimeline transaction={transaction} payment={order?.payment} />
+      <TransactionTimeline
+        transaction={transaction}
+        payment={order?.payment}
+        order={order}
+      />
 
       <Modal
         open={isQuotationModalOpen}

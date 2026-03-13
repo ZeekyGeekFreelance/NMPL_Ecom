@@ -813,6 +813,11 @@ export class UserService {
       password: string;
       businessName?: string;
       contactPhone: string;
+      /**
+       * When true, the dealer is created as LEGACY with pay-later enabled.
+       * The user will be forced to change their password on first login.
+       */
+      isLegacy?: boolean;
     },
     createdByUserId: string
   ) {
@@ -837,6 +842,11 @@ export class UserService {
       "Contact phone"
     );
     const normalizedBusinessName = dealerData.businessName?.trim() || null;
+    const isLegacy = dealerData.isLegacy === true;
+    // LEGACY → pay-later enabled, must change password on first login.
+    // APPROVED → standard prepaid dealer, no forced password change.
+    const dealerStatus = isLegacy ? "LEGACY" : "APPROVED";
+
     const existingUser = await this.userRepository.findUserByEmail(
       normalizedEmail
     );
@@ -860,6 +870,7 @@ export class UserService {
         name: normalizedName,
         phone: normalizedPhone,
         role: ROLE.DEALER,
+        ...(isLegacy ? { mustChangePassword: true } : {}),
       });
       await this.userRepository.incrementUserTokenVersion(hydratedExistingUser.id);
 
@@ -868,8 +879,9 @@ export class UserService {
         businessName:
           normalizedBusinessName ?? hydratedExistingUser.dealerProfile?.businessName ?? null,
         contactPhone: normalizedPhone,
-        status: "APPROVED",
+        status: dealerStatus,
         approvedBy: actorUserId,
+        ...(isLegacy ? { payLaterEnabled: true, creditTermDays: 30 } : {}),
       });
 
       const upgradedDealer = await this.userRepository.findUserById(
@@ -879,50 +891,64 @@ export class UserService {
         throw new AppError(500, "Dealer account upgraded but profile load failed");
       }
 
-      await this.dealerNotificationService.sendDealerStatusUpdated({
-        recipientName: upgradedDealer.name,
-        recipientEmail: upgradedDealer.email,
-        businessName:
-          dealerProfile?.businessName ?? normalizedBusinessName ?? null,
-        accountReference: toAccountReference(upgradedDealer.id),
-        status: "APPROVED",
-        reviewedBy: this.resolveActorName(creator),
-      });
+      if (isLegacy) {
+        // Send legacy-specific account-created email with credentials.
+        await this.dealerNotificationService.sendDealerAccountCreated({
+          recipientName: upgradedDealer.name,
+          recipientEmail: upgradedDealer.email,
+          businessName: dealerProfile?.businessName ?? normalizedBusinessName ?? null,
+          accountReference: toAccountReference(upgradedDealer.id),
+          temporaryPassword: dealerData.password,
+          isLegacy: true,
+        });
+      } else {
+        await this.dealerNotificationService.sendDealerStatusUpdated({
+          recipientName: upgradedDealer.name,
+          recipientEmail: upgradedDealer.email,
+          businessName:
+            dealerProfile?.businessName ?? normalizedBusinessName ?? null,
+          accountReference: toAccountReference(upgradedDealer.id),
+          status: "APPROVED",
+          reviewedBy: this.resolveActorName(creator),
+        });
+      }
 
       return this.withAccountReference(upgradedDealer);
     }
 
+    // ── Brand-new user + dealer profile ───────────────────────────────────
     const newDealerUser = await this.userRepository.createUser({
       name: normalizedName,
       email: normalizedEmail,
       phone: normalizedPhone,
       password: dealerData.password,
       role: "DEALER",
+      mustChangePassword: isLegacy,
     });
 
     await this.userRepository.upsertDealerProfile({
       userId: newDealerUser.id,
       businessName: normalizedBusinessName,
       contactPhone: normalizedPhone,
-      status: "APPROVED",
+      status: dealerStatus,
       approvedBy: actorUserId,
+      ...(isLegacy ? { payLaterEnabled: true, creditTermDays: 30 } : {}),
     });
 
     const dealerUser = await this.userRepository.findUserById(newDealerUser.id);
 
-    if (dealerUser) {
-      await this.dealerNotificationService.sendDealerAccountCreated({
-        recipientName: dealerUser.name,
-        recipientEmail: dealerUser.email,
-        businessName: normalizedBusinessName,
-        accountReference: toAccountReference(dealerUser.id),
-        temporaryPassword: dealerData.password,
-      });
-    }
-
     if (!dealerUser) {
       throw new AppError(500, "Dealer account created but profile load failed");
     }
+
+    await this.dealerNotificationService.sendDealerAccountCreated({
+      recipientName: dealerUser.name,
+      recipientEmail: dealerUser.email,
+      businessName: normalizedBusinessName,
+      accountReference: toAccountReference(dealerUser.id),
+      temporaryPassword: dealerData.password,
+      isLegacy,
+    });
 
     return this.withAccountReference(dealerUser);
   }

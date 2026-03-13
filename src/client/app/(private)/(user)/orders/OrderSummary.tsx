@@ -19,6 +19,8 @@ import {
   normalizeOrderStatus,
 } from "@/app/lib/orderLifecycle";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import { usePayLaterPayment } from "@/app/hooks/payment/usePayLaterPayment";
+import { useRouter } from "next/navigation";
 
 const quotationEventLabel: Record<string, string> = {
   ORIGINAL_ORDER: "Original Order",
@@ -66,20 +68,42 @@ const OrderSummary = ({
 }) => {
   const formatPrice = useFormatPrice();
   const { showToast } = useToast();
+  const router = useRouter();
   const [acceptQuotation, { isLoading: isAcceptingQuotation }] =
     useAcceptQuotationMutation();
   const [rejectQuotation, { isLoading: isRejectingQuotation }] =
     useRejectQuotationMutation();
-  const orderStatus =
-    order?.transaction?.status || order?.status || "PENDING_VERIFICATION";
-  const normalizedOrderStatus = normalizeOrderStatus(orderStatus);
+  const statusFromTransaction = normalizeOrderStatus(order?.transaction?.status);
+  const statusFromOrder = normalizeOrderStatus(order?.status);
+  const normalizedOrderStatus =
+    statusFromOrder === "DELIVERED"
+      ? statusFromOrder
+      : statusFromTransaction === "DELIVERED"
+      ? statusFromTransaction
+      : statusFromTransaction !== "PENDING_VERIFICATION"
+      ? statusFromTransaction
+      : statusFromOrder;
   const canTakeQuotationDecision = normalizedOrderStatus === "AWAITING_PAYMENT";
-  const canDownloadInvoice = canDownloadInvoiceForStatus(orderStatus);
+  const canDownloadInvoice = canDownloadInvoiceForStatus(normalizedOrderStatus);
+  const hasConfirmedPayment =
+    Array.isArray(order?.paymentTransactions) &&
+    order.paymentTransactions.some(
+      (transaction: any) =>
+        String(transaction?.status || "").toUpperCase() === "CONFIRMED"
+    );
+  const isPaid =
+    hasConfirmedPayment || String(order?.payment?.status || "").toUpperCase() === "PAID";
+  const isPayLaterDue =
+    !!order?.isPayLater &&
+    normalizedOrderStatus === "DELIVERED" &&
+    !!order?.paymentDueDate &&
+    !isPaid;
   const actionTriggeredRef = useRef(false);
   const [pendingQuotationAction, setPendingQuotationAction] = useState<
     "pay" | "reject" | null
   >(null);
   const [isQuotationConfirmOpen, setIsQuotationConfirmOpen] = useState(false);
+  const [isPayDueConfirmOpen, setIsPayDueConfirmOpen] = useState(false);
   const quotationLogs = Array.isArray(order?.quotationLogs)
     ? order.quotationLogs
     : [];
@@ -105,6 +129,11 @@ const OrderSummary = ({
   const total = useMemo(() => {
     return formatPrice(finalTotal);
   }, [finalTotal, formatPrice]);
+  const payLaterPayment = usePayLaterPayment(order, {
+    onSuccess: () => {
+      router.refresh();
+    },
+  });
 
   const handleDownloadInvoice = useCallback(async () => {
     if (!canDownloadInvoice) {
@@ -142,6 +171,18 @@ const OrderSummary = ({
         response?.checkoutUrl ||
         response?.data?.checkoutUrl ||
         response?.data?.data?.checkoutUrl;
+      const isPayLater =
+        response?.isPayLater ||
+        response?.data?.isPayLater ||
+        response?.data?.data?.isPayLater;
+
+      if (!checkoutUrl && isPayLater) {
+        showToast(
+          "Order confirmed under pay-later terms. Payment will be due after delivery.",
+          "success"
+        );
+        return;
+      }
 
       if (!checkoutUrl) {
         showToast(
@@ -267,6 +308,26 @@ const OrderSummary = ({
             ? "This quotation is closed. Invoice is not available."
             : "Invoice is generated only after payment confirmation."}
         </p>
+      )}
+
+      {isPayLaterDue && (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="font-medium">Payment due after delivery</p>
+          <p className="mt-1 text-xs">
+            Due by {formatDate(order.paymentDueDate, { withTime: false })}. Amount
+            due: {formatPrice(order.amount)}.
+          </p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setIsPayDueConfirmOpen(true)}
+              disabled={payLaterPayment.isLoading}
+              className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-amber-300"
+            >
+              {payLaterPayment.isLoading ? "Redirecting..." : "Pay Due Amount"}
+            </button>
+          </div>
+        </div>
       )}
 
       {canTakeQuotationDecision && (
@@ -429,6 +490,21 @@ const OrderSummary = ({
           setPendingQuotationAction(null);
         }}
         isConfirming={isAcceptingQuotation || isRejectingQuotation}
+        disableCancelWhileConfirming
+      />
+
+      <ConfirmModal
+        isOpen={isPayDueConfirmOpen}
+        title="Pay Due Amount?"
+        message={`You are about to settle the due amount of ${total}. You will be redirected to the payment gateway.`}
+        type="warning"
+        confirmLabel="Pay Due Amount"
+        onConfirm={async () => {
+          setIsPayDueConfirmOpen(false);
+          await payLaterPayment.startPayment();
+        }}
+        onCancel={() => setIsPayDueConfirmOpen(false)}
+        isConfirming={payLaterPayment.isLoading}
         disableCancelWhileConfirming
       />
     </motion.div>

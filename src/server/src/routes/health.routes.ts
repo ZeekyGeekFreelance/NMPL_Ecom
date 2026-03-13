@@ -10,7 +10,7 @@ const buildHealthPayload = async () => {
   // Allow up to 10s for DB ping — Neon free tier has cold-start latency.
   const dbConnected = await Promise.race([
     pingDB(),
-    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10_000)),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3_000)),
   ]);
   const redisConnected = config.redis.enabled ? await pingRedis() : true;
   const heapUsedMb = Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
@@ -21,6 +21,7 @@ const buildHealthPayload = async () => {
     redisConnected &&
     bootState.configValidated &&
     bootState.migrationsApplied &&
+    bootState.serverReady &&
     memoryHealthy;
 
   return {
@@ -32,6 +33,7 @@ const buildHealthPayload = async () => {
       redis: redisConnected,
       config: bootState.configValidated,
       migration: bootState.migrationsApplied,
+      serverReady: bootState.serverReady,
       memory: memoryHealthy,
     },
     memory: {

@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { Server as SocketIOServer } from "socket.io";
 import usersRoutes from "@/modules/user/user.routes";
 import authRoutes from "@/modules/auth/auth.routes";
 import productRoutes from "@/modules/product/product.routes";
@@ -22,7 +21,7 @@ import deliveryRateRoutes from "@/modules/deliveryRate/deliveryRate.routes";
 import idempotencyGuard from "@/shared/middlewares/idempotencyGuard";
 import mutationAuditLogger from "@/shared/middlewares/mutationAuditLogger";
 
-export const configureV1Routes = (io: SocketIOServer) => {
+export const configureV1Routes = () => {
   const router = Router();
   router.use(idempotencyGuard);
   router.use(mutationAuditLogger);
@@ -42,7 +41,7 @@ export const configureV1Routes = (io: SocketIOServer) => {
   router.use("/addresses", addressRoutes);
   router.use("/sections", sectionRoutes);
   router.use("/attributes", attributesRoutes);
-  router.use("/chat", configureChatRoutes(io));
+  router.use("/chat", configureChatRoutes());
   router.use('/variants', variantsRoutes)
   router.use("/invoices", invoiceRoutes);
   router.use("/delivery-rates", deliveryRateRoutes);

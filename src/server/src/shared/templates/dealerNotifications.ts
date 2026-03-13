@@ -342,6 +342,7 @@ export const buildDealerAccountCreatedEmail = ({
   temporaryPassword,
   portalUrl,
   supportEmail,
+  isLegacy = false,
 }: {
   recipientName: string;
   businessName: string | null;
@@ -350,9 +351,88 @@ export const buildDealerAccountCreatedEmail = ({
   temporaryPassword: string;
   portalUrl: string;
   supportEmail: string;
+  /**
+   * When true, renders the legacy-dealer variant:
+   * - Subject: "Dealer Account Created" (per spec)
+   * - Body: temporary credentials block with forced password-change notice
+   */
+  isLegacy?: boolean;
 }) => {
   const salutation = recipientName?.trim() || "Dealer";
 
+  if (isLegacy) {
+    // ── Legacy dealer account created email ─────────────────────────────────
+    // Spec: Subject "Dealer Account Created", body shows credentials, must
+    // change password on first login.
+    const title = "Dealer Account Created";
+    const preview = "Your dealer account has been created. Please sign in with your temporary credentials.";
+
+    return {
+      subject: withPlatformSubject(title),
+      text: [
+        `Hello ${salutation},`,
+        "",
+        "Your dealer account has been created.",
+        "",
+        "Temporary credentials:",
+        `Email: ${email}`,
+        `Password: ${temporaryPassword}`,
+        "",
+        "You must change your password on first login.",
+        "",
+        businessName ? `Business: ${businessName}` : null,
+        accountReference ? `Account Reference: ${accountReference}` : null,
+        `Sign in: ${portalUrl}/dealer/sign-in`,
+        `Support: ${supportEmail}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      html: baseEmailLayout({
+        preview,
+        title,
+        bodyHtml: `
+          <h2 style="margin:0 0 12px;font-size:22px;color:#111827;">${title}</h2>
+          <p style="margin:0 0 14px;">Hello <strong>${salutation}</strong>,</p>
+          <p style="margin:0 0 14px;">Your dealer account has been created.</p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+            style="background:#fefce8;border:1px solid #fde68a;border-radius:6px;margin:0 0 18px;">
+            <tr>
+              <td style="padding:16px 20px;">
+                <p style="margin:0 0 10px;font-weight:bold;font-size:14px;color:#92400e;">Temporary Credentials</p>
+                <p style="margin:0 0 6px;"><strong>Email:</strong> ${email}</p>
+                <p style="margin:0;"><strong>Password:</strong> ${temporaryPassword}</p>
+              </td>
+            </tr>
+          </table>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+            style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin:0 0 18px;">
+            <tr>
+              <td style="padding:12px 20px;">
+                <p style="margin:0;font-size:13px;color:#b91c1c;font-weight:bold;">
+                  &#9888;&nbsp; You must change your password on first login.
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <p style="margin:0 0 14px;">
+            ${businessName ? `<strong>Business:</strong> ${businessName}<br />` : ""}
+            ${accountReference ? `<strong>Account Reference:</strong> ${accountReference}<br />` : ""}
+          </p>
+          <p style="margin:0 0 14px;">
+            Sign in: <a href="${portalUrl}/dealer/sign-in" style="color:#2563eb;">${portalUrl}/dealer/sign-in</a>
+          </p>
+          <p style="margin:0;">
+            Support: <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>
+          </p>
+        `,
+      }),
+    };
+  }
+
+  // ── Standard (non-legacy) dealer account created email ───────────────────
   return {
     subject: withPlatformSubject("Your Dealer Account Is Ready"),
     text: [

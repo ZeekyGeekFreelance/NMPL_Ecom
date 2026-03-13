@@ -131,19 +131,23 @@ export class AuthController {
 
   signin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { email, password, portal } = req.body;
-    const { user, accessToken, refreshToken } = await this.authService.signin({
-      email,
-      password,
-      portal,
-    });
+    const result = await this.authService.signin({ email, password, portal });
+    const { user } = result;
+    // requiresPasswordChange is only set for legacy dealer first-login.
+    // When it's true, no tokens are issued — the client must redirect to /change-password.
+    const requiresPasswordChange = !!(result as any).requiresPasswordChange;
 
-    res.cookie("refreshToken", refreshToken, cookieOptions);
-    res.cookie("accessToken", accessToken, cookieOptions);
+    if (!requiresPasswordChange) {
+      // Only set cookies when tokens are actually issued.
+      res.cookie("refreshToken", result.refreshToken!, cookieOptions);
+      res.cookie("accessToken", result.accessToken!, cookieOptions);
+    }
 
     const userId = user.id;
 
     sendResponse(res, 200, {
       data: {
+        ...(requiresPasswordChange ? { requiresPasswordChange: true } : {}),
         user: {
           id: user.id,
           accountReference: user.accountReference,
@@ -159,7 +163,9 @@ export class AuthController {
           dealerContactPhone: user.dealerContactPhone || null,
         },
       },
-      message: "User logged in successfully",
+      message: requiresPasswordChange
+        ? "Password change required before accessing your account."
+        : "User logged in successfully",
     });
 
     this.logsService.info("Sign in", {
@@ -219,6 +225,54 @@ export class AuthController {
     });
   });
 
+  /**
+   * Handles the forced first-login password change for legacy dealer accounts.
+   * The client posts the original temporary password + the new password.
+   * On success, full session tokens are issued so the dealer lands in the portal.
+   */
+  changePasswordOnFirstLogin = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { email, currentPassword, newPassword } = req.body as {
+        email: string;
+        currentPassword: string;
+        newPassword: string;
+      };
+
+      const { user, accessToken, refreshToken } =
+        await this.authService.changePasswordOnFirstLogin({
+          email,
+          currentPassword,
+          newPassword,
+        });
+
+      res.cookie("refreshToken", refreshToken, cookieOptions);
+      res.cookie("accessToken", accessToken, cookieOptions);
+
+      sendResponse(res, 200, {
+        message: "Password changed successfully. You are now signed in.",
+        data: {
+          user: {
+            id: user.id,
+            accountReference: user.accountReference,
+            name: user.name,
+            email: user.email,
+            phone: user.phone || null,
+            role: user.role,
+            effectiveRole: user.effectiveRole || user.role,
+            avatar: user.avatar || null,
+            isDealer: user.isDealer || false,
+            dealerStatus: user.dealerStatus || null,
+          },
+        },
+      });
+
+      this.logsService.info("First-login password change", {
+        userId: user.id,
+        sessionId: req.session.id,
+      });
+    }
+  );
+
   requestOwnPasswordResetLink = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const userId = req.user?.id;
@@ -277,6 +331,21 @@ export class AuthController {
       const { newAccessToken, newRefreshToken, user } =
         await this.authService.refreshToken(oldRefreshToken);
 
+      // Clear old cookies first
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: config.isProduction,
+        sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
+        path: "/",
+      });
+      res.clearCookie("accessToken", {
+        httpOnly: true,
+        secure: config.isProduction,
+        sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
+        path: "/",
+      });
+
+      // Set new cookies
       res.cookie("refreshToken", newRefreshToken, cookieOptions);
       res.cookie("accessToken", newAccessToken, cookieOptions);
 

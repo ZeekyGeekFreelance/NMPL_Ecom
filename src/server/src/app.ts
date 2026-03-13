@@ -11,7 +11,7 @@ import compression from "compression";
 import passport from "passport";
 import session from "express-session";
 import { RedisStore } from "connect-redis";
-import redisClient, { connectRedis } from "./infra/cache/redis";
+import redisClient from "./infra/cache/redis";
 import configurePassport from "./infra/passport/passport";
 import { cookieParserOptions } from "./shared/constants";
 import globalError from "./shared/errors/globalError";
@@ -22,11 +22,9 @@ import { configureGraphQL } from "./graphql";
 import webhookRoutes from "./modules/webhook/webhook.routes";
 import healthRoutes from "./routes/health.routes";
 import { Server as HTTPServer } from "http";
-import { SocketManager } from "@/infra/socket/socket";
-import { setIo } from "@/infra/socket/IoProvider";
-import { connectDB } from "./infra/database/database.config";
 import { setupSwagger } from "./docs/swagger";
 import { config, isAllowedOrigin } from "@/config";
+import { bootState } from "@/bootstrap/state";
 import { randomUUID } from "crypto";
 import { createRequestMetricsMiddleware } from "@/shared/observability/requestMetrics";
 
@@ -55,20 +53,16 @@ const parseCspDirectives = (value: string): Record<string, string[]> => {
 export const createApp = async () => {
   const app = express();
 
-  await connectDB();
-  if (config.redis.enabled) {
-    await connectRedis();
-  }
-
+  // ── HTTP server created immediately so it can be returned and listened on
+  // BEFORE the database connection is established.  The readiness gate below
+  // ensures API routes return 503 until the DB + Redis are fully connected.
   const httpServer = new HTTPServer(app);
-  const socketManager = new SocketManager(httpServer);
-  const io = socketManager.getIO();
-  // Register the singleton so modules can call getIo() without constructor injection.
-  setIo(io);
 
   setupSwagger(app);
   app.disable("x-powered-by");
   app.set("trust proxy", config.server.trustProxy ? 1 : 0);
+
+  // ── Trace-ID injection ───────────────────────────────────────────────────
   app.use((req, res, next) => {
     const incomingTraceId = String(req.headers["x-trace-id"] || "").trim();
     const traceId = incomingTraceId || randomUUID();
@@ -78,7 +72,13 @@ export const createApp = async () => {
   });
   app.use(createRequestMetricsMiddleware());
 
+  // ── Health / liveness endpoints ──────────────────────────────────────────
+  // Registered FIRST — before session, passport, CORS, and the readiness gate —
+  // so Docker healthchecks and the frontend useBackendReady poll always get a
+  // response, even during the DB connection phase (bootState.serverReady=false).
   app.use("/", healthRoutes);
+
+  // ── Webhook routes (raw body required for Stripe signature verification) ─
   app.use(
     "/api/v1/webhook",
     bodyParser.raw({ type: "application/json", limit: config.server.bodyJsonLimit }),
@@ -101,16 +101,22 @@ export const createApp = async () => {
     resave: false,
     saveUninitialized: false,
     proxy: config.server.trustProxy,
+    name: "sessionId",
+    rolling: true,
     cookie: {
       httpOnly: true,
       secure: config.isProduction,
       sameSite: config.security.cookieSameSite,
       domain: config.security.cookieDomain,
       maxAge: 1000 * 60 * 60 * 24 * 7,
+      path: "/",
     },
   };
 
   if (config.redis.enabled) {
+    // RedisStore is created here; the underlying ioredis client connects
+    // asynchronously in the bootstrap.  connect-redis gracefully queues
+    // session ops until the client is ready, so this is safe to create now.
     sessionConfig.store = new RedisStore({ client: redisClient as any });
   } else if (config.isDevelopment) {
     console.warn(
@@ -119,6 +125,7 @@ export const createApp = async () => {
   }
 
   const sessionMiddleware = session(sessionConfig);
+
   const isPublicCatalog = (req: express.Request) =>
     req.method === "POST" &&
     req.path === "/api/v1/graphql" &&
@@ -206,11 +213,33 @@ export const createApp = async () => {
   );
   app.use(compression());
 
-  app.use("/api", configureRoutes(io));
+  // ── Readiness gate ───────────────────────────────────────────────────────
+  // Block all /api and /graphql traffic with 503 until the full boot sequence
+  // (DB connect + Redis connect) has completed and bootState.serverReady=true.
+  // /health, /ready, and /live bypass this gate so Docker probes always work.
+  // The frontend RetryLink transparently retries 503s with exponential backoff.
+  app.use(["/api", "/api/v1/graphql"], (req, res, next) => {
+    if (!bootState.serverReady) {
+      res.status(503).json({
+        status: "error",
+        message: "Server is starting up. Please retry in a moment.",
+        retryAfterSeconds: 5,
+      });
+      return;
+    }
+    next();
+  });
+
+  app.use("/api", configureRoutes());
   await configureGraphQL(app);
 
   app.use(logRequest);
   app.use(globalError);
+
+  // NOTE: bootState.serverReady is intentionally NOT set here.
+  // It is set in server.ts bootstrap() AFTER connectDB() and connectRedis()
+  // both resolve successfully, so the readiness gate above only opens once
+  // the full data layer is ready.
 
   return { app, httpServer };
 };

@@ -140,6 +140,12 @@ export class DealerNotificationService {
     businessName: string | null;
     accountReference?: string | null;
     temporaryPassword: string;
+    /**
+     * Pass true when the account was created as a legacy pay-later dealer.
+     * Renders the "Dealer Account Created" variant with credential block and
+     * forced password-change notice instead of the standard approval email.
+     */
+    isLegacy?: boolean;
   }): Promise<void> {
     const { subject, text, html } = buildDealerAccountCreatedEmail({
       recipientName: params.recipientName,
@@ -149,6 +155,7 @@ export class DealerNotificationService {
       temporaryPassword: params.temporaryPassword,
       portalUrl: this.getPortalUrl(),
       supportEmail: this.getSupportEmail(),
+      isLegacy: params.isLegacy ?? false,
     });
 
     await this.sendNotification(

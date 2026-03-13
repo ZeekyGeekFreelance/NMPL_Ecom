@@ -2,11 +2,13 @@
  * Shared DealerRepository
  * ──────────────────────────────────────────────────────────────────────────
  * Single source of truth for all DealerProfile + DealerPriceMapping
- * raw SQL operations. Previously duplicated across:
+ * raw SQL operations. Consumed by:
  *   - modules/auth/auth.repository.ts
  *   - modules/user/user.repository.ts
  *
- * Both modules now import from here. Any bug fixes apply to every consumer.
+ * Phase 2 additions: payLaterEnabled, creditTermDays fields.
+ * Phase 3 additions: legacy dealer creation support in upsertDealerProfile;
+ *                    payLaterEnabled mirrored in updateDealerStatus.
  */
 import prisma from "@/infra/database/database.config";
 import { Prisma, ROLE } from "@prisma/client";
@@ -28,6 +30,10 @@ export interface DealerProfileRecord {
   status: DealerStatus;
   approvedAt: Date | null;
   approvedBy: string | null;
+  /** True only for LEGACY dealers.  All other statuses have false. */
+  payLaterEnabled: boolean;
+  /** NET payment term in days (default 30).  Meaningful only when payLaterEnabled = true. */
+  creditTermDays: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +75,8 @@ export async function findDealerProfileByUserId(
           "status",
           "approvedAt",
           "approvedBy",
+          "payLaterEnabled",
+          "creditTermDays",
           "createdAt",
           "updatedAt"
         FROM "DealerProfile"
@@ -102,6 +110,8 @@ export async function findDealerProfilesByUserIds(
           "status",
           "approvedAt",
           "approvedBy",
+          "payLaterEnabled",
+          "creditTermDays",
           "createdAt",
           "updatedAt"
         FROM "DealerProfile"
@@ -116,8 +126,12 @@ export async function findDealerProfilesByUserIds(
 
 /**
  * Upsert a dealer profile.
- * Uses gen_random_uuid() (DB-side) for ID generation — consistent across all callers.
+ *
  * ON CONFLICT targets the unique index on "userId".
+ * payLaterEnabled / creditTermDays: updated via COALESCE so that callers
+ * that don't provide these fields (e.g. auth registration) leave them untouched.
+ *
+ * approvedAt is set when status is APPROVED or LEGACY (both represent admin approval).
  */
 export async function upsertDealerProfile(data: {
   userId: string;
@@ -125,9 +139,18 @@ export async function upsertDealerProfile(data: {
   contactPhone?: string | null;
   status: DealerStatus;
   approvedBy?: string | null;
+  payLaterEnabled?: boolean | null;
+  creditTermDays?: number | null;
 }): Promise<DealerProfileRecord | null> {
   const now = new Date();
-  const approvedAt = data.status === "APPROVED" ? now : null;
+  // approvedAt is set for both APPROVED and LEGACY — both are admin-approved states.
+  const approvedAt =
+    data.status === "APPROVED" || data.status === "LEGACY" ? now : null;
+
+  // Resolve concrete values for the new pay-later columns.
+  // null means "don't override" — COALESCE in ON CONFLICT handles this.
+  const payLaterEnabled = data.payLaterEnabled ?? null;
+  const creditTermDays = data.creditTermDays ?? null;
 
   try {
     await prisma.$executeRaw(
@@ -140,6 +163,8 @@ export async function upsertDealerProfile(data: {
           "status",
           "approvedAt",
           "approvedBy",
+          "payLaterEnabled",
+          "creditTermDays",
           "createdAt",
           "updatedAt"
         )
@@ -151,17 +176,21 @@ export async function upsertDealerProfile(data: {
           ${data.status}::"DEALER_STATUS",
           ${approvedAt},
           ${data.approvedBy ?? null},
+          ${payLaterEnabled ?? false},
+          ${creditTermDays ?? 30},
           ${now},
           ${now}
         )
         ON CONFLICT ("userId")
         DO UPDATE SET
-          "businessName" = COALESCE(EXCLUDED."businessName", "DealerProfile"."businessName"),
-          "contactPhone" = COALESCE(EXCLUDED."contactPhone", "DealerProfile"."contactPhone"),
-          "status"       = EXCLUDED."status",
-          "approvedAt"   = EXCLUDED."approvedAt",
-          "approvedBy"   = EXCLUDED."approvedBy",
-          "updatedAt"    = EXCLUDED."updatedAt"
+          "businessName"    = COALESCE(EXCLUDED."businessName",    "DealerProfile"."businessName"),
+          "contactPhone"    = COALESCE(EXCLUDED."contactPhone",    "DealerProfile"."contactPhone"),
+          "status"          = EXCLUDED."status",
+          "approvedAt"      = EXCLUDED."approvedAt",
+          "approvedBy"      = EXCLUDED."approvedBy",
+          "payLaterEnabled" = COALESCE(${payLaterEnabled}, "DealerProfile"."payLaterEnabled"),
+          "creditTermDays"  = COALESCE(${creditTermDays},  "DealerProfile"."creditTermDays"),
+          "updatedAt"       = EXCLUDED."updatedAt"
       `
     );
   } catch (error) {
@@ -175,6 +204,13 @@ export async function upsertDealerProfile(data: {
 /**
  * Atomically update dealer status AND the linked User.role + tokenVersion
  * in a single CTE — prevents the two tables going out of sync.
+ *
+ * payLaterEnabled is automatically mirrored:
+ *   LEGACY  → payLaterEnabled = TRUE
+ *   any other status → payLaterEnabled = FALSE
+ *
+ * This ensures that if an admin demotes a legacy dealer back to APPROVED or
+ * SUSPENDED, they lose pay-later access immediately without a separate action.
  */
 export async function updateDealerStatus(
   userId: string,
@@ -182,11 +218,14 @@ export async function updateDealerStatus(
   approvedBy?: string
 ): Promise<DealerProfileRecord | null> {
   const now = new Date();
-  const approvedAt = status === "APPROVED" ? now : null;
+  const approvedAt =
+    status === "APPROVED" || status === "LEGACY" ? now : null;
   const nextRole =
     status === "APPROVED" || status === "LEGACY" || status === "SUSPENDED"
       ? ROLE.DEALER
       : ROLE.USER;
+  // Mirror payLaterEnabled: only LEGACY status enables pay-later.
+  const payLaterEnabled = status === "LEGACY";
 
   try {
     const rows = await prisma.$queryRaw<DealerProfileRecord[]>(
@@ -194,18 +233,21 @@ export async function updateDealerStatus(
         WITH updated_profile AS (
           UPDATE "DealerProfile"
           SET
-            "status"     = ${status}::"DEALER_STATUS",
-            "approvedAt" = ${approvedAt},
-            "approvedBy" = ${
+            "status"          = ${status}::"DEALER_STATUS",
+            "approvedAt"      = ${approvedAt},
+            "approvedBy"      = ${
               status === "APPROVED" || status === "LEGACY"
                 ? approvedBy ?? null
                 : null
             },
-            "updatedAt"  = ${now}
+            "payLaterEnabled" = ${payLaterEnabled},
+            "updatedAt"       = ${now}
           WHERE "userId" = ${userId}
           RETURNING
             "id", "userId", "businessName", "contactPhone",
-            "status", "approvedAt", "approvedBy", "createdAt", "updatedAt"
+            "status", "approvedAt", "approvedBy",
+            "payLaterEnabled", "creditTermDays",
+            "createdAt", "updatedAt"
         ),
         updated_user AS (
           UPDATE "User"
@@ -220,14 +262,14 @@ export async function updateDealerStatus(
         SELECT
           up."id", up."userId", up."businessName", up."contactPhone",
           up."status", up."approvedAt", up."approvedBy",
+          up."payLaterEnabled", up."creditTermDays",
           up."createdAt", up."updatedAt"
         FROM updated_profile up
       `
     );
     const result = rows[0] ?? null;
 
-    // Invalidate the protect middleware cache: the CTE above increments
-    // tokenVersion, so any cached user record for this userId is now stale.
+    // Invalidate the protect middleware cache.
     if (result) {
       await clearProtectUserCache(userId);
     }

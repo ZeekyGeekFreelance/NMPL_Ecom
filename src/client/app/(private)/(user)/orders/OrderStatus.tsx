@@ -15,9 +15,14 @@ import formatDate from "@/app/utils/formatDate";
 import {
   getCustomerOrderStatusLabel,
   getOrderStatusColor,
+  getPaymentStateColor,
+  getPaymentStateLabel,
   normalizeOrderStatus,
+  resolvePaymentState,
   type OrderLifecycleStatus,
 } from "@/app/lib/orderLifecycle";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import { toTitleCaseWords } from "@/app/lib/textNormalization";
 
 const stepIndexByStatus: Record<OrderLifecycleStatus, number> = {
   PENDING_VERIFICATION: 1,
@@ -30,9 +35,48 @@ const stepIndexByStatus: Record<OrderLifecycleStatus, number> = {
 };
 
 const OrderStatus = ({ order }) => {
-  const currentStatus = normalizeOrderStatus(
-    order?.transaction?.status || order?.status,
+  const formatPrice = useFormatPrice();
+  const statusFromTransaction = normalizeOrderStatus(order?.transaction?.status);
+  const statusFromOrder = normalizeOrderStatus(order?.status);
+  const currentStatus =
+    (stepIndexByStatus[statusFromOrder] ?? 0) >=
+    (stepIndexByStatus[statusFromTransaction] ?? 0)
+      ? statusFromOrder
+      : statusFromTransaction;
+  const paymentTransactions = Array.isArray(order?.paymentTransactions)
+    ? order.paymentTransactions
+    : [];
+  const confirmedPayments = paymentTransactions.filter(
+    (transaction: any) =>
+      String(transaction?.status || "").toUpperCase() === "CONFIRMED"
   );
+  const paymentState = resolvePaymentState({
+    isPayLater: order?.isPayLater,
+    paymentDueDate: order?.paymentDueDate,
+    paymentTransactions,
+    payment: order?.payment,
+  });
+  const isPaid = paymentState.isPaid;
+  const isPayLaterDue =
+    !!order?.isPayLater &&
+    currentStatus === "DELIVERED" &&
+    !!order?.paymentDueDate &&
+    !isPaid;
+  const hasDueDate = !!order?.paymentDueDate;
+  let statusLabel = getCustomerOrderStatusLabel(currentStatus);
+  let statusColor = getOrderStatusColor(currentStatus);
+
+  if (order?.isPayLater && (currentStatus === "DELIVERED" || currentStatus === "CONFIRMED")) {
+    if (currentStatus === "DELIVERED" && !hasDueDate && !isPaid) {
+      statusLabel = "Delivered - Due Date Missing";
+      statusColor = "bg-red-100 text-red-800";
+    } else {
+      statusLabel = `${getCustomerOrderStatusLabel(currentStatus)} - ${getPaymentStateLabel(
+        paymentState.state
+      )}`;
+      statusColor = getPaymentStateColor(paymentState.state);
+    }
+  }
 
   const getStatusIcon = (status: OrderLifecycleStatus) => {
     switch (status) {
@@ -129,15 +173,67 @@ const OrderStatus = ({ order }) => {
       <div className="border-b border-gray-100 pb-4 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <p
-            className={`text-sm font-medium px-3 py-1 rounded-full flex items-center gap-1.5 ${getOrderStatusColor(
-              currentStatus,
-            )}`}
+            className={`text-sm font-medium px-3 py-1 rounded-full flex items-center gap-1.5 ${statusColor}`}
           >
             {getStatusIcon(currentStatus)}
-            <span>{getCustomerOrderStatusLabel(currentStatus)}</span>
+            <span>{statusLabel}</span>
           </p>
         </div>
       </div>
+
+      {confirmedPayments.length > 0 && (
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <p className="font-medium">Payment received</p>
+          <div className="mt-2 space-y-2">
+            {confirmedPayments.map((payment: any) => {
+              const reference =
+                payment?.utrNumber
+                  ? `UTR: ${payment.utrNumber}`
+                  : payment?.chequeNumber
+                  ? `Cheque: ${payment.chequeNumber}`
+                  : payment?.gatewayPaymentId
+                  ? `Transaction: ${payment.gatewayPaymentId}`
+                  : null;
+              return (
+                <div
+                  key={payment.id}
+                  className="rounded-md border border-emerald-100 bg-white/70 px-3 py-2"
+                >
+                  <p className="text-xs text-emerald-700">
+                    {payment.paymentReceivedAt
+                      ? formatDate(payment.paymentReceivedAt)
+                      : "Payment date not recorded"}
+                  </p>
+                  <p className="text-sm font-semibold text-emerald-900">
+                    {formatPrice(Number(payment.amount || 0))} •{" "}
+                    {toTitleCaseWords(String(payment.paymentMethod || "Payment"))}
+                    {payment.paymentSource
+                      ? ` (${toTitleCaseWords(String(payment.paymentSource))})`
+                      : ""}
+                  </p>
+                  {reference ? (
+                    <p className="text-xs text-emerald-700">{reference}</p>
+                  ) : null}
+                  {payment.notes ? (
+                    <p className="text-xs text-emerald-700">{payment.notes}</p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {isPayLaterDue && (
+        <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Payment due by{" "}
+          <span className="font-semibold">
+            {formatDate(order.paymentDueDate, { withTime: false })}
+          </span>
+          . Amount due:{" "}
+          <span className="font-semibold">{formatPrice(order.amount)}</span>.
+        </div>
+      )}
 
       {(currentStatus === "QUOTATION_REJECTED" ||
         currentStatus === "QUOTATION_EXPIRED") && (
@@ -204,3 +300,4 @@ const OrderStatus = ({ order }) => {
 };
 
 export default OrderStatus;
+

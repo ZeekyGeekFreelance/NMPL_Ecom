@@ -17,12 +17,14 @@ import {
   useUpdateDealerStatusMutation,
 } from "@/app/store/apis/UserApi";
 import { useGetAllVariantsQuery } from "@/app/store/apis/VariantApi";
+import { useGetDealerCreditLedgerQuery, useGetOutstandingPaymentOrdersQuery } from "@/app/store/apis/PaymentApi";
 import useToast from "@/app/hooks/ui/useToast";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
-import { Eye, EyeOff, Loader2, Search, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, Search, Trash2, X, Receipt, TrendingDown, TrendingUp } from "lucide-react";
 import { toAccountReference } from "@/app/lib/utils/accountReference";
 import { getPaginatedSerialNumber } from "@/app/lib/utils/pagination";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import { format } from "date-fns";
 import {
   normalizeEmailValue,
   normalizePhoneDigits,
@@ -77,6 +79,7 @@ const DealersDashboard = () => {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [isPaymentHistoryModalOpen, setIsPaymentHistoryModalOpen] = useState(false);
   // #9: Lazy-load variants only when the price modal is open — avoids fetching 500 records on page load.
   const { data: variantsData } = useGetAllVariantsQuery(
     { limit: 500 },
@@ -104,16 +107,28 @@ const DealersDashboard = () => {
     password: string;
     businessName: string;
     contactPhone: string;
+    /**
+     * When true, the dealer is created as LEGACY:
+     *   - status = LEGACY (active immediately, no approval queue)
+     *   - payLaterEnabled = true (pay after delivery, NET 30 terms)
+     *   - mustChangePassword = true (forced credential reset on first login)
+     * Only admins/superadmins can set this flag — it is never exposed to end users.
+     */
+    isLegacy: boolean;
   };
 
   const {
     register: registerDealerField,
     handleSubmit: handleDealerSubmit,
     reset: resetDealerForm,
+    watch: watchDealerField,
     formState: { errors: dealerFormErrors, isSubmitting: isDealerFormSubmitting },
   } = useForm<CreateDealerFormValues>({
-    defaultValues: { name: "", email: "", password: "", businessName: "", contactPhone: "" },
+    defaultValues: { name: "", email: "", password: "", businessName: "", contactPhone: "", isLegacy: false },
   });
+
+  // Live-watch the legacy toggle so the warning panel appears/disappears reactively.
+  const isLegacyChecked = watchDealerField("isLegacy");
 
   useEffect(() => {
     if (!isPriceModalOpen) {
@@ -164,6 +179,17 @@ const DealersDashboard = () => {
     useGetDealerPricesQuery(selectedDealerId || "", {
       skip: !selectedDealerId || !isPriceModalOpen,
     });
+
+  const { data: creditLedgerData, isFetching: isFetchingCreditLedger } =
+    useGetDealerCreditLedgerQuery(selectedDealerId || "", {
+      skip: !selectedDealerId || !isPaymentHistoryModalOpen,
+    });
+
+  const { data: outstandingOrdersData, isFetching: isFetchingOutstandingOrders } =
+    useGetOutstandingPaymentOrdersQuery(
+      { dealerId: selectedDealerId || undefined },
+      { skip: !selectedDealerId || !isPaymentHistoryModalOpen }
+    );
 
   useEffect(() => {
     if (!isPriceModalOpen) {
@@ -400,10 +426,18 @@ const DealersDashboard = () => {
         password: values.password,
         businessName: sanitizeTextInput(values.businessName),
         contactPhone: normalizePhoneDigits(values.contactPhone, 10),
+        // Only send isLegacy=true when the admin explicitly checked the box.
+        // Omitting the field (vs. sending false) keeps the API call clean.
+        ...(values.isLegacy === true ? { isLegacy: true } : {}),
       }).unwrap();
 
       closeCreateDealerModal();
-      showToast("Dealer account created successfully", "success");
+      showToast(
+        values.isLegacy
+          ? "Legacy dealer account created. Credentials email sent."
+          : "Dealer account created successfully",
+        "success"
+      );
     } catch (error) {
       showToast(
         getApiErrorMessage(error as any, "Failed to create dealer"),
@@ -463,6 +497,15 @@ const DealersDashboard = () => {
   const openPriceModal = (dealerId: string) => {
     setSelectedDealerId(dealerId);
     setIsPriceModalOpen(true);
+  };
+
+  const openPaymentHistoryModal = (dealerId: string) => {
+    setSelectedDealerId(dealerId);
+    setIsPaymentHistoryModalOpen(true);
+  };
+
+  const closePaymentHistoryModal = () => {
+    setIsPaymentHistoryModalOpen(false);
   };
 
   const requestSavePrices = async () => {
@@ -746,17 +789,28 @@ const DealersDashboard = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
-                          dealer.dealerProfile?.status || "PENDING"
-                        )}`}
-                      >
-                        {dealer.dealerProfile?.status || "PENDING"}
-                      </span>
+                      {dealer.dealerProfile?.status === "LEGACY" ? (
+                        <div className="flex gap-2">
+                          <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800">
+                            LEGACY
+                          </span>
+                          <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800">
+                            APPROVED
+                          </span>
+                        </div>
+                      ) : (
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
+                            dealer.dealerProfile?.status || "PENDING"
+                          )}`}
+                        >
+                          {dealer.dealerProfile?.status || "PENDING"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        {dealer.dealerProfile?.status !== "APPROVED" && (
+                        {dealer.dealerProfile?.status !== "APPROVED" && dealer.dealerProfile?.status !== "LEGACY" && (
                           <button
                             disabled={actionInFlight}
                             onClick={() =>
@@ -774,7 +828,7 @@ const DealersDashboard = () => {
                             )}
                           </button>
                         )}
-                        {dealer.dealerProfile?.status !== "REJECTED" && (
+                        {dealer.dealerProfile?.status !== "REJECTED" && dealer.dealerProfile?.status !== "LEGACY" && (
                           <button
                             disabled={actionInFlight}
                             onClick={() =>
@@ -795,12 +849,21 @@ const DealersDashboard = () => {
                         {/* #7: Only APPROVED or LEGACY dealers are eligible for custom pricing. */}
                         {(dealer.dealerProfile?.status === "APPROVED" ||
                           dealer.dealerProfile?.status === "LEGACY") && (
-                          <button
-                            onClick={() => openPriceModal(dealer.id)}
-                            className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
-                          >
-                            Set Prices
-                          </button>
+                          <>
+                            <button
+                              onClick={() => openPriceModal(dealer.id)}
+                              className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+                            >
+                              Set Prices
+                            </button>
+                            <button
+                              onClick={() => openPaymentHistoryModal(dealer.id)}
+                              className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                            >
+                              <Receipt size={14} />
+                              Payment History
+                            </button>
+                          </>
                         )}
                         <button
                           disabled={actionInFlight}
@@ -929,6 +992,39 @@ const DealersDashboard = () => {
               {dealerFormErrors.contactPhone && (
                 <p className="mt-1 text-xs text-red-600">{dealerFormErrors.contactPhone.message}</p>
               )}
+
+              {/* ── Legacy dealer toggle ──────────────────────────────────────── */}
+              <div className={`rounded-lg border px-4 py-3 transition-colors ${
+                isLegacyChecked ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"
+              }`}>
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    {...registerDealerField("isLegacy")}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-blue-600"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      Create as Legacy dealer
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      For pre-existing offline dealers being migrated to the platform.
+                      Legacy dealers order on credit and pay after delivery (NET 30).
+                    </p>
+                  </div>
+                </label>
+
+                {isLegacyChecked && (
+                  <ul className="mt-3 space-y-1 border-t border-blue-200 pt-3 text-xs text-blue-800">
+                    <li>• Status set to <strong>LEGACY</strong> — active immediately, no approval queue</li>
+                    <li>• Pay-later enabled — dealer can order without upfront payment</li>
+                    <li>• Payment due <strong>30 days</strong> after each order is delivered</li>
+                    <li>• Dealer must <strong>change their password</strong> on first login</li>
+                    <li>• Credentials email sent automatically with the temporary password above</li>
+                  </ul>
+                )}
+              </div>
+              {/* ── end legacy toggle ─────────────────────────────────────────── */}
             </div>
 
             <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-4">
@@ -1220,6 +1316,197 @@ const DealersDashboard = () => {
                     )}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment History Modal */}
+        {isPaymentHistoryModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={closePaymentHistoryModal}
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              className="flex h-[calc(100dvh-2rem)] min-h-0 w-full max-w-6xl flex-col rounded-xl bg-white p-6 max-h-[calc(100dvh-2rem)]"
+            >
+              <div className="sticky top-0 z-20 bg-white pb-4 border-b border-gray-200">
+                <h2 className="type-h4 text-gray-900">Payment History & Credit Ledger</h2>
+                <p className="type-body-sm text-gray-600 mt-1">
+                  Transaction history for{" "}
+                  <span className="font-medium text-gray-900">
+                    {selectedDealer?.name || "selected dealer"}
+                  </span>
+                  {selectedDealer?.dealerProfile?.businessName && (
+                    <span className="text-gray-500">
+                      {" "}({selectedDealer.dealerProfile.businessName})
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {isFetchingCreditLedger || isFetchingOutstandingOrders ? (
+                <div className="flex-1 min-h-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <Loader2 size={32} className="animate-spin text-indigo-600 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">Loading payment history...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-y-auto">
+                  {/* Current Balance Card */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="rounded-lg border border-gray-200 bg-gradient-to-br from-blue-50 to-blue-100 p-4">
+                      <p className="text-sm text-blue-700 font-medium">Current Outstanding Balance</p>
+                      <p className="text-2xl font-bold text-blue-900 mt-1">
+                        {formatPrice(creditLedgerData?.currentBalance || 0)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-gradient-to-br from-amber-50 to-amber-100 p-4">
+                      <p className="text-sm text-amber-700 font-medium">Pending Orders</p>
+                      <p className="text-2xl font-bold text-amber-900 mt-1">
+                        {outstandingOrdersData?.orders?.length || 0}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-gradient-to-br from-green-50 to-green-100 p-4">
+                      <p className="text-sm text-green-700 font-medium">Total Transactions</p>
+                      <p className="text-2xl font-bold text-green-900 mt-1">
+                        {creditLedgerData?.totalEntries || 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Outstanding Orders */}
+                  {outstandingOrdersData && outstandingOrdersData.orders.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                      <h3 className="text-sm font-semibold text-amber-900 mb-3">Outstanding Orders</h3>
+                      <div className="space-y-2">
+                        {outstandingOrdersData.orders.map((order) => (
+                          <div
+                            key={order.id}
+                            className="rounded-md bg-white border border-amber-200 p-3 text-sm"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  Order #{order.id.slice(0, 8)}
+                                </p>
+                                <p className="text-xs text-gray-600 mt-0.5">
+                                  Placed: {format(new Date(order.orderDate), "MMM dd, yyyy")}
+                                </p>
+                                {order.paymentDueDate && (
+                                  <p className="text-xs text-amber-700 mt-0.5">
+                                    Due: {format(new Date(order.paymentDueDate), "MMM dd, yyyy")}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className="font-semibold text-gray-900">
+                                  {formatPrice(order.amount)}
+                                </p>
+                                <span className="inline-block mt-1 rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800">
+                                  {order.status}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Credit Ledger */}
+                  <div className="rounded-lg border border-gray-200">
+                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                      <h3 className="text-sm font-semibold text-gray-900">Transaction Ledger</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[800px] text-sm">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Date</th>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Event Type</th>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Order ID</th>
+                            <th className="px-4 py-3 text-right font-medium text-gray-700">Debit</th>
+                            <th className="px-4 py-3 text-right font-medium text-gray-700">Credit</th>
+                            <th className="px-4 py-3 text-right font-medium text-gray-700">Balance</th>
+                            <th className="px-4 py-3 text-left font-medium text-gray-700">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {!creditLedgerData || creditLedgerData.entries.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                                No transaction history found.
+                              </td>
+                            </tr>
+                          ) : (
+                            creditLedgerData.entries.map((entry) => (
+                              <tr key={entry.id} className="border-b border-gray-100 last:border-b-0">
+                                <td className="px-4 py-3 text-gray-700">
+                                  {format(new Date(entry.createdAt), "MMM dd, yyyy HH:mm")}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                      entry.eventType === "ORDER_DELIVERED"
+                                        ? "bg-red-100 text-red-800"
+                                        : entry.eventType === "PAYMENT_RECEIVED"
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-gray-100 text-gray-800"
+                                    }`}
+                                  >
+                                    {entry.eventType === "ORDER_DELIVERED" && <TrendingUp size={12} />}
+                                    {entry.eventType === "PAYMENT_RECEIVED" && <TrendingDown size={12} />}
+                                    {entry.eventType.replace(/_/g, " ")}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-gray-700 font-mono text-xs">
+                                  {entry.orderId ? entry.orderId.slice(0, 8) : "-"}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {entry.debitAmount > 0 ? (
+                                    <span className="font-medium text-red-700">
+                                      {formatPrice(entry.debitAmount)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {entry.creditAmount > 0 ? (
+                                    <span className="font-medium text-green-700">
+                                      {formatPrice(entry.creditAmount)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                                  {formatPrice(entry.balanceAfter)}
+                                </td>
+                                <td className="px-4 py-3 text-gray-600 text-xs">
+                                  {entry.notes || "-"}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="sticky bottom-0 z-20 mt-4 flex items-center justify-end border-t border-gray-200 pt-4 bg-white">
+                <button
+                  type="button"
+                  onClick={closePaymentHistoryModal}
+                  className="rounded-lg bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>

@@ -115,6 +115,17 @@ export class CreateDealerDto {
     message: "Contact phone must be exactly 10 digits",
   })
   contactPhone!: string;
+
+  /**
+   * When true, creates a LEGACY pay-later dealer:
+   *   - DealerProfile.status = LEGACY
+   *   - DealerProfile.payLaterEnabled = true
+   *   - User.mustChangePassword = true
+   *   - Sends legacy credential email with forced password-change notice
+   */
+  @IsOptional()
+  @IsBoolean({ message: "isLegacy must be a boolean" })
+  isLegacy?: boolean;
 }
 
 export class UpdateDealerStatusDto {

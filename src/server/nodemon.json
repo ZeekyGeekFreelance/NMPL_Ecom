@@ -2,5 +2,6 @@
   "watch": ["src"],
   "ext": "ts",
   "ignore": ["src/**/*.spec.ts"],
-  "exec": "npx ts-node -r ./scripts/load-env.js -r module-alias/register src/server.ts"
+  "exec": "npx ts-node -r ./scripts/load-env.js -r module-alias/register src/server.ts",
+  "delay": "2000"
 }

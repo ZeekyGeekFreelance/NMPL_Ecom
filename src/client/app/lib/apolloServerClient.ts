@@ -93,7 +93,10 @@ export function createServerApolloClient(): ApolloClient<object> {
     uri: SERVER_GRAPHQL_URL,
     credentials: "include",
     fetch: fetchWithTimeout,
-    headers: { "x-public-catalog": "1" },
+    // Public catalog header - can be overridden via env if needed
+    headers: { 
+      "x-public-catalog": process.env.NEXT_PUBLIC_CATALOG_HEADER || "1" 
+    },
   });
 
   return new ApolloClient({

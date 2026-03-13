@@ -14,6 +14,12 @@ interface InvoiceEmailTemplateInput {
   deliveryCharge?: number;
   deliveryMode?: string;
   totalAmount: number;
+  /** PAID | PAYMENT_DUE | OVERDUE — drives the payment-status block in the email */
+  paymentStatus?: string | null;
+  /** e.g. "NET 30 DAYS" — shown in the payment-due block */
+  paymentTerms?: string | null;
+  /** Due date for pay-later invoices */
+  paymentDueDate?: Date | null;
 }
 
 export const buildInvoiceEmailTemplate = ({
@@ -28,6 +34,9 @@ export const buildInvoiceEmailTemplate = ({
   deliveryCharge,
   deliveryMode,
   totalAmount,
+  paymentStatus,
+  paymentTerms,
+  paymentDueDate,
 }: InvoiceEmailTemplateInput): { html: string; text: string } => {
   const normalizedName = recipientName?.trim() || "Customer";
   const amount = formatINRCurrency(totalAmount);
@@ -40,6 +49,10 @@ export const buildInvoiceEmailTemplate = ({
   const platformName = getPlatformName();
   const supportEmail = getSupportEmail();
   const billingTeamLabel = `${platformName} Billing Team`;
+
+  const isPaymentDue = paymentStatus === "PAYMENT_DUE" || paymentStatus === "OVERDUE";
+  const isOverdue = paymentStatus === "OVERDUE";
+  const dueDateFormatted = paymentDueDate ? formatDateTimeInIST(paymentDueDate) : null;
 
   return {
     text: [
@@ -55,6 +68,9 @@ export const buildInvoiceEmailTemplate = ({
       subtotal ? `Subtotal: ${subtotal}` : null,
       delivery ? `Delivery (${deliveryMode || "DELIVERY"}): ${delivery}` : null,
       `Total Amount: ${amount}`,
+      isPaymentDue ? `Payment Status: ${isOverdue ? "OVERDUE" : "PAYMENT DUE"}` : null,
+      paymentTerms ? `Payment Terms: ${paymentTerms}` : null,
+      dueDateFormatted ? `Payment Due Date: ${dueDateFormatted}` : null,
       `Support: ${supportEmail}`,
       "",
       "Thanks,",
@@ -87,6 +103,22 @@ export const buildInvoiceEmailTemplate = ({
           }
           <strong>Total Amount:</strong> ${amount}
         </p>
+        ${
+          isPaymentDue
+            ? `
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+          style="background:${isOverdue ? "#fef2f2" : "#fefce8"};border:1px solid ${isOverdue ? "#fecaca" : "#fde68a"};border-radius:6px;margin:12px 0;">
+          <tr>
+            <td style="padding:14px 18px;">
+              <p style="margin:0 0 6px;font-weight:bold;color:${isOverdue ? "#b91c1c" : "#92400e"};"
+              >${isOverdue ? "&#9888; PAYMENT OVERDUE" : "&#9432; PAYMENT DUE"}</p>
+              ${paymentTerms ? `<p style="margin:0 0 4px;"><strong>Terms:</strong> ${paymentTerms}</p>` : ""}
+              ${dueDateFormatted ? `<p style="margin:0;"><strong>Due Date:</strong> ${dueDateFormatted}</p>` : ""}
+            </td>
+          </tr>
+        </table>`
+            : ""
+        }
         <p>
           Support:
           <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>

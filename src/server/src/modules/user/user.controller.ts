@@ -231,7 +231,7 @@ export class UserController {
         throw new AppError(401, "User not authenticated");
       }
 
-      const { name, email, password, businessName, contactPhone } = req.body;
+      const { name, email, password, businessName, contactPhone, isLegacy } = req.body;
       const dealer = await this.userService.createDealer(
         {
           name,
@@ -239,6 +239,7 @@ export class UserController {
           password,
           businessName,
           contactPhone,
+          isLegacy: isLegacy === true,
         },
         currentUserId
       );

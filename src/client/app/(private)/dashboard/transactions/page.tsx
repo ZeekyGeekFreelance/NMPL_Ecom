@@ -20,8 +20,9 @@ import {
 import {
   ORDER_STATUS_OPTIONS,
   getAllowedNextOrderStatuses,
-  getOrderStatusColor,
   getOrderStatusLabel,
+  getPaymentAwareOrderStatusColor,
+  getPaymentAwareOrderStatusLabel,
   normalizeOrderStatus,
   type OrderLifecycleStatus,
 } from "@/app/lib/orderLifecycle";
@@ -228,15 +229,28 @@ const TransactionsDashboard = () => {
       key: "status",
       label: "Status",
       sortable: true,
-      render: (row: any) => (
-        <span
-          className={`px-2 py-1 rounded-full text-xs font-medium ${getOrderStatusColor(
-            row.status
-          )}`}
-        >
-          {getOrderStatusLabel(row.status)}
-        </span>
-      ),
+      render: (row: any) => {
+        const label = getPaymentAwareOrderStatusLabel({
+          status: row.status,
+          isPayLater: row.order?.isPayLater,
+          paymentDueDate: row.order?.paymentDueDate,
+          paymentTransactions: row.order?.paymentTransactions,
+          payment: row.order?.payment,
+        });
+        const color = getPaymentAwareOrderStatusColor({
+          status: row.status,
+          isPayLater: row.order?.isPayLater,
+          paymentDueDate: row.order?.paymentDueDate,
+          paymentTransactions: row.order?.paymentTransactions,
+          payment: row.order?.payment,
+        });
+
+        return (
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${color}`}>
+            {label}
+          </span>
+        );
+      },
     },
     {
       key: "transactionDate",
@@ -448,7 +462,5 @@ const TransactionsDashboard = () => {
 };
 
 export default withAuth(TransactionsDashboard);
-
-
 
 

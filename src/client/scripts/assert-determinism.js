@@ -16,6 +16,10 @@ const FORBIDDEN_ARTIFACT_PATTERNS = [
 
 const ignoredProcessEnvFiles = new Set([
   path.normalize(path.join(appRoot, "lib", "runtimeEnv.ts")),
+  // useBackendReady reads optional NEXT_PUBLIC_ config vars that are not part
+  // of the required schema in runtimeEnv.ts. These are purely optional and
+  // baked in at build time by Next.js — safe to read directly here.
+  path.normalize(path.join(appRoot, "hooks", "network", "useBackendReady.ts")),
 ]);
 
 const walkFiles = (dir) => {

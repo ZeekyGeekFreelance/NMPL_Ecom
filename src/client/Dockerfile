@@ -13,4 +13,8 @@ RUN if [ "$APP_ENV" = "production" ]; then npm run build; else echo "Skipping pr
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+# Use `npm run dev` as the default so the container works correctly when
+# APP_ENV=development and no build artefact exists.  The docker-compose
+# `command` override also sets `npm run dev` explicitly, making this the
+# consistent entry-point for both invocation paths.
+CMD ["npm", "run", "dev"]
