@@ -6,9 +6,9 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
   // directUrl is only needed when DATABASE_URL points to a pgbouncer-pooled
-  // connection (e.g. Neon free tier). Railway Postgres is a direct connection,
-  // so directUrl is not required. If you ever switch back to a pooled provider,
-  // uncomment the line below and set DIRECT_URL to the non-pooled URL.
+  // connection (e.g. Neon free tier). Direct connections do not require
+  // directUrl. If you ever switch back to a pooled provider, uncomment the
+  // line below and set DIRECT_URL to the non-pooled URL.
   // directUrl = env("DIRECT_URL")
 }
 

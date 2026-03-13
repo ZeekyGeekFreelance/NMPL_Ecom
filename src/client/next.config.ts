@@ -31,7 +31,7 @@ const nextConfig: NextConfig = {
 
   // Expose INTERNAL_API_URL to the Next.js server runtime (SSR) only.
   // This is NOT exposed to the browser — it is used by server-side fetch calls
-  // so SSR hits the private Railway network instead of the public API URL.
+  // so SSR can use a private/internal network instead of the public API URL.
   serverRuntimeConfig: {
     internalApiUrl: process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "",
   },

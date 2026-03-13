@@ -262,8 +262,8 @@ const directDbTarget = directUrlRaw
 const dbUrl = new URL(dbTarget.normalizedUrl);
 
 // connection_limit and pool_timeout are pgbouncer-specific parameters
-// required for Neon's pooled connections. Railway Postgres is a direct
-// connection — these params are not used and should not be required.
+// required for pooled connections (e.g. Neon free tier). Direct connections
+// do not use them and should not require them.
 // We still inject them if missing so Prisma respects our pool settings
 // in both environments, but we no longer block production boot on them.
 if (!dbTarget.connectionLimit) {
@@ -284,11 +284,11 @@ if (isProduction && LOCALHOSTS.has(dbTarget.host)) {
 }
 
 // DIRECT_URL is only required when DATABASE_URL is a pgbouncer-pooled connection
-// (Neon free tier uses pgbouncer; Railway Postgres does not).
+// (Neon free tier uses pgbouncer).
 // We no longer enforce DIRECT_URL in production — the schema.prisma no longer
 // declares directUrl, so Prisma uses DATABASE_URL for both queries and migrations.
 if (isProduction && directDbTarget === undefined) {
-  console.log("[config] DIRECT_URL not set — using DATABASE_URL for all Prisma operations (Railway direct connection mode).");
+  console.log("[config] DIRECT_URL not set — using DATABASE_URL for all Prisma operations (direct connection mode).");
 }
 
 if (isProduction && directDbTarget && LOCALHOSTS.has(directDbTarget.host)) {
@@ -304,15 +304,13 @@ if (isProduction && !dbSslRequired) {
 
 // SSL is enforced via DB_SSL_REQUIRED=true and Prisma's SSL config.
 // We no longer require sslmode=require in the URL string itself because
-// Railway's auto-generated DATABASE_URL uses a connection string format
-// that enables SSL without the query param (it uses the ?sslmode=require
-// form only on external URLs; internal private network connections inherit SSL).
+// some managed platforms provide SSL by default even when the param is omitted.
 if (isProduction) {
   const sslMode = (dbTarget.sslMode || "").toLowerCase();
   if (sslMode && sslMode !== "require" && sslMode !== "verify-full") {
     throwConfigError(
       "DATABASE_URL",
-      `Production database URL has an unsafe sslmode: '${sslMode}'. Use sslmode=require or omit for Railway's default SSL.`
+      `Production database URL has an unsafe sslmode: '${sslMode}'. Use sslmode=require or omit to rely on the provider's default SSL.`
     );
   }
 }

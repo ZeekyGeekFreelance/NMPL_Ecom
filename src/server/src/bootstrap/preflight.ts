@@ -64,7 +64,7 @@ const probeTcpPort = (host: string, port: number, timeoutMs: number): Promise<bo
   });
 
 export const assertPortAvailable = async (): Promise<void> => {
-  // In production (Railway, Docker, etc.) port collision detection via TCP probe
+  // In production (containerized or managed), port collision detection via TCP probe
   // is unreliable: the platform assigns the port, old processes release it before
   // the new container starts, and probing can race.  Skip in production — if the
   // port is genuinely in use, httpServer.listen() will throw EADDRINUSE anyway.

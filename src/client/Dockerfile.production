@@ -20,9 +20,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build-time public env vars must be baked in here.
-# Railway passes variables as build args automatically when you add them to the
-# service's Variables tab. Declare them here so Next.js can read them during
-# `next build` and bake them into the JS bundle.
+# Build platforms can pass variables as build args (or CI can inject them).
+# Declare them here so Next.js can read them during `next build` and bake them
+# into the JS bundle.
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_PLATFORM_NAME
 ARG NEXT_PUBLIC_SUPPORT_EMAIL
@@ -32,9 +32,10 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_PLATFORM_NAME=$NEXT_PUBLIC_PLATFORM_NAME
 ENV NEXT_PUBLIC_SUPPORT_EMAIL=$NEXT_PUBLIC_SUPPORT_EMAIL
 
-# Run only the structural build checks. Skip env:check because Railway provides
-# env vars at runtime, not build time. The Next.js build already validates
-# NEXT_PUBLIC_* via runtimeEnv.ts when the bundle is first evaluated.
+# Run only the structural build checks. Skip env:check because some platforms
+# inject runtime env vars at container start rather than during image build.
+# The Next.js build already validates NEXT_PUBLIC_* via runtimeEnv.ts when the
+# bundle is first evaluated.
 RUN npm run repo:sanity && \
     node ./scripts/assert-determinism.js pre && \
     node ./scripts/clean-build.js && \

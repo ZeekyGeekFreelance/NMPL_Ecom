@@ -19,11 +19,11 @@ RUN npx prisma generate
 
 # Compile TypeScript → dist/
 # We invoke tsc directly and run only the structural pre/post checks.
-# We deliberately SKIP env:check here because Railway injects env vars at
+# We deliberately SKIP env:check here because many platforms inject env vars at
 # container runtime, not at image build time. Running env:check at build time
-# would always fail because DATABASE_URL, SESSION_SECRET, etc. are all absent
-# during the Docker build phase. The config system performs the same validation
-# at process startup, which is the correct and reliable place for it.
+# would fail because DATABASE_URL, SESSION_SECRET, etc. are all absent during
+# the Docker build phase. The config system performs the same validation at
+# process startup, which is the correct and reliable place for it.
 ENV NODE_ENV=production
 RUN npm run repo:sanity && \
     node ./scripts/assert-determinism.js pre && \
@@ -51,7 +51,7 @@ COPY --from=builder /app/scripts ./scripts
 EXPOSE 5000
 
 # Run migrations then start the compiled server.
-# Railway injects DATABASE_URL and DIRECT_URL from environment variables,
+# The runtime environment injects DATABASE_URL and DIRECT_URL via env vars,
 # so no .env file patching is needed here.
 #
 # prisma migrate deploy: safe to re-run, skips already-applied migrations.
