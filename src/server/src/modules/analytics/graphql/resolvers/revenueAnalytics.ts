@@ -5,8 +5,10 @@ import {
   shouldFetchPreviousPeriod,
   calculateChanges,
   aggregateMonthlyTrends,
+  buildDateFilter,
 } from "@/shared/utils/analytics";
 import { Context } from "../resolver";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const revenueAnalytics = {
   Query: {
@@ -19,6 +21,12 @@ const revenueAnalytics = {
         yearStart,
         yearEnd,
       } = getDateRange({ timePeriod, year, startDate, endDate });
+      const currentOrderDateFilter = buildDateFilter(
+        currentStartDate,
+        endDate,
+        yearStart,
+        yearEnd
+      );
 
       const currentOrders = await fetchData(
         prisma,
@@ -27,21 +35,41 @@ const revenueAnalytics = {
         currentStartDate,
         endDate,
         yearStart,
-        yearEnd
-      );
-      const currentOrderItems = await fetchData(
-        prisma,
-        "orderItem",
-        "createdAt",
-        currentStartDate,
-        endDate,
-        yearStart,
         yearEnd,
         undefined,
-        { variant: true } 
+        undefined,
+        {
+          status: {
+            in: [...CONFIRMED_ORDER_STATUS_VALUES],
+          },
+        }
       );
+      const currentOrderItems = await prisma.orderItem.findMany({
+        where: {
+          order: {
+            orderDate: currentOrderDateFilter,
+            status: {
+              in: [...CONFIRMED_ORDER_STATUS_VALUES],
+            },
+          },
+        },
+        include: {
+          variant: true,
+          order: {
+            select: {
+              orderDate: true,
+            },
+          },
+        },
+      });
 
       const fetchPrevious = shouldFetchPreviousPeriod(timePeriod);
+      const previousOrderDateFilter = buildDateFilter(
+        previousStartDate,
+        previousEndDate,
+        yearStart,
+        yearEnd
+      );
       const previousOrders = fetchPrevious
         ? await fetchData(
             prisma,
@@ -50,21 +78,35 @@ const revenueAnalytics = {
             previousStartDate,
             previousEndDate,
             yearStart,
-            yearEnd
+            yearEnd,
+            undefined,
+            undefined,
+            {
+              status: {
+                in: [...CONFIRMED_ORDER_STATUS_VALUES],
+              },
+            }
           )
         : [];
       const previousOrderItems = fetchPrevious
-        ? await fetchData(
-            prisma,
-            "orderItem",
-            "createdAt",
-            previousStartDate,
-            previousEndDate,
-            yearStart,
-            yearEnd,
-            undefined,
-            { variant: true } 
-          )
+        ? await prisma.orderItem.findMany({
+            where: {
+              order: {
+                orderDate: previousOrderDateFilter,
+                status: {
+                  in: [...CONFIRMED_ORDER_STATUS_VALUES],
+                },
+              },
+            },
+            include: {
+              variant: true,
+              order: {
+                select: {
+                  orderDate: true,
+                },
+              },
+            },
+          })
         : [];
 
       const currentMetrics = calculateMetrics(currentOrders, currentOrderItems, []);
@@ -72,30 +114,54 @@ const revenueAnalytics = {
 
       const changes = calculateChanges(currentMetrics, previousMetrics, fetchPrevious);
 
+      const trendStartDate = yearStart ?? currentStartDate;
+      const trendEndDate = yearEnd ?? (endDate ? new Date(endDate) : undefined);
+
       const ordersForTrends = await fetchData(
         prisma,
         "order",
-        "createdAt",
-        yearStart,
-        yearEnd
-      );
-      const orderItemsForTrends = await fetchData(
-        prisma,
-        "orderItem",
-        "createdAt",
-        yearStart,
-        yearEnd,
+        "orderDate",
+        trendStartDate,
+        trendEndDate,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          status: {
+            in: [...CONFIRMED_ORDER_STATUS_VALUES],
+          },
+        }
       );
-      const usersForTrends = await fetchData(
-        prisma,
-        "user",
-        "createdAt",
-        yearStart,
-        yearEnd
+      const trendOrderDateFilter = buildDateFilter(
+        trendStartDate,
+        trendEndDate,
+        undefined,
+        undefined
       );
+      const orderItemsForTrends = await prisma.orderItem.findMany({
+        where: {
+          order: {
+            orderDate: trendOrderDateFilter,
+            status: {
+              in: [...CONFIRMED_ORDER_STATUS_VALUES],
+            },
+          },
+        },
+        include: {
+          order: {
+            select: {
+              orderDate: true,
+            },
+          },
+        },
+      });
 
-      const monthlyTrends = aggregateMonthlyTrends(ordersForTrends, orderItemsForTrends, usersForTrends);
+      const monthlyTrends = aggregateMonthlyTrends(
+        ordersForTrends,
+        orderItemsForTrends,
+        []
+      );
 
       return {
         totalRevenue: Number(currentMetrics.totalRevenue.toFixed(2)),

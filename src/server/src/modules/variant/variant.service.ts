@@ -3,12 +3,42 @@ import { VariantRepository } from "./variant.repository";
 import { AttributeRepository } from "../attribute/attribute.repository";
 import prisma from "@/infra/database/database.config";
 import ApiFeatures from "@/shared/utils/ApiFeatures";
+import { clearCatalogListingCache } from "@/modules/product/graphql/resolver";
 
 export class VariantService {
+  private static readonly BASE_VARIANT_DELETE_MESSAGE =
+    "Base variant cannot be deleted. Add another variant first or delete the product instead.";
+
   constructor(
     private variantRepository: VariantRepository,
     private attributeRepository: AttributeRepository
   ) {}
+
+  private buildVariantValidationError(message: string): AppError {
+    return new AppError(400, message, true, [
+      {
+        property: "variants",
+        constraints: {
+          integrity: message,
+        },
+      },
+    ]);
+  }
+
+  private describeAttributeCombination(
+    attributes: Array<{ attributeId: string; valueId: string }>,
+    attributeNameById: Map<string, string>,
+    valueLabelById: Map<string, string>
+  ): string {
+    return attributes
+      .map((attribute) => {
+        const attributeName = attributeNameById.get(attribute.attributeId) || "Attribute";
+        const valueLabel = valueLabelById.get(attribute.valueId) || "Value";
+        return `${attributeName} = ${valueLabel}`;
+      })
+      .sort((a, b) => a.localeCompare(b))
+      .join(", ");
+  }
 
   async getAllVariants(queryString: Record<string, any>) {
     const apiFeatures = new ApiFeatures(queryString)
@@ -95,14 +125,35 @@ export class VariantService {
     productId: string;
     sku: string;
     price: number;
+    defaultDealerPrice?: number | null;
     images: string[];
     stock: number;
     lowStockThreshold?: number;
     barcode?: string;
-    warehouseLocation?: string;
     attributes: { attributeId: string; valueId: string }[];
   }) {
     const { productId, attributes } = data;
+
+    if (!Number.isFinite(Number(data.price)) || Number(data.price) <= 0) {
+      throw new AppError(400, "Retail price must be a positive number");
+    }
+    if (!Number.isFinite(Number(data.stock)) || Number(data.stock) < 0) {
+      throw new AppError(400, "Stock must be a non-negative number");
+    }
+    if (
+      data.defaultDealerPrice !== undefined &&
+      data.defaultDealerPrice !== null
+    ) {
+      if (
+        !Number.isFinite(Number(data.defaultDealerPrice)) ||
+        Number(data.defaultDealerPrice) < 0
+      ) {
+        throw new AppError(400, "Dealer base price must be numeric and >= 0");
+      }
+      if (Number(data.defaultDealerPrice) > Number(data.price)) {
+        throw new AppError(400, "Dealer base price cannot exceed retail price");
+      }
+    }
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -155,6 +206,7 @@ export class VariantService {
     const allValueIds = [...new Set(attributes.map((a) => a.valueId))];
     const existingValues = await prisma.attributeValue.findMany({
       where: { id: { in: allValueIds } },
+      select: { id: true, attributeId: true, value: true },
     });
     if (existingValues.length !== allValueIds.length) {
       throw new AppError(400, "One or more attribute values are invalid");
@@ -181,13 +233,27 @@ export class VariantService {
           .join("|") === newComboKey
     );
     if (isDuplicateCombo) {
-      throw new AppError(
-        400,
-        "Duplicate attribute combination for this product"
+      const attributeNameById = new Map(
+        existingAttributes.map((attribute) => [attribute.id, attribute.name])
+      );
+      const valueLabelById = new Map(
+        existingValues.map((value) => [value.id, value.value])
+      );
+      const readableCombination = this.describeAttributeCombination(
+        attributes,
+        attributeNameById,
+        valueLabelById
+      );
+      throw this.buildVariantValidationError(
+        readableCombination
+          ? `Duplicate attribute combination: ${readableCombination} already exists.`
+          : "Variant with same attribute combination already defined."
       );
     }
 
-    return this.variantRepository.createVariant(data);
+    const createdVariant = await this.variantRepository.createVariant(data);
+    await clearCatalogListingCache();
+    return createdVariant;
   }
 
   async updateVariant(
@@ -195,11 +261,11 @@ export class VariantService {
     data: Partial<{
       sku: string;
       price: number;
+      defaultDealerPrice?: number | null;
       images?: string[];
       stock: number;
       lowStockThreshold?: number;
       barcode?: string;
-      warehouseLocation?: string;
       attributes: { attributeId: string; valueId: string }[];
     }>
   ) {
@@ -217,6 +283,41 @@ export class VariantService {
       if (existingSku) {
         throw new AppError(400, "SKU already exists");
       }
+    }
+
+    if (data.price !== undefined) {
+      if (!Number.isFinite(Number(data.price)) || Number(data.price) <= 0) {
+        throw new AppError(400, "Retail price must be a positive number");
+      }
+    }
+
+    const retailPriceForValidation = Number(data.price ?? existingVariant.price);
+    if (
+      data.defaultDealerPrice !== undefined &&
+      data.defaultDealerPrice !== null
+    ) {
+      if (
+        !Number.isFinite(Number(data.defaultDealerPrice)) ||
+        Number(data.defaultDealerPrice) < 0
+      ) {
+        throw new AppError(400, "Dealer base price must be numeric and >= 0");
+      }
+      if (Number(data.defaultDealerPrice) > retailPriceForValidation) {
+        throw new AppError(400, "Dealer base price cannot exceed retail price");
+      }
+    }
+
+    if (
+      data.defaultDealerPrice === undefined &&
+      data.price !== undefined &&
+      existingVariant.defaultDealerPrice !== null &&
+      existingVariant.defaultDealerPrice !== undefined &&
+      Number(existingVariant.defaultDealerPrice) > retailPriceForValidation
+    ) {
+      throw new AppError(
+        400,
+        "Retail price cannot be below current dealer base price. Update or clear dealer base price first."
+      );
     }
 
     if (data.attributes) {
@@ -264,6 +365,7 @@ export class VariantService {
       const allValueIds = [...new Set(data.attributes.map((a) => a.valueId))];
       const existingValues = await prisma.attributeValue.findMany({
         where: { id: { in: allValueIds } },
+        select: { id: true, attributeId: true, value: true },
       });
       if (existingValues.length !== allValueIds.length) {
         throw new AppError(400, "One or more attribute values are invalid");
@@ -289,14 +391,28 @@ export class VariantService {
             .join("|") === newComboKey
       );
       if (isDuplicateCombo) {
-        throw new AppError(
-          400,
-          "Duplicate attribute combination for this product"
+        const attributeNameById = new Map(
+          existingAttributes.map((attribute) => [attribute.id, attribute.name])
+        );
+        const valueLabelById = new Map(
+          existingValues.map((value) => [value.id, value.value])
+        );
+        const readableCombination = this.describeAttributeCombination(
+          data.attributes,
+          attributeNameById,
+          valueLabelById
+        );
+        throw this.buildVariantValidationError(
+          readableCombination
+            ? `Duplicate attribute combination: ${readableCombination} already exists.`
+            : "Variant with same attribute combination already defined."
         );
       }
     }
 
-    return this.variantRepository.updateVariant(variantId, data);
+    const updatedVariant = await this.variantRepository.updateVariant(variantId, data);
+    await clearCatalogListingCache();
+    return updatedVariant;
   }
 
   async restockVariant(
@@ -316,7 +432,7 @@ export class VariantService {
       throw new AppError(404, "Variant not found");
     }
 
-    return prisma.$transaction(async (tx) => {
+    const restockResult = await prisma.$transaction(async (tx) => {
       const restock = await this.variantRepository.createRestock({
         variantId,
         quantity,
@@ -343,6 +459,9 @@ export class VariantService {
 
       return { restock, isLowStock };
     });
+
+    await clearCatalogListingCache();
+    return restockResult;
   }
 
   async deleteVariant(variantId: string) {
@@ -351,6 +470,17 @@ export class VariantService {
       throw new AppError(404, "Variant not found");
     }
 
+    const productVariantCount = await prisma.productVariant.count({
+      where: { productId: variant.productId },
+    });
+
+    if (productVariantCount <= 1) {
+      throw this.buildVariantValidationError(
+        VariantService.BASE_VARIANT_DELETE_MESSAGE
+      );
+    }
+
     await this.variantRepository.deleteVariant(variantId);
+    await clearCatalogListingCache();
   }
 }

@@ -2,6 +2,7 @@
 import { ReactNode } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { Shield, AlertTriangle } from "lucide-react";
+import { resolveDisplayRole } from "@/app/lib/userRole";
 
 interface RoleHierarchyGuardProps {
   children: ReactNode;
@@ -55,17 +56,23 @@ const RoleHierarchyGuard: React.FC<RoleHierarchyGuardProps> = ({
   const getRoleHierarchy = (role: string): number => {
     const hierarchy: { [key: string]: number } = {
       USER: 1,
+      DEALER: 1,
       ADMIN: 2,
       SUPERADMIN: 3,
     };
     return hierarchy[role] || 0;
   };
 
-  const currentUserHierarchy = getRoleHierarchy(user.role);
-  const targetUserHierarchy = getRoleHierarchy(targetUserRole);
+  const currentUserRole = resolveDisplayRole(user);
+  const normalizedTargetRole = String(targetUserRole || "").trim().toUpperCase();
+  const currentUserHierarchy = getRoleHierarchy(currentUserRole);
+  const targetUserHierarchy = getRoleHierarchy(normalizedTargetRole);
 
-  // Check if current user has higher or equal hierarchy than target user
-  if (currentUserHierarchy <= targetUserHierarchy) {
+  // SuperAdmin can manage other SuperAdmins (self is blocked above).
+  if (
+    currentUserRole !== "SUPERADMIN" &&
+    currentUserHierarchy <= targetUserHierarchy
+  ) {
     return showFallback
       ? fallback || (
           <div className="flex items-center justify-center p-6 bg-yellow-50 rounded-lg border border-yellow-200">

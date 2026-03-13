@@ -4,8 +4,9 @@ import asyncHandler from "@/shared/utils/asyncHandler";
 import sendResponse from "@/shared/utils/sendResponse";
 import { makeLogsService } from "../logs/logs.factory";
 import AppError from "@/shared/errors/AppError";
+import { config } from "@/config";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = config.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);
@@ -18,7 +19,9 @@ export class UserController {
 
   getAllUsers = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const users = await this.userService.getAllUsers();
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 50;
+      const users = await this.userService.getAllUsers({ page, limit });
       sendResponse(res, 200, {
         data: { users },
         message: "Users fetched successfully",
@@ -59,22 +62,45 @@ export class UserController {
     });
   });
 
+  updateCurrentUserProfile = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const { name, phone } = req.body as { name?: string; phone?: string };
+      const user = await this.userService.updateCurrentUserProfile(currentUserId, {
+        name,
+        phone,
+      });
+
+      sendResponse(res, 200, {
+        data: { user },
+        message: "Profile updated successfully",
+      });
+
+      this.logsService.info("Self profile updated", {
+        userId: req.user?.id,
+        sessionId: req.session.id,
+      });
+    }
+  );
+
   updateMe = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
       const updatedData = req.body;
+      const start = Date.now();
       const user = await this.userService.updateMe(id, updatedData);
       sendResponse(res, 200, {
         data: { user },
         message: "User updated successfully",
       });
-      const start = Date.now();
-      const end = Date.now();
 
       this.logsService.info("User updated", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
       });
     }
   );
@@ -88,22 +114,21 @@ export class UserController {
         throw new AppError(401, "User not authenticated");
       }
 
+      const start = Date.now();
       await this.userService.deleteUser(id, currentUserId);
       sendResponse(res, 204, { message: "User deleted successfully" });
-      const start = Date.now();
-      const end = Date.now();
 
       this.logsService.info("User deleted", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
+        timePeriod: Date.now() - start,
       });
     }
   );
 
   createAdmin = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { name, email, password } = req.body;
+      const { name, email, phone, password, assignBillingSupervisor } = req.body;
       const currentUserId = req.user?.id;
 
       if (!currentUserId) {
@@ -111,22 +136,70 @@ export class UserController {
       }
 
       const newAdmin = await this.userService.createAdmin(
-        { name, email, password },
+        { name, email, phone, password, assignBillingSupervisor },
         currentUserId
       );
 
       sendResponse(res, 201, {
         data: { user: newAdmin },
-        message: "Admin created successfully",
+        message: assignBillingSupervisor
+          ? "Admin created and assigned to billing successfully"
+          : "Admin created successfully",
       });
-
-      const start = Date.now();
-      const end = Date.now();
 
       this.logsService.info("Admin created", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
+      });
+    }
+  );
+
+  updateBillingSupervisor = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const { id } = req.params;
+      const { isBillingSupervisor } = req.body as {
+        isBillingSupervisor: boolean;
+      };
+
+      const user = await this.userService.updateBillingSupervisor(
+        id,
+        isBillingSupervisor,
+        currentUserId
+      );
+
+      sendResponse(res, 200, {
+        data: { user },
+        message: isBillingSupervisor
+          ? "Billing supervisor assigned successfully"
+          : "Billing supervisor removed successfully",
+      });
+    }
+  );
+
+  updateAdminPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const { id } = req.params;
+      const { newPassword } = req.body as { newPassword: string };
+
+      const user = await this.userService.updateAdminPassword(
+        id,
+        newPassword,
+        currentUserId
+      );
+
+      sendResponse(res, 200, {
+        data: { user },
+        message: "Admin password updated successfully",
       });
     }
   );
@@ -137,9 +210,9 @@ export class UserController {
         typeof req.query.status === "string"
           ? req.query.status.toUpperCase()
           : undefined;
-      const allowedStatuses = new Set(["PENDING", "APPROVED", "REJECTED"]);
+      const allowedStatuses = new Set(["PENDING", "APPROVED", "LEGACY", "REJECTED", "SUSPENDED"]);
       const status = rawStatus && allowedStatuses.has(rawStatus)
-        ? (rawStatus as "PENDING" | "APPROVED" | "REJECTED")
+        ? (rawStatus as "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED")
         : undefined;
 
       const dealers = await this.userService.getDealers(status);
@@ -158,7 +231,7 @@ export class UserController {
         throw new AppError(401, "User not authenticated");
       }
 
-      const { name, email, password, businessName, contactPhone } = req.body;
+      const { name, email, password, businessName, contactPhone, isLegacy } = req.body;
       const dealer = await this.userService.createDealer(
         {
           name,
@@ -166,6 +239,7 @@ export class UserController {
           password,
           businessName,
           contactPhone,
+          isLegacy: isLegacy === true,
         },
         currentUserId
       );

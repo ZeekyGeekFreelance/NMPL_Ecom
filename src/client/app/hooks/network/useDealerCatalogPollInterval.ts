@@ -2,22 +2,15 @@
 
 import { useMemo } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
+import { resolveDisplayRole } from "@/app/lib/userRole";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
-const DEFAULT_POLL_INTERVAL_MS = 15000;
 const MIN_POLL_INTERVAL_MS = 5000;
 
-const resolveConfiguredPollInterval = () => {
-  const raw = process.env.NEXT_PUBLIC_DEALER_CATALOG_POLL_MS;
-  const parsed = Number(raw);
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_POLL_INTERVAL_MS;
-  }
-
-  return Math.max(Math.floor(parsed), MIN_POLL_INTERVAL_MS);
-};
-
-const configuredPollInterval = resolveConfiguredPollInterval();
+const configuredPollInterval =
+  typeof runtimeEnv.dealerCatalogPollMs === "number"
+    ? Math.max(runtimeEnv.dealerCatalogPollMs, MIN_POLL_INTERVAL_MS)
+    : undefined;
 
 export const useDealerCatalogPollInterval = (enabled = true): number | undefined => {
   const { isAuthenticated, user } = useAuth();
@@ -28,9 +21,7 @@ export const useDealerCatalogPollInterval = (enabled = true): number | undefined
     }
 
     const isApprovedDealer =
-      user.role === "USER" &&
-      user.isDealer === true &&
-      user.dealerStatus === "APPROVED";
+      resolveDisplayRole(user) === "DEALER" && user.dealerStatus === "APPROVED";
 
     if (!isApprovedDealer) {
       return undefined;

@@ -6,7 +6,9 @@ import client from "./lib/apolloClient";
 import Toast from "./components/feedback/Toast";
 import AuthProvider from "./components/HOC/AuthProvider";
 import ApolloAuthSync from "./components/HOC/ApolloAuthSync";
+import GlobalInputNormalizer from "./components/HOC/GlobalInputNormalizer";
 import TopLoadingBar from "./components/feedback/TopLoadingBar";
+import { runtimeEnv } from "./lib/runtimeEnv";
 
 export default function ClientProviders({
   children,
@@ -19,9 +21,10 @@ export default function ClientProviders({
       <Provider store={store}>
         <AuthProvider>
           <ApolloAuthSync />
+          <GlobalInputNormalizer />
           {children}
         </AuthProvider>
-        {process.env.NODE_ENV !== "test" && <Toast />}
+        {!runtimeEnv.isTest && <Toast />}
       </Provider>
     </ApolloProvider>
   );

@@ -11,35 +11,35 @@ const Charts = ({ data, mostSoldProducts, interactionByType }) => {
         title="Order Trends"
         data={data?.revenueAnalytics?.monthlyTrends?.orders || []}
         categories={data?.revenueAnalytics?.monthlyTrends?.labels || []}
-        color="#ec4899"
+        color="#1d3461"
         percentageChange={data?.orderAnalytics?.changes?.orders}
       />
       <AreaChartComponent
         title="Revenue Trends"
         data={data?.revenueAnalytics?.monthlyTrends?.revenue || []}
         categories={data?.revenueAnalytics?.monthlyTrends?.labels || []}
-        color="#22c55e"
+        color="#15803d"
         percentageChange={data?.revenueAnalytics?.changes?.revenue}
       />
       <AreaChartComponent
         title="Sales Trends"
         data={data?.revenueAnalytics?.monthlyTrends?.sales || []}
         categories={data?.revenueAnalytics?.monthlyTrends?.labels || []}
-        color="#3b82f6"
+        color="#b84c0d"
         percentageChange={data?.orderAnalytics?.changes?.sales}
       />
       <AreaChartComponent
         title="User Trends"
         data={data?.revenueAnalytics?.monthlyTrends?.users || []}
         categories={data?.revenueAnalytics?.monthlyTrends?.labels || []}
-        color="#f59e0b"
+        color="#b45309"
         percentageChange={data?.userAnalytics?.changes?.users}
       />
       <AreaChartComponent
         title="Interaction Trends (Views)"
         data={data?.userAnalytics?.interactionTrends?.views || []}
         categories={data?.userAnalytics?.interactionTrends?.labels || []}
-        color="#8b5cf6"
+        color="#152847"
         percentageChange={data?.interactionAnalytics?.changes?.views}
       />
       <DonutChart
@@ -52,7 +52,11 @@ const Charts = ({ data, mostSoldProducts, interactionByType }) => {
         data={interactionByType.data}
         labels={interactionByType.labels}
       />
-      <RevenueOverTimeChart startDate="2023-01-01" endDate="2023-12-31" />
+      <RevenueOverTimeChart
+        labels={data?.revenueAnalytics?.monthlyTrends?.labels || []}
+        revenue={data?.revenueAnalytics?.monthlyTrends?.revenue || []}
+        totalRevenue={data?.revenueAnalytics?.totalRevenue || 0}
+      />
     </div>
   );
 };

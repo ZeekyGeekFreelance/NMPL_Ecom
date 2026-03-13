@@ -7,7 +7,7 @@ const Button: React.FC<ButtonProps> = ({ children, className, ...props }) => {
   return (
     <button
       type={props.type || "button"}
-      className={`active:scale-95 px-4 py-2 rounded ${className}`}
+      className={`btn-base active:scale-[0.99] ${className || ""}`}
       {...props}
     >
       {children}

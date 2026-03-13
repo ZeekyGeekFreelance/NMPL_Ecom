@@ -1,36 +1,21 @@
 "use client";
 import { useState } from "react";
 import { useGetAllChatsQuery } from "@/app/store/apis/ChatApi";
-import { useAdminSocketEvents } from "../../(chat)/useAdminSocketEvents";
 import ChatContainer from "../../(chat)";
-import useToast from "@/app/hooks/ui/useToast";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { toPrefixedReference } from "@/app/lib/utils/accountReference";
 
 const AdminChatsPage = () => {
-  const { showToast } = useToast();
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const { data: chats, isLoading, refetch } = useGetAllChatsQuery("OPEN");
+  const { data: chats, isLoading } = useGetAllChatsQuery("OPEN");
   console.log("chats => ", chats);
-
-  // Listen for admin socket events
-  useAdminSocketEvents(
-    () => {
-      showToast("New chat created", "success");
-      console.log("chat created");
-      refetch();
-    },
-    () => {
-      showToast("Chat status updated", "success");
-      console.log("chat status updated");
-      refetch();
-    }
-  );
+  const formatChatReference = (id: string) => toPrefixedReference("CHT", id);
 
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar with chat list */}
       <div className="w-64 bg-white border-r border-gray-200 p-4">
-        <h2 className="font-semibold text-lg mb-4">Open Support Chats</h2>
+        <h2 className="text-sm sm:text-base font-semibold mb-4">Open Support Chats</h2>
 
         {isLoading ? (
           <div>Loading open chats...</div>
@@ -49,7 +34,7 @@ const AdminChatsPage = () => {
                 }`}
               >
                 <div className="font-medium">
-                  Chat #{chat.id.substring(0, 8)}
+                  Chat #{formatChatReference(chat.id)}
                 </div>
                 <div className="text-sm text-gray-500 flex items-center">
                   <span

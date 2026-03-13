@@ -4,30 +4,30 @@
 export const chatTheme = {
   colors: {
     primary: {
-      light: "#60a5fa", // blue-400
-      default: "#2563eb", // blue-600
-      dark: "#1d4ed8", // blue-700
+      light: "#b3c0d9", // --color-primary-muted
+      default: "#1d3461", // --color-primary
+      dark: "#152847", // --color-primary-hover
     },
     secondary: {
-      light: "#e5e7eb", // gray-200
-      default: "#9ca3af", // gray-400
-      dark: "#6b7280", // gray-500
+      light: "#dde2e9", // --color-border
+      default: "#b0bbc8", // --color-border-dark
+      dark: "#6b7280", // --color-text-subtle
     },
     background: {
-      light: "#f9fafb", // gray-50
-      default: "#f3f4f6", // gray-100
-      dark: "#e5e7eb", // gray-200
+      light: "#ffffff", // --color-surface
+      default: "#f9fafb", // --color-surface-alt
+      dark: "#f4f5f7", // --color-background
     },
     text: {
-      light: "#9ca3af", // gray-400
-      default: "#4b5563", // gray-600
-      dark: "#1f2937", // gray-800
+      light: "#6b7280", // --color-text-subtle
+      default: "#4b5563", // --color-text-muted
+      dark: "#1c2533", // --color-text
     },
     success: {
-      default: "#10b981", // green-500
+      default: "#15803d", // --color-success
     },
     error: {
-      default: "#ef4444", // red-500
+      default: "#b91c1c", // --color-error
     },
   },
   spacing: {

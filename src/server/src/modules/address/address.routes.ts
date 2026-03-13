@@ -1,6 +1,8 @@
 import express from "express";
 import protect from "@/shared/middlewares/protect";
 import { makeAddressController } from "./address.factory";
+import { validateDto } from "@/shared/middlewares/validateDto";
+import { CreateAddressDto, UpdateAddressDto } from "./address.dto";
 
 const router = express.Router();
 const addressController = makeAddressController();
@@ -20,6 +22,12 @@ const addressController = makeAddressController();
  *         description: Unauthorized. Token is invalid or missing.
  */
 router.get("/", protect, addressController.getUserAddresses);
+router.post(
+  "/",
+  protect,
+  validateDto(CreateAddressDto),
+  addressController.createAddress
+);
 
 /**
  * @swagger
@@ -44,7 +52,14 @@ router.get("/", protect, addressController.getUserAddresses);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/:id", protect, addressController.getAddressDetails);
+router.get("/:addressId", protect, addressController.getAddressDetails);
+router.patch(
+  "/:addressId",
+  protect,
+  validateDto(UpdateAddressDto),
+  addressController.updateAddress
+);
+router.patch("/:addressId/default", protect, addressController.setDefaultAddress);
 
 /**
  * @swagger
@@ -69,6 +84,6 @@ router.get("/:id", protect, addressController.getAddressDetails);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.delete("/:id", protect, addressController.deleteAddress);
+router.delete("/:addressId", protect, addressController.deleteAddress);
 
 export default router;

@@ -15,7 +15,7 @@ const BarChartComponent: React.FC<Props> = ({
   title,
   data,
   categories,
-  color = "#6366f1",
+  color = "#1d3461",
   percentageChange,
 }) => {
   const options = {
@@ -32,12 +32,12 @@ const BarChartComponent: React.FC<Props> = ({
     xaxis: {
       categories,
       labels: {
-        style: { colors: "#9ca3af" },
+        style: { colors: "#6b7280" },
       },
     },
     yaxis: {
       labels: {
-        style: { colors: "#9ca3af" },
+        style: { colors: "#6b7280" },
       },
     },
     tooltip: {
@@ -45,7 +45,7 @@ const BarChartComponent: React.FC<Props> = ({
     },
     grid: {
       show: true,
-      borderColor: "#e5e7eb",
+      borderColor: "#dde2e9",
     },
   };
 
@@ -59,11 +59,11 @@ const BarChartComponent: React.FC<Props> = ({
   return (
     <div className="p-4 rounded-2xl shadow-sm w-full bg-white">
       <div className="flex justify-between items-center mb-2">
-        <h2 className="text-black text-lg font-semibold">{title}</h2>
+        <h2 className="text-[var(--color-text)] text-lg font-semibold">{title}</h2>
         {percentageChange !== undefined && (
           <span
             className={`text-sm font-medium ${
-              percentageChange >= 0 ? "text-green-400" : "text-red-400"
+              percentageChange >= 0 ? "text-success" : "text-[var(--color-error)]"
             }`}
           >
             {percentageChange >= 0 ? <TrendingUp /> : <TrendingDown />}{" "}

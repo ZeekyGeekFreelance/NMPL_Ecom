@@ -1,14 +1,8 @@
 import nodemailer from "nodemailer";
+import logger from "@/infra/winston/logger";
 import { getPlatformName } from "./branding";
+import { config } from "@/config";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
-const debugLog = (...args: unknown[]) => {
-  if (isDevelopment) {
-    console.log(...args);
-  }
-};
-
-// Define the type for email options
 interface EmailAttachment {
   filename: string;
   content: Buffer | string;
@@ -25,16 +19,6 @@ interface EmailOptions {
   attachments?: EmailAttachment[];
 }
 
-// Define the type for transporter configuration
-interface TransporterConfig {
-  service: string;
-  auth: {
-    user: string;
-    pass: string;
-  };
-}
-
-// Define the type for mail options
 interface MailOptions {
   from: string;
   to: string;
@@ -46,6 +30,48 @@ interface MailOptions {
   attachments?: EmailAttachment[];
 }
 
+const resolveCredentials = (): { user: string; pass: string } => {
+  const user = config.email.smtpUser;
+  const pass = config.email.smtpPass;
+  return { user, pass };
+};
+
+// Singleton transporter — reuses the same SMTP connection pool across all emails.
+// Re-created only if credentials change between calls (unlikely in practice).
+let _transporter: nodemailer.Transporter | null = null;
+let _transporterCacheKey = "";
+
+const getTransporter = (user: string, pass: string): nodemailer.Transporter => {
+  const cacheKey = `${user}:${pass}:${config.email.smtpHost}:${config.email.smtpPort}`;
+  if (_transporter && _transporterCacheKey === cacheKey) {
+    return _transporter;
+  }
+
+  const smtpHost = config.email.smtpHost;
+  let transporter: nodemailer.Transporter;
+
+  if (smtpHost) {
+    transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: config.email.smtpPort,
+      secure: config.email.smtpSecure,
+      auth: { user, pass },
+      pool: true,          // keep-alive connection pool
+      maxConnections: 5,
+      maxMessages: 100,
+    });
+  } else {
+    transporter = nodemailer.createTransport({
+      service: config.email.emailService,
+      auth: { user, pass },
+    });
+  }
+
+  _transporter = transporter;
+  _transporterCacheKey = cacheKey;
+  return transporter;
+};
+
 const sendEmail = async ({
   to,
   subject,
@@ -56,25 +82,22 @@ const sendEmail = async ({
   attachments,
 }: EmailOptions): Promise<boolean> => {
   try {
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
+    const { user: emailUser, pass: emailPass } = resolveCredentials();
     const platformName = getPlatformName();
 
     if (!emailUser || !emailPass) {
-      console.error("Email not sent: EMAIL_USER/EMAIL_PASS are not configured.");
+      logger.error(
+        "[sendEmail] Email not sent: SMTP_USER/SMTP_PASS or EMAIL_USER/EMAIL_PASS are not configured."
+      );
       return false;
     }
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: emailUser,
-        pass: emailPass,
-      },
-    } as TransporterConfig);
+    const transporter = getTransporter(emailUser, emailPass);
+    const fromAddress = config.email.from;
+    const fromName = config.email.fromName || `${platformName} Support`;
 
     const mailOptions: MailOptions = {
-      from: `"${platformName} Support" <${emailUser}>`,
+      from: `"${fromName}" <${fromAddress}>`,
       to,
       subject,
       text,
@@ -84,11 +107,11 @@ const sendEmail = async ({
       attachments,
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    debugLog("Email sent: ", info.response);
+    await transporter.sendMail(mailOptions);
     return true;
   } catch (error) {
-    console.error("Error sending email:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`[sendEmail] Error sending email: ${message}`);
     return false;
   }
 };

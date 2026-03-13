@@ -23,17 +23,24 @@ const abandonedCartAnalytics = {
         throw new Error("Invalid or missing date range. Please provide valid startDate and endDate or timePeriod.");
       }
 
-      // Fetch cart events
+      // Fetch cart events for the current period up to now.
+      // NOTE: previousEndDate is the boundary between the previous and current
+      // periods — using it as the upper bound would collapse the window to a
+      // single instant.  We always query through the current moment.
       const cartEvents = await prisma.cartEvent.findMany({
         where: {
           timestamp: {
             gte: currentStartDate,
-            lte: previousEndDate,
+            lte: new Date(),
           },
         },
         include: {
           cart: {
-            include: { cartItems: true },
+            include: {
+              cartItems: {
+                include: { variant: true },
+              },
+            },
           },
           user: true,
         },

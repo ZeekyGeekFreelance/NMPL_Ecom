@@ -1,0 +1,61 @@
+# ── Stage 1: dependencies ─────────────────────────────────────────────────────
+FROM node:22-alpine AS deps
+WORKDIR /app
+
+COPY package*.json ./
+# ci = reproducible install, respects package-lock.json exactly
+RUN npm ci
+
+# ── Stage 2: build ────────────────────────────────────────────────────────────
+FROM node:22-alpine AS builder
+WORKDIR /app
+
+# Copy deps from stage 1 (avoids reinstalling)
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Generate Prisma client before tsc so the generated types are available
+RUN npx prisma generate
+
+# Compile TypeScript → dist/
+# We invoke tsc directly and run only the structural pre/post checks.
+# We deliberately SKIP env:check here because Railway injects env vars at
+# container runtime, not at image build time. Running env:check at build time
+# would always fail because DATABASE_URL, SESSION_SECRET, etc. are all absent
+# during the Docker build phase. The config system performs the same validation
+# at process startup, which is the correct and reliable place for it.
+ENV NODE_ENV=production
+RUN npm run repo:sanity && \
+    node ./scripts/assert-determinism.js pre && \
+    node ./scripts/clean-build.js && \
+    npx tsc && \
+    node ./scripts/assert-determinism.js post
+
+# ── Stage 3: production runtime ───────────────────────────────────────────────
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Only copy what the runtime needs — keeps the image lean
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/prisma ./prisma
+
+# scripts/load-env.js is required at runtime by the -r flag in the start command.
+# In production it is a near-no-op (env is already injected by the platform)
+# but it must exist in the image.
+COPY --from=builder /app/scripts ./scripts
+
+EXPOSE 5000
+
+# Run migrations then start the compiled server.
+# Railway injects DATABASE_URL and DIRECT_URL from environment variables,
+# so no .env file patching is needed here.
+#
+# prisma migrate deploy: safe to re-run, skips already-applied migrations.
+# node -r: loads load-env.js before the app module graph is evaluated.
+CMD ["sh", "-c", \
+  "npx prisma migrate deploy && \
+   node -r ./scripts/load-env.js -r module-alias/register dist/server.js"]

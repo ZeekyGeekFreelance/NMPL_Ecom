@@ -2,11 +2,13 @@
 import React, { useEffect, useState } from "react";
 import { z } from "zod";
 import { motion } from "framer-motion";
+import { Eye, EyeClosed } from "lucide-react";
 
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters long")
   .regex(/[A-Z]/, "Password must include at least one uppercase letter")
+  .regex(/[a-z]/, "Password must include at least one lowercase letter")
   .regex(/[0-9]/, "Password must include at least one number")
   .regex(
     /[!@#$%^&*(),.?":{}|<>]/,
@@ -29,11 +31,13 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
   const passwordValue = watch(name, "");
 
   const [strength, setStrength] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     let score = 0;
     if (passwordValue.length >= 8) score++;
     if (/[A-Z]/.test(passwordValue)) score++;
+    if (/[a-z]/.test(passwordValue)) score++;
     if (/[0-9]/.test(passwordValue)) score++;
     if (/[!@#$%^&*(),.?":{}|<>]/.test(passwordValue)) score++;
     setStrength(score);
@@ -41,19 +45,32 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
 
   return (
     <div>
-      <input
-        type="password"
-        placeholder="Enter your password"
-        {...register(name, {
-          required: "Password is required",
-          validate: (value) => {
-            const result = passwordSchema.safeParse(value);
-            return result.success || result.error.errors[0].message;
-          },
-        })}
-        className="p-[17px] pl-3 pr-10 w-full border-b-2 border-gray-300 text-gray-800 placeholder:text-gray-600 
-              focus:outline-none focus:border-gray-700"
-      />
+      <div className="relative">
+        <input
+          type={showPassword ? "text" : "password"}
+          placeholder="Enter your password"
+          {...register(name, {
+            required: "Password is required",
+            validate: (value) => {
+              const result = passwordSchema.safeParse(value);
+              return result.success || result.error.errors[0].message;
+            },
+          })}
+          className={`p-[17px] pl-3 pr-10 w-full border-b-2 text-gray-800 placeholder:text-gray-600 focus:outline-none ${
+            errors[name]
+              ? "border-red-500 bg-red-50/40 focus:border-red-500"
+              : "border-gray-300 focus:border-gray-700"
+          }`}
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((previous) => !previous)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-800"
+          aria-label={showPassword ? "Hide password" : "Show password"}
+        >
+          {showPassword ? <Eye size={18} /> : <EyeClosed size={18} />}
+        </button>
+      </div>
       {errors[name] && (
         <p className="text-red-500 text-sm mt-1">
           {errors[name]?.message as string}
@@ -62,7 +79,7 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
 
       <div className="mt-2">
         <div className="flex items-center justify-center gap-[1px] py-2">
-          {[...Array(4)].map((_, index) => (
+          {[...Array(5)].map((_, index) => (
             <motion.div
               key={index}
               className="h-[6px] flex-1 rounded w-[100px]"
@@ -83,8 +100,10 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
             : strength === 2
             ? "Weak"
             : strength === 3
-            ? "Good"
+            ? "Fair"
             : strength === 4
+            ? "Good"
+            : strength === 5
             ? "Strong"
             : "Password strength"}
         </p>

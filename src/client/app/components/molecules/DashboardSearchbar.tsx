@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import React, { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { Search, Loader2 } from "lucide-react";
 import { useLazyQuery } from "@apollo/client";
 import { debounce } from "lodash";
@@ -14,7 +14,7 @@ interface DashboardSearchBarProps {
 }
 
 const DashboardSearchBar: React.FC<DashboardSearchBarProps> = ({
-  placeholder = "Search Dashboard",
+  placeholder = "Search dashboard records",
   className = "",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -25,10 +25,15 @@ const DashboardSearchBar: React.FC<DashboardSearchBarProps> = ({
   const [searchDashboard, { data, loading, error }] =
     useLazyQuery(SEARCH_DASHBOARD);
 
+  const normalizeQuery = (value: string) =>
+    value
+      .trim()
+      .replace(/\s+/g, " ");
+
   // Debounced search function
-  const debouncedSearch = useCallback(
-    debounce((searchQuery: string) => {
-      if (searchQuery) {
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((searchQuery: string) => {
         setIsLoading(true);
         searchDashboard({
           variables: {
@@ -37,33 +42,22 @@ const DashboardSearchBar: React.FC<DashboardSearchBarProps> = ({
             },
           },
         }).finally(() => setIsLoading(false));
-      }
-    }, 300),
-    [searchDashboard] // Add searchDashboard as a dependency
+      }, 300),
+    [searchDashboard]
   );
 
   // Trigger search when query changes
   useEffect(() => {
-    if (isOpen) {
-      debouncedSearch(query);
+    const normalized = normalizeQuery(query);
+
+    if (isOpen && normalized.length > 0) {
+      debouncedSearch(normalized);
+    } else {
+      setIsLoading(false);
     }
+
     return () => debouncedSearch.cancel();
   }, [query, isOpen, debouncedSearch]);
-
-  // Ctrl + K shortcut
-  // useEffect(() => {
-  //   const handleKeyDown = (e: KeyboardEvent) => {
-  //     if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-  //       e.preventDefault();
-  //       setIsOpen((prev) => !prev);
-  //       if (!isOpen) setQuery("");
-  //     } else if (e.key === "Escape" && isOpen) {
-  //       setIsOpen(false);
-  //     }
-  //   };
-  //   window.addEventListener("keydown", handleKeyDown);
-  //   return () => window.removeEventListener("keydown", handleKeyDown);
-  // }, [isOpen]);
 
   // Clear query when closing
   useEffect(() => {
@@ -78,15 +72,12 @@ const DashboardSearchBar: React.FC<DashboardSearchBarProps> = ({
         onClick={() => setIsOpen(true)}
         className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-gray-200
            hover:border-gray-300 transition-all ${className}`}
-        aria-label="Open dashboard search (Ctrl + K)"
+        aria-label="Open dashboard search"
       >
         <Search size={18} className="text-gray-400 group-hover:text-gray-600" />
         <span className="text-sm text-gray-500 hidden sm:inline">
           {placeholder}
         </span>
-        <kbd className="hidden sm:flex items-center text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 ml-2">
-          Ctrl K
-        </kbd>
       </button>
 
       {isOpen && (

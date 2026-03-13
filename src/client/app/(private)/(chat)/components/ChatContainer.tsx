@@ -5,20 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   useGetChatQuery,
   useSendMessageMutation,
-  useUpdateChatStatusMutation,
 } from "@/app/store/apis/ChatApi";
-import { useSocketConnection } from "../useSocketConnection";
 import { useChatMessages } from "../useChatMessages";
 import { useGetMeQuery } from "@/app/store/apis/UserApi";
-import { useWebRTCCall } from "../useWebRTCCall";
 
 // Components
 import ChatLayout from "./ChatLayout";
 import MessageList from "./MessageList";
 import ChatStatus from "./ChatStatus";
 import ChatInput from "./ChatInput";
-import CallConnectingScreen from "../CallConnectingScreen";
-import CallInProgressScreen from "../CallInProgressScreen";
 import ChatSkeletonLoader from "./ChatSkeletonLoader";
 import ErrorDisplay from "./ErrorDisplay";
 
@@ -28,28 +23,15 @@ interface ChatContainerProps {
 
 const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
   const { data: userData } = useGetMeQuery(undefined);
-  const user = userData?.user;
+  const user = userData?.user ?? null;
 
   const { data, isLoading, error } = useGetChatQuery(chatId);
   const chat = data?.chat;
 
   const [sendMessage] = useSendMessageMutation();
-  const [updateChatStatus] = useUpdateChatStatusMutation();
-
-  const socket = useSocketConnection(chatId);
 
   const { messages, message, setMessage, handleSendMessage, isTyping } =
-    useChatMessages(chatId, user, chat, socket, sendMessage);
-
-  const { callStatus, endCall } = useWebRTCCall({ chatId, socket });
-
-  const handleResolveChat = async () => {
-    try {
-      await updateChatStatus({ chatId, status: "RESOLVED" }).unwrap();
-    } catch (err) {
-      console.error("Failed to resolve chat:", err);
-    }
-  };
+    useChatMessages(chatId, chat, sendMessage);
 
   // Loading state
   if (isLoading) {
@@ -60,10 +42,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
   if (error) {
     return <ErrorDisplay error={error} />;
   }
-
-  const canResolve =
-    (user?.role === "ADMIN" || user?.role === "SUPERADMIN") &&
-    chat?.status === "OPEN";
 
   return (
     <ChatLayout chatId={chatId}>
@@ -90,31 +68,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
           )}
         </AnimatePresence>
 
-        {/* Call Screens */}
-        <AnimatePresence>
-          {callStatus === "calling" && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-white z-50"
-            >
-              <CallConnectingScreen chat={chat} onCancel={endCall} />
-            </motion.div>
-          )}
-
-          {callStatus === "in-call" && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-white z-50"
-            >
-              <CallInProgressScreen onEndCall={endCall} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Chat Input */}
         <AnimatePresence>
           {chat?.status === "OPEN" ? (
@@ -127,8 +80,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ chatId }) => {
                 message={message}
                 setMessage={setMessage}
                 onSendMessage={handleSendMessage}
-                disabled={callStatus !== "idle"}
-                isTyping={isTyping}
               />
             </motion.div>
           ) : (

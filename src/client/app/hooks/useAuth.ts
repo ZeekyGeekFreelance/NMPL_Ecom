@@ -1,11 +1,14 @@
+"use client";
+
 import { useAppSelector } from "./state/useRedux";
 
 export function useAuth() {
-  const user = useAppSelector((state) => state.auth.user);
+  const { user, isAuthChecking } = useAppSelector((state) => state.auth);
 
   return {
     user,
     isAuthenticated: !!user,
-    isLoading: user === undefined, // hydration in progress
+    isLoading:
+      typeof isAuthChecking === "boolean" ? isAuthChecking : user === undefined,
   };
 }

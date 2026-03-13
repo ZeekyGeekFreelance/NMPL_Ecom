@@ -3,59 +3,46 @@ import asyncHandler from "@/shared/utils/asyncHandler";
 import sendResponse from "@/shared/utils/sendResponse";
 import { CartService } from "./cart.service";
 import { makeLogsService } from "../logs/logs.factory";
+import AppError from "@/shared/errors/AppError";
 
 export class CartController {
   private logsService = makeLogsService();
+
   constructor(private cartService: CartService) {}
 
-  getCart = asyncHandler(async (req: Request, res: Response) => {
-    console.log("🔍 [CART CONTROLLER] getCart called");
-    console.log("🔍 [CART CONTROLLER] Request user:", req.user);
-    console.log("🔍 [CART CONTROLLER] Request session:", req.session);
-    console.log("🔍 [CART CONTROLLER] Session ID:", req.session?.id);
+  private async logAction(message: string, req: Request, start: number) {
+    await this.logsService.info(message, {
+      userId: req.user?.id,
+      sessionId: req.session.id,
+      timePeriod: Date.now() - start,
+    });
+  }
 
+  private getRequiredUserId(req: Request) {
     const userId = req.user?.id;
-    const sessionId = req.session.id;
+    if (!userId) {
+      throw new AppError(401, "Authentication required for cart access");
+    }
 
-    console.log("🔍 [CART CONTROLLER] Extracted userId:", userId);
-    console.log("🔍 [CART CONTROLLER] Extracted sessionId:", sessionId);
+    return userId;
+  }
 
-    const cart = await this.cartService.getOrCreateCart(userId, sessionId);
-
-    console.log("🔍 [CART CONTROLLER] Cart returned from service:", cart);
-    console.log("🔍 [CART CONTROLLER] Cart ID:", cart?.id);
-    console.log(
-      "🔍 [CART CONTROLLER] Cart items count:",
-      cart?.cartItems?.length
-    );
-    console.log("🔍 [CART CONTROLLER] Cart items:", cart?.cartItems);
+  getCart = asyncHandler(async (req: Request, res: Response) => {
+    const startedAt = Date.now();
+    const userId = this.getRequiredUserId(req);
+    const cart = await this.cartService.getOrCreateCart(userId);
 
     sendResponse(res, 200, {
       data: { cart },
       message: "Cart fetched successfully",
     });
 
-    this.logsService.info("Cart fetched", {
-      userId: req.user?.id,
-      sessionId: req.session.id,
-      timePeriod: Date.now() - Date.now(),
-    });
+    await this.logAction("Cart fetched", req, startedAt);
   });
 
   getCartCount = asyncHandler(async (req: Request, res: Response) => {
-    console.log("🔍 [CART CONTROLLER] getCartCount called");
-    console.log("🔍 [CART CONTROLLER] Request user:", req.user);
-    console.log("🔍 [CART CONTROLLER] Request session:", req.session);
-
-    const userId = req.user?.id;
-    const sessionId = req.session.id;
-
-    console.log("🔍 [CART CONTROLLER] Extracted userId:", userId);
-    console.log("🔍 [CART CONTROLLER] Extracted sessionId:", sessionId);
-
-    const cartCount = await this.cartService.getCartCount(userId, sessionId);
-
-    console.log("🔍 [CART CONTROLLER] Cart count returned:", cartCount);
+    const userId = this.getRequiredUserId(req);
+    const cartCount = await this.cartService.getCartCount(userId);
 
     sendResponse(res, 200, {
       data: { cartCount },
@@ -64,106 +51,62 @@ export class CartController {
   });
 
   addToCart = asyncHandler(async (req: Request, res: Response) => {
-    console.log("🔍 [CART CONTROLLER] addToCart called");
-    console.log("🔍 [CART CONTROLLER] Request body:", req.body);
-    console.log("🔍 [CART CONTROLLER] Request user:", req.user);
-    console.log("🔍 [CART CONTROLLER] Request session:", req.session);
-
-    const userId = req.user?.id;
-    const sessionId = req.session.id;
+    const startedAt = Date.now();
+    const userId = this.getRequiredUserId(req);
     const { variantId, quantity } = req.body;
 
-    console.log("🔍 [CART CONTROLLER] Extracted userId:", userId);
-    console.log("🔍 [CART CONTROLLER] Extracted sessionId:", sessionId);
-    console.log("🔍 [CART CONTROLLER] Extracted variantId:", variantId);
-    console.log("🔍 [CART CONTROLLER] Extracted quantity:", quantity);
-
-    const item = await this.cartService.addToCart(
-      variantId,
-      quantity,
-      userId,
-      sessionId
-    );
-
-    console.log("🔍 [CART CONTROLLER] Item returned from service:", item);
-    console.log("🔍 [CART CONTROLLER] Item ID:", item?.id);
-    console.log("🔍 [CART CONTROLLER] Item cartId:", item?.cartId);
+    const item = await this.cartService.addToCart(variantId, quantity, userId);
 
     sendResponse(res, 200, {
       data: { item },
       message: "Item added to cart successfully",
     });
 
-    this.logsService.info("Item added to cart", {
-      userId: req.user?.id,
-      sessionId: req.session.id,
-      timePeriod: Date.now() - Date.now(),
-    });
+    await this.logAction("Item added to cart", req, startedAt);
   });
 
   updateCartItem = asyncHandler(async (req: Request, res: Response) => {
-    console.log("🔍 [CART CONTROLLER] updateCartItem called");
-    console.log("🔍 [CART CONTROLLER] Request params:", req.params);
-    console.log("🔍 [CART CONTROLLER] Request body:", req.body);
-
+    const startedAt = Date.now();
     const { itemId } = req.params;
     const { quantity } = req.body;
-
-    console.log("🔍 [CART CONTROLLER] Extracted itemId:", itemId);
-    console.log("🔍 [CART CONTROLLER] Extracted quantity:", quantity);
+    const userId = this.getRequiredUserId(req);
 
     const updatedItem = await this.cartService.updateCartItemQuantity(
       itemId,
-      quantity
+      quantity,
+      userId
     );
-
-    console.log("🔍 [CART CONTROLLER] Updated item returned:", updatedItem);
 
     sendResponse(res, 200, {
       data: { item: updatedItem },
       message: "Item quantity updated successfully",
     });
 
-    this.logsService.info("Item quantity updated", {
-      userId: req.user?.id,
-      sessionId: req.session.id,
-      timePeriod: Date.now() - Date.now(),
-    });
+    await this.logAction("Item quantity updated", req, startedAt);
   });
 
   removeFromCart = asyncHandler(async (req: Request, res: Response) => {
-    console.log("🔍 [CART CONTROLLER] removeFromCart called");
-    console.log("🔍 [CART CONTROLLER] Request params:", req.params);
-
+    const startedAt = Date.now();
     const { itemId } = req.params;
-    console.log("🔍 [CART CONTROLLER] Extracted itemId:", itemId);
-
-    const result = await this.cartService.removeFromCart(itemId);
-
-    console.log("🔍 [CART CONTROLLER] Remove result:", result);
+    const userId = this.getRequiredUserId(req);
+    await this.cartService.removeFromCart(itemId, userId);
 
     sendResponse(res, 200, {
       message: "Item removed from cart successfully",
     });
 
-    this.logsService.info("Item removed from cart", {
-      userId: req.user?.id,
-      sessionId: req.session.id,
-      timePeriod: Date.now() - Date.now(),
-    });
+    await this.logAction("Item removed from cart", req, startedAt);
   });
 
   mergeCarts = asyncHandler(async (req: Request, res: Response) => {
+    const startedAt = Date.now();
     const sessionId = req.session.id;
     const userId = req.user?.id;
+
     await this.cartService.mergeCartsOnLogin(sessionId, userId);
 
     sendResponse(res, 200, { message: "Carts merged successfully" });
 
-    this.logsService.info("Carts merged", {
-      userId: req.user?.id,
-      sessionId: req.session.id,
-      timePeriod: Date.now() - Date.now(),
-    });
+    await this.logAction("Carts merged", req, startedAt);
   });
 }

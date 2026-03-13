@@ -23,6 +23,10 @@ export class CategoryRepository {
     });
   }
 
+  async countCategories(where?: Record<string, any>) {
+    return prisma.category.count({ where });
+  }
+
   async findCategoryById(id: string, includeProducts: boolean = false) {
     return prisma.category.findUnique({
       where: { id },

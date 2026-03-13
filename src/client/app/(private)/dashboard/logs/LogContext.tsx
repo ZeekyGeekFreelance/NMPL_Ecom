@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
+import { toAccountReference } from "@/app/lib/utils/accountReference";
 
 const LogContext = ({ context, level, logId }) => {
   const router = useRouter();
@@ -22,7 +23,7 @@ const LogContext = ({ context, level, logId }) => {
           <div className="text-sm">
             <span className="font-medium text-gray-600">User:</span>{" "}
             <span className="font-mono text-xs">
-              {context.userId.substring(0, 8)}...
+              {toAccountReference(context.userId)}
             </span>
           </div>
         )}

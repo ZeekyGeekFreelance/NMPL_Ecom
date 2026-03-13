@@ -13,9 +13,38 @@ export class ReportsController {
 
   constructor(private reportsService: ReportsService) {}
 
+  private resolveFileExtension(extension: unknown): string {
+    if (typeof extension === "string" && extension.trim()) {
+      return extension.trim();
+    }
+
+    if (Array.isArray(extension)) {
+      const match = extension.find(
+        (item) => typeof item === "string" && item.trim()
+      ) as string | undefined;
+
+      if (match) {
+        return match.trim();
+      }
+    }
+
+    return "csv";
+  }
+
+  private buildExportFilename(
+    prefix: string,
+    extension: unknown
+  ): string {
+    const normalizedExtension = this.resolveFileExtension(extension);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    return `${prefix}-${timestamp}.${normalizedExtension}`;
+  }
+
   generateReport = asyncHandler(async (req: Request, res: Response) => {
     const { type, format, timePeriod, year, startDate, endDate } = req.query;
     const user = req.user; // From auth middleware
+    const now = new Date();
+    const currentYear = now.getFullYear();
 
     // Validate format
     const validFormats = ["csv", "pdf", "xlsx"];
@@ -51,14 +80,27 @@ export class ReportsController {
     let selectedYear: number | undefined;
     if (year) {
       selectedYear = parseInt(year as string, 10);
-      if (isNaN(selectedYear)) {
+      if (
+        isNaN(selectedYear) ||
+        selectedYear < 1900 ||
+        selectedYear > currentYear
+      ) {
         throw new AppError(400, "Invalid year format.");
       }
+    } else if (timePeriod === "allTime" && !startDate && !endDate) {
+      selectedYear = currentYear;
     }
 
     // Validate custom date range
     let customStartDate: Date | undefined;
     let customEndDate: Date | undefined;
+    if (timePeriod === "custom" && (!startDate || !endDate)) {
+      throw new AppError(
+        400,
+        "Both startDate and endDate must be provided for a custom range."
+      );
+    }
+
     if (startDate && endDate) {
       customStartDate = new Date(startDate as string);
       customEndDate = new Date(endDate as string);
@@ -72,6 +114,10 @@ export class ReportsController {
 
       if (customStartDate > customEndDate) {
         throw new AppError(400, "startDate must be before endDate.");
+      }
+
+      if (customStartDate > now || customEndDate > now) {
+        throw new AppError(400, "Future dates are not allowed.");
       }
     } else if (startDate || endDate) {
       throw new AppError(
@@ -93,11 +139,11 @@ export class ReportsController {
     switch (type) {
       case "sales":
         data = await this.reportsService.generateSalesReport(query);
-        filename = `sales-report-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("sales-report", format);
         break;
       case "user_retention":
         data = await this.reportsService.generateUserRetentionReport(query);
-        filename = `user-retention-report-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("user-retention-report", format);
         break;
       case "all":
         data = {
@@ -106,7 +152,7 @@ export class ReportsController {
             query
           ),
         };
-        filename = `combined-report-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("combined-report", format);
         break;
       default:
         throw new AppError(400, "Invalid report type");
@@ -128,7 +174,7 @@ export class ReportsController {
     switch (format) {
       case "csv":
         result = generateCSV(data);
-        contentType = "text/csv";
+        contentType = "text/csv; charset=utf-8";
         break;
       case "pdf":
         result = await generatePDF(data);

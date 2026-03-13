@@ -1,9 +1,15 @@
 import { Context } from "../resolver";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const yearRange = {
   Query: {
     yearRange: async (_: any, __: any, { prisma }: Context) => {
       const orders = await prisma.order.aggregate({
+        where: {
+          status: {
+            in: [...CONFIRMED_ORDER_STATUS_VALUES],
+          },
+        },
         _min: { orderDate: true },
         _max: { orderDate: true },
       });

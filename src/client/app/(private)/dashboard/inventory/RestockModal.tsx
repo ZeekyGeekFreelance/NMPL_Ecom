@@ -1,7 +1,8 @@
 "use client";
 import { useForm, Controller } from "react-hook-form";
-import { X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
+import Modal from "@/app/components/organisms/Modal";
 
 interface RestockFormData {
   quantity: number;
@@ -11,7 +12,7 @@ interface RestockFormData {
 interface RestockModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (variantId: string, data: RestockFormData) => void;
+  onSubmit: (variantId: string, data: RestockFormData) => void | Promise<void>;
   variant: { id: string; sku: string } | null;
   isLoading?: boolean;
 }
@@ -23,74 +24,99 @@ const RestockModal: React.FC<RestockModalProps> = ({
   variant,
   isLoading,
 }) => {
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [pendingRestockData, setPendingRestockData] =
+    useState<RestockFormData | null>(null);
   const form = useForm<RestockFormData>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       quantity: 0,
       notes: "",
     },
   });
 
-  const { control, handleSubmit, reset, formState: { errors } } = form;
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { errors, isValid },
+  } = form;
+
+  const closeAll = () => {
+    if (isLoading) {
+      return;
+    }
+    setIsConfirmOpen(false);
+    setPendingRestockData(null);
+    onClose();
+    reset();
+  };
+
+  const handleRequestRestock = (data: RestockFormData) => {
+    setPendingRestockData(data);
+    setIsConfirmOpen(true);
+  };
+
+  const handleConfirmRestock = async () => {
+    if (!variant || !pendingRestockData) {
+      setIsConfirmOpen(false);
+      return;
+    }
+
+    await onSubmit(variant.id, pendingRestockData);
+    setIsConfirmOpen(false);
+    setPendingRestockData(null);
+  };
 
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          className="fixed inset-0 bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.1 }}
-        >
-          <motion.div
-            className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md max-h-[80%] overflow-auto border border-gray-100"
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          >
-            <div className="flex justify-between items-center mb-6 border-b border-gray-200 pb-4">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent">
-                Restock Variant: {variant?.sku}
-              </h2>
-              <button
-                onClick={() => {
-                  onClose();
-                  reset();
-                }}
-                className="text-gray-400 hover:text-gray-700 transition-colors duration-200 rounded-full p-1 hover:bg-gray-100"
-              >
-                <X size={24} />
-              </button>
-            </div>
+    <>
+      <Modal
+        open={isOpen}
+        onClose={closeAll}
+        contentClassName="max-w-2xl overflow-hidden p-0"
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
+            <h2 className="pr-12 text-lg font-semibold text-gray-900">
+              Restock Variant: {variant?.sku}
+            </h2>
+          </div>
 
-            <form onSubmit={handleSubmit((data) => onSubmit(variant!.id, data))} className="space-y-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <form
+              onSubmit={handleSubmit(handleRequestRestock)}
+              className="space-y-5"
+            >
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-sm font-medium text-gray-700">
                   Quantity
                 </label>
                 <Controller
                   name="quantity"
                   control={control}
-                  rules={{ required: "Quantity is required", min: { value: 1, message: "Quantity must be positive" } }}
+                  rules={{
+                    required: "Quantity is required",
+                    min: { value: 1, message: "Quantity must be positive" },
+                  }}
                   render={({ field }) => (
                     <input
                       {...field}
                       type="number"
-                      className="px-4 py-3 w-full border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                       placeholder="100"
                     />
                   )}
                 />
                 {errors.quantity && (
-                  <p className="text-red-500 text-xs mt-1">{errors.quantity.message}</p>
+                  <p className="mt-1 text-xs text-red-500">{errors.quantity.message}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-sm font-medium text-gray-700">
                   Notes (Optional)
                 </label>
                 <Controller
@@ -99,7 +125,7 @@ const RestockModal: React.FC<RestockModalProps> = ({
                   render={({ field }) => (
                     <textarea
                       {...field}
-                      className="px-4 py-3 w-full border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                       placeholder="Restock notes..."
                       rows={3}
                     />
@@ -110,21 +136,43 @@ const RestockModal: React.FC<RestockModalProps> = ({
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={isLoading}
-                  className={`px-6 py-3 text-white rounded-lg shadow-md font-medium flex items-center justify-center min-w-24 ${
-                    isLoading
-                      ? "bg-blue-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                  } transition-all duration-200`}
+                  disabled={isLoading || !isValid}
+                  className={`rounded-md px-5 py-2.5 font-medium text-white ${
+                    isLoading || !isValid
+                      ? "cursor-not-allowed bg-indigo-300"
+                      : "bg-indigo-600 hover:bg-indigo-700"
+                  }`}
                 >
                   {isLoading ? "Restocking..." : "Restock"}
                 </button>
               </div>
             </form>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        title="Confirm Inventory Restock"
+        message={
+          pendingRestockData
+            ? `You are adding ${pendingRestockData.quantity} unit(s) to ${variant?.sku}. This is a manual inventory correction and will be logged.`
+            : "Confirm inventory restock?"
+        }
+        type="warning"
+        confirmLabel="Confirm Restock"
+        onConfirm={handleConfirmRestock}
+        onCancel={() => {
+          if (isLoading) {
+            return;
+          }
+          setIsConfirmOpen(false);
+          setPendingRestockData(null);
+        }}
+        isConfirming={Boolean(isLoading)}
+        disableCancelWhileConfirming
+      />
+    </>
   );
 };
 

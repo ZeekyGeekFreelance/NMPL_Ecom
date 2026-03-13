@@ -12,9 +12,9 @@ export class CategoryController {
 
   getAllCategories = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const categories = await this.categoryService.getAllCategories(req.query);
+      const result = await this.categoryService.getAllCategories(req.query);
       sendResponse(res, 200, {
-        data: { categories },
+        data: result,
         message: "Categories fetched successfully",
       });
     }

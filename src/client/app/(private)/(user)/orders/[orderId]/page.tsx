@@ -1,6 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useEffect } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import MainLayout from "@/app/components/templates/MainLayout";
 import ShippingAddressCard from "../ShippingAddressCard";
 import OrderSummary from "../OrderSummary";
@@ -8,12 +9,33 @@ import OrderStatus from "../OrderStatus";
 import OrderItems from "../OrderItems";
 import { useGetOrderQuery } from "@/app/store/apis/OrderApi";
 import CustomLoader from "@/app/components/feedback/CustomLoader";
+import { withAuth } from "@/app/components/HOC/WithAuth";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const OrderTrackingPage = () => {
   const { orderId } = useParams();
-  const { data, isLoading, error } = useGetOrderQuery(orderId);
-  const order = data?.order;
-  console.log("order: ", order);
+  const searchParams = useSearchParams();
+  const normalizedOrderId = Array.isArray(orderId) ? orderId[0] : orderId;
+  const quotationActionParam = searchParams.get("quotationAction");
+  const initialQuotationAction =
+    quotationActionParam === "pay" || quotationActionParam === "reject"
+      ? quotationActionParam
+      : null;
+  const { data, isLoading, error } = useGetOrderQuery(normalizedOrderId, {
+    skip: !normalizedOrderId,
+  });
+  const order = data?.order || data?.data?.order;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#tracking") {
+      return;
+    }
+
+    const trackingSection = document.getElementById("tracking");
+    if (trackingSection) {
+      trackingSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [order?.id]);
 
   if (isLoading) {
     return (
@@ -22,8 +44,16 @@ const OrderTrackingPage = () => {
       </MainLayout>
     );
   }
-  if (error || !order)
-    return <div>Error loading order or order not found.</div>;
+
+  if (error || !order) {
+    return (
+      <MainLayout>
+        <div className="max-w-7xl mx-auto px-4 py-8 text-sm text-red-600">
+          {getApiErrorMessage(error, "Error loading order or order not found.")}
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -32,9 +62,14 @@ const OrderTrackingPage = () => {
           <OrderItems order={order} />
 
           <div className="col-span-2 space-y-6">
-            <OrderStatus order={order} />
+            <div id="tracking" className="scroll-mt-24">
+              <OrderStatus order={order} />
+            </div>
 
-            <OrderSummary order={order} />
+            <OrderSummary
+              order={order}
+              initialQuotationAction={initialQuotationAction}
+            />
           </div>
 
           <ShippingAddressCard order={order} />
@@ -44,4 +79,4 @@ const OrderTrackingPage = () => {
   );
 };
 
-export default OrderTrackingPage;
+export default withAuth(OrderTrackingPage, { allowedRoles: ["USER", "DEALER"] });

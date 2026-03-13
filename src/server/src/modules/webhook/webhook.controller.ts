@@ -5,6 +5,7 @@ import { WebhookService } from "./webhook.service";
 import { makeLogsService } from "../logs/logs.factory";
 import stripe from "@/infra/payment/stripe";
 import AppError from "@/shared/errors/AppError";
+import { config } from "@/config";
 
 export class WebhookController {
   private logsService = makeLogsService();
@@ -21,16 +22,20 @@ export class WebhookController {
     }
 
     let event;
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        config.payment.stripeWebhookSecret!
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new AppError(400, `Webhook signature verification failed: ${message}`);
+    }
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const { order, payment, shipment, address } =
-        await this.webhookService.handleCheckoutCompletion(session);
+      await this.webhookService.handleCheckoutCompletion(session);
     }
 
     sendResponse(res, 200, { message: "Webhook received successfully" });

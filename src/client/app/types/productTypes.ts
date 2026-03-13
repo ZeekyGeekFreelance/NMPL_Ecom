@@ -3,22 +3,26 @@ export interface Product {
   id: string;
   slug: string;
   name: string;
+  thumbnail?: string | null;
+  minPrice?: number;
+  maxPrice?: number;
+  dealerMinPrice?: number | null;
+  dealerMaxPrice?: number | null;
+  price?: number;
   isNew: boolean;
   isFeatured: boolean;
   isTrending: boolean;
   isBestSeller: boolean;
-  averageRating: number;
-  reviewCount: number;
   description: string | null;
   variants: {
     id: string;
     sku: string;
     price: number;
+    retailPrice?: number;
     images: string[];
     stock: number;
     lowStockThreshold: number;
     barcode: string | null;
-    warehouseLocation: string | null;
     attributes: {
       id: string;
       attribute: {
@@ -38,14 +42,6 @@ export interface Product {
     name: string;
     slug: string;
   } | null;
-  reviews: {
-    id: string;
-    rating: number;
-    comment: string | null;
-    createdAt: string;
-    userId: string;
-    user?: { name: string };
-  }[];
 }
 export interface Order {
   order_no: string;
@@ -54,7 +50,6 @@ export interface Order {
   user: User;
   userId: string;
   products: Product[];
-  tracking?: TrackingDetail | null;
   orderItems: OrderItem[];
 }
 
@@ -82,13 +77,6 @@ export interface Address {
   country: string;
   user: User;
   userId: string;
-}
-
-export interface TrackingDetail {
-  id: string;
-  status: string;
-  order: Order;
-  order_no: string;
 }
 
 export interface Cart {

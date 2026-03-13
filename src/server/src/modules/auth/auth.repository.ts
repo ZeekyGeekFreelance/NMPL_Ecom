@@ -1,30 +1,17 @@
 import prisma from "@/infra/database/database.config";
-import { Prisma, ROLE } from "@prisma/client";
-import crypto from "crypto";
+import { ROLE } from "@prisma/client";
 import AppError from "@/shared/errors/AppError";
 import { passwordUtils } from "@/shared/utils/authUtils";
+import { clearProtectUserCache } from "@/shared/utils/auth/protectCache";
+import {
+  findDealerProfileByUserId as sharedFindDealerProfileByUserId,
+  upsertDealerProfile as sharedUpsertDealerProfile,
+} from "@/shared/repositories/dealer.repository";
 
-export type DealerStatus = "PENDING" | "APPROVED" | "REJECTED";
-
-export interface DealerProfileRecord {
-  id: string;
-  userId: string;
-  businessName: string | null;
-  contactPhone: string | null;
-  status: DealerStatus;
-  approvedAt: Date | null;
-  approvedBy: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// Re-export types so existing imports from auth.repository continue to work
+export type { DealerStatus, DealerProfileRecord } from "@/shared/repositories/dealer.repository";
 
 export class AuthRepository {
-  private isDealerTableMissing(error: unknown): boolean {
-    return (
-      error instanceof Error &&
-      error.message.includes('relation "DealerProfile" does not exist')
-    );
-  }
 
   async findUserByEmail(email: string) {
     return prisma.user.findFirst({
@@ -48,10 +35,14 @@ export class AuthRepository {
       select: {
         id: true,
         password: true,
+        tokenVersion: true,
         role: true,
         name: true,
         email: true,
+        phone: true,
         avatar: true,
+        /** Checked immediately after sign-in to gate token issuance. */
+        mustChangePassword: true,
       },
     });
   }
@@ -63,8 +54,10 @@ export class AuthRepository {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         avatar: true,
+        tokenVersion: true,
       },
     });
 
@@ -82,6 +75,7 @@ export class AuthRepository {
 
   async createUser(data: {
     email: string;
+    phone: string;
     name: string;
     password: string;
     role: ROLE;
@@ -97,99 +91,31 @@ export class AuthRepository {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         avatar: true,
+        tokenVersion: true,
       },
     });
   }
 
+  // ── Dealer profile methods — delegate to shared repository ──────────────
+  // Single source of truth: @/shared/repositories/dealer.repository
+
   async findDealerProfileByUserId(
     userId: string
-  ): Promise<DealerProfileRecord | null> {
-    try {
-      const rows = await prisma.$queryRaw<DealerProfileRecord[]>(
-        Prisma.sql`
-          SELECT
-            "id",
-            "userId",
-            "businessName",
-            "contactPhone",
-            "status",
-            "approvedAt",
-            "approvedBy",
-            "createdAt",
-            "updatedAt"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `
-      );
-
-      return rows[0] ?? null;
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        return null;
-      }
-      throw error;
-    }
+  ): Promise<import("@/shared/repositories/dealer.repository").DealerProfileRecord | null> {
+    return sharedFindDealerProfileByUserId(userId);
   }
 
   async upsertDealerProfile(data: {
     userId: string;
     businessName?: string | null;
     contactPhone?: string | null;
-    status: DealerStatus;
+    status: import("@/shared/repositories/dealer.repository").DealerStatus;
     approvedBy?: string | null;
-  }) {
-    const now = new Date();
-    const approvedAt = data.status === "APPROVED" ? now : null;
-
-    try {
-      await prisma.$executeRaw(
-        Prisma.sql`
-          INSERT INTO "DealerProfile" (
-            "id",
-            "userId",
-            "businessName",
-            "contactPhone",
-            "status",
-            "approvedAt",
-            "approvedBy",
-            "createdAt",
-            "updatedAt"
-          )
-          VALUES (
-            ${crypto.randomUUID()},
-            ${data.userId},
-            ${data.businessName ?? null},
-            ${data.contactPhone ?? null},
-            ${data.status},
-            ${approvedAt},
-            ${data.approvedBy ?? null},
-            ${now},
-            ${now}
-          )
-          ON CONFLICT ("userId")
-          DO UPDATE SET
-            "businessName" = COALESCE(EXCLUDED."businessName", "DealerProfile"."businessName"),
-            "contactPhone" = COALESCE(EXCLUDED."contactPhone", "DealerProfile"."contactPhone"),
-            "status" = EXCLUDED."status",
-            "approvedAt" = EXCLUDED."approvedAt",
-            "approvedBy" = EXCLUDED."approvedBy",
-            "updatedAt" = EXCLUDED."updatedAt"
-        `
-      );
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        throw new AppError(
-          503,
-          "Dealer tables are not available. Run Prisma migrations before dealer registration."
-        );
-      }
-      throw error;
-    }
-
-    return this.findDealerProfileByUserId(data.userId);
+  }): Promise<import("@/shared/repositories/dealer.repository").DealerProfileRecord | null> {
+    return sharedUpsertDealerProfile(data);
   }
 
   async updateUserEmailVerification(
@@ -239,16 +165,43 @@ export class AuthRepository {
     });
   }
 
-  async updateUserPassword(userId: string, password: string) {
-    const hashedPassword = await passwordUtils.hashPassword(password);
+  /**
+   * Clears the mustChangePassword flag after a successful first-login
+   * password change.  Called only from changePasswordOnFirstLogin.
+   */
+  async clearMustChangePassword(userId: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mustChangePassword: false },
+    });
+  }
 
-    return prisma.user.update({
+  async updateUserPassword(
+    userId: string,
+    password: string,
+    options?: { invalidateSessions?: boolean }
+  ) {
+    const hashedPassword = await passwordUtils.hashPassword(password);
+    const invalidateSessions = options?.invalidateSessions ?? true;
+
+    const result = await prisma.user.update({
       where: { id: userId },
       data: {
         password: hashedPassword,
         resetPasswordToken: null,
         resetPasswordTokenExpiresAt: null,
+        ...(invalidateSessions
+          ? { tokenVersion: { increment: 1 } }
+          : {}),
       },
     });
+
+    // Invalidate the protect middleware cache so the new tokenVersion
+    // is picked up on the very next request — no 60-second lag.
+    if (invalidateSessions) {
+      await clearProtectUserCache(userId);
+    }
+
+    return result;
   }
 }

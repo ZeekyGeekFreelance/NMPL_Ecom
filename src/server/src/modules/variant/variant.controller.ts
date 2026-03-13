@@ -88,10 +88,10 @@ export class VariantController {
         productId,
         sku,
         price,
+        defaultDealerPrice,
         stock,
         lowStockThreshold,
         barcode,
-        warehouseLocation,
         attributes,
       } = req.body;
 
@@ -106,7 +106,7 @@ export class VariantController {
           if (!attr.attributeId || !attr.valueId) {
             throw new AppError(
               400,
-              `Invalid attribute structure at index ${index}`
+              `Invalid attribute structure at attribute #${index + 1}.`
             );
           }
         });
@@ -120,7 +120,6 @@ export class VariantController {
         throw new AppError(400, "Invalid attributes format");
       }
 
-      console.log("req.files: ", req.files);
       const files = req.files as Express.Multer.File[];
       let imageUrls: string[] = [];
       if (Array.isArray(files) && files.length > 0) {
@@ -132,12 +131,15 @@ export class VariantController {
         productId,
         sku,
         price: Number(price),
+        defaultDealerPrice:
+          defaultDealerPrice !== undefined && defaultDealerPrice !== ""
+            ? Number(defaultDealerPrice)
+            : null,
         stock: Number(stock),
         lowStockThreshold: lowStockThreshold
           ? Number(lowStockThreshold)
           : undefined,
         barcode,
-        warehouseLocation,
         images: imageUrls,
         attributes: parsedAttributes,
       });
@@ -159,10 +161,10 @@ export class VariantController {
       const {
         sku,
         price,
+        defaultDealerPrice,
         stock,
         lowStockThreshold,
         barcode,
-        warehouseLocation,
         attributes,
       } = req.body;
 
@@ -180,7 +182,7 @@ export class VariantController {
             if (!attr.attributeId || !attr.valueId) {
               throw new AppError(
                 400,
-                `Invalid attribute structure at index ${index}`
+                `Invalid attribute structure at attribute #${index + 1}.`
               );
             }
           });
@@ -205,12 +207,18 @@ export class VariantController {
       const variant = await this.variantService.updateVariant(variantId, {
         ...(sku && { sku }),
         ...(price !== undefined && { price: Number(price) }),
+        // defaultDealerPrice: explicit null clears it, a number sets it, undefined = no change
+        ...(defaultDealerPrice !== undefined && {
+          defaultDealerPrice:
+            defaultDealerPrice === null || defaultDealerPrice === ""
+              ? null
+              : Number(defaultDealerPrice),
+        }),
         ...(stock !== undefined && { stock: Number(stock) }),
         ...(lowStockThreshold !== undefined && {
           lowStockThreshold: Number(lowStockThreshold),
         }),
         ...(barcode !== undefined && { barcode }),
-        ...(warehouseLocation !== undefined && { warehouseLocation }),
         ...(imageUrls.length > 0 && { images: imageUrls }),
         ...(parsedAttributes && { attributes: parsedAttributes }),
       });
@@ -230,7 +238,6 @@ export class VariantController {
     async (req: Request, res: Response): Promise<void> => {
       const { id: variantId } = req.params;
       const { quantity, notes } = req.body;
-      console.log("req.body: ", req.body);
 
       const parsedQuantity = Number(quantity);
       if (!quantity || isNaN(parsedQuantity) || parsedQuantity <= 0) {

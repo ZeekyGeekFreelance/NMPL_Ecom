@@ -63,10 +63,42 @@ const interactionAnalytics = {
         .sort((a, b) => b.viewCount - a.viewCount)
         .slice(0, 5);
 
+      const productVariantRows = await prisma.productVariant.findMany({
+        where: {
+          productId: {
+            in: mostViewedProducts.map((item) => item.productId),
+          },
+        },
+        select: {
+          productId: true,
+          sku: true,
+          createdAt: true,
+        },
+        orderBy: [
+          { productId: "asc" },
+          { createdAt: "asc" },
+        ],
+      });
+
+      const skuByProduct = productVariantRows.reduce<Record<string, string>>(
+        (accumulator, row) => {
+          if (!accumulator[row.productId]) {
+            accumulator[row.productId] = row.sku;
+          }
+          return accumulator;
+        },
+        {}
+      );
+
+      const enrichedMostViewedProducts = mostViewedProducts.map((item) => ({
+        ...item,
+        productSku: skuByProduct[item.productId] || null,
+      }));
+
       return {
         totalInteractions,
         byType,
-        mostViewedProducts,
+        mostViewedProducts: enrichedMostViewedProducts,
       };
     },
   },

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { skipToken } from "@reduxjs/toolkit/query";
 import {
   useUpdateProductMutation,
   useDeleteProductMutation,
@@ -10,9 +11,27 @@ import {
 import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
 import useToast from "@/app/hooks/ui/useToast";
 import { ProductFormData } from "@/app/(private)/dashboard/products/product.types";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+
+const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
+
+const normalizeVariantAttributes = (
+  attributes: any[] | undefined
+): { attributeId: string; valueId: string }[] =>
+  (Array.isArray(attributes) ? attributes : [])
+    .map((attribute) => ({
+      attributeId: String(
+        attribute?.attributeId || attribute?.attribute?.id || ""
+      ).trim(),
+      valueId: String(attribute?.valueId || attribute?.value?.id || "").trim(),
+    }))
+    .filter((attribute) => attribute.attributeId && attribute.valueId);
 
 export const useProductDetail = () => {
   const { id } = useParams();
+  const productId =
+    typeof id === "string" ? id.trim() : (id?.[0] ?? "").trim();
+  const productQueryArg = productId || skipToken;
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -20,7 +39,7 @@ export const useProductDetail = () => {
     data: product,
     isLoading: productsLoading,
     error: productsError,
-  } = useGetProductByIdQuery(id);
+  } = useGetProductByIdQuery(productQueryArg);
 
   const { data: categoriesData, isLoading: categoriesLoading } =
     useGetAllCategoriesQuery({});
@@ -33,6 +52,7 @@ export const useProductDetail = () => {
 
   const [updateProduct, { isLoading: isUpdating }] = useUpdateProductMutation();
   const [deleteProduct, { isLoading: isDeleting }] = useDeleteProductMutation();
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Variant selection state
   const [selectedVariant, setSelectedVariant] = useState(null);
@@ -56,6 +76,7 @@ export const useProductDetail = () => {
   // Reset form and selected variant when product data is fetched
   useEffect(() => {
     if (product) {
+      setSubmitError(null);
       form.reset({
         id: product.id || "",
         name: product.name || "",
@@ -70,11 +91,11 @@ export const useProductDetail = () => {
             id: v.id || "",
             sku: v.sku || "",
             price: v.price || 0,
+            defaultDealerPrice: v.defaultDealerPrice ?? null,
             stock: v.stock || 0,
             lowStockThreshold: v.lowStockThreshold || 10,
             barcode: v.barcode || "",
-            warehouseLocation: v.warehouseLocation || "",
-            attributes: v.attributes || [],
+            attributes: normalizeVariantAttributes(v.attributes),
             images: v.images || [],
           })) || [],
       });
@@ -111,6 +132,16 @@ export const useProductDetail = () => {
 
   // Handle update
   const onSubmit = async (data: ProductFormData) => {
+    if (isUpdating) {
+      return;
+    }
+
+    if (!form.formState.isDirty) {
+      setSubmitError(null);
+      showToast("No changes detected.", "info");
+      return;
+    }
+
     const payload = new FormData();
     payload.append("name", data.name || "");
     payload.append("description", data.description || "");
@@ -126,39 +157,41 @@ export const useProductDetail = () => {
       payload.append(`variants[${index}][id]`, variant.id || "");
       payload.append(`variants[${index}][sku]`, variant.sku || "");
       payload.append(`variants[${index}][price]`, variant.price.toString());
+      payload.append(
+        `variants[${index}][defaultDealerPrice]`,
+        variant.defaultDealerPrice != null ? variant.defaultDealerPrice.toString() : ""
+      );
       payload.append(`variants[${index}][stock]`, variant.stock.toString());
       payload.append(
         `variants[${index}][lowStockThreshold]`,
         variant.lowStockThreshold?.toString() || "10"
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
-      payload.append(
-        `variants[${index}][warehouseLocation]`,
-        variant.warehouseLocation || ""
-      );
+      const normalizedAttributes = normalizeVariantAttributes(variant.attributes);
       payload.append(
         `variants[${index}][attributes]`,
-        JSON.stringify(variant.attributes || [])
+        JSON.stringify(normalizedAttributes)
       );
 
-      const existingImages: string[] = [];
+      const orderedImages: string[] = [];
       const imageIndexes: number[] = [];
 
       if (variant.images && variant.images.length > 0) {
         variant.images.forEach((image) => {
           if (image instanceof File) {
             payload.append("images", image);
+            orderedImages.push(`${UPLOADED_IMAGE_TOKEN_PREFIX}${imageIndex}`);
             imageIndexes.push(imageIndex);
             imageIndex += 1;
           } else if (typeof image === "string" && image.trim()) {
-            existingImages.push(image);
+            orderedImages.push(image);
           }
         });
       }
 
       payload.append(
         `variants[${index}][images]`,
-        JSON.stringify(existingImages)
+        JSON.stringify(orderedImages)
       );
       payload.append(
         `variants[${index}][imageIndexes]`,
@@ -167,21 +200,46 @@ export const useProductDetail = () => {
     });
 
     try {
-      await updateProduct({
-        id: id as string,
+      if (!productId) {
+        setSubmitError("Product id is missing. Please reload and try again.");
+        showToast("Product id is missing. Please reload and try again.", "error");
+        return;
+      }
+
+      const response = await updateProduct({
+        id: productId,
         data: payload,
       }).unwrap();
+      const didChange = Boolean(
+        (response as any)?.didChange ?? (response as any)?.data?.didChange ?? true
+      );
+
+      if (!didChange) {
+        setSubmitError(null);
+        showToast("No changes detected.", "info");
+        return;
+      }
+
+      form.reset(data);
+      setSubmitError(null);
       showToast("Product updated successfully", "success");
     } catch (err) {
+      const message = getApiErrorMessage(err, "Failed to update product");
+      setSubmitError(message);
       console.error("Failed to update product:", err);
-      showToast("Failed to update product", "error");
+      showToast(message, "error");
     }
   };
 
   // Handle delete
   const handleDelete = async () => {
     try {
-      await deleteProduct(id as string).unwrap();
+      if (!productId) {
+        showToast("Product id is missing. Please reload and try again.", "error");
+        return;
+      }
+
+      await deleteProduct(productId).unwrap();
       showToast("Product deleted successfully", "success");
       router.push("/dashboard/products");
     } catch (err) {
@@ -226,6 +284,7 @@ export const useProductDetail = () => {
     categoriesLoading,
     productsError,
     form,
+    submitError,
     isUpdating,
     isDeleting,
     isConfirmModalOpen,

@@ -3,6 +3,7 @@
 import { useApolloClient } from "@apollo/client";
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 const getAuthSignature = (
   user:
@@ -10,8 +11,15 @@ const getAuthSignature = (
         id: string;
         accountReference?: string;
         role: string;
+        effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
         isDealer?: boolean;
-        dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+        dealerStatus?:
+          | "PENDING"
+          | "APPROVED"
+          | "LEGACY"
+          | "REJECTED"
+          | "SUSPENDED"
+          | null;
       }
     | null
     | undefined
@@ -23,6 +31,7 @@ const getAuthSignature = (
   return [
     user.id,
     user.role,
+    user.effectiveRole || "no-effective-role",
     user.isDealer ? "dealer" : "non-dealer",
     user.dealerStatus || "no-dealer-status",
   ].join("|");
@@ -48,7 +57,7 @@ export default function ApolloAuthSync() {
 
     // Ensure role-sensitive GraphQL data (e.g., dealer pricing) is refreshed.
     apolloClient.resetStore().catch((error) => {
-      if (process.env.NODE_ENV !== "production") {
+      if (!runtimeEnv.isProduction) {
         console.error("Apollo resetStore failed after auth change", error);
       }
     });
@@ -57,6 +66,7 @@ export default function ApolloAuthSync() {
     isLoading,
     user?.id,
     user?.role,
+    user?.effectiveRole,
     user?.isDealer,
     user?.dealerStatus,
   ]);

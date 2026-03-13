@@ -6,6 +6,7 @@ import TableActions from "../molecules/TableActions";
 import TableBody from "../molecules/TableBody";
 import PaginationComponent from "../organisms/Pagination";
 import { useRouter } from "next/navigation";
+import useDebounce from "@/app/hooks/network/useDebounce";
 
 interface Column {
   key: string;
@@ -14,6 +15,7 @@ interface Column {
   render?: (row: any) => React.ReactNode;
   sortAccessor?: (row: any) => unknown;
   searchAccessor?: (row: any) => unknown;
+  exportAccessor?: (row: any) => unknown;
   width?: string;
   align?: "left" | "center" | "right";
 }
@@ -33,10 +35,15 @@ interface TableProps {
   totalResults?: number;
   resultsPerPage?: number;
   currentPage?: number;
+  onPageChange?: (page: number) => void;
+  clientPagination?: boolean;
+  clientPageSize?: number;
   expandable?: boolean;
   expandedRowId?: string | null;
   renderExpandedRow?: (row: any) => React.ReactNode;
   className?: string;
+  initialSortKey?: string | null;
+  initialSortDirection?: "asc" | "desc";
 }
 
 const getNestedValue = (obj: any, key: string): any =>
@@ -57,7 +64,7 @@ const extractTextFromReactNode = (node: React.ReactNode): string => {
     return node.map((child) => extractTextFromReactNode(child)).join(" ");
   }
 
-  if (React.isValidElement(node)) {
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
     return extractTextFromReactNode(node.props?.children);
   }
 
@@ -91,6 +98,7 @@ const collectSearchableText = (value: unknown): string[] => {
 const normalizeString = (value: unknown): string =>
   String(value ?? "")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
 
 const scoreFieldAgainstQuery = (fieldValue: string, query: string): number => {
@@ -153,19 +161,29 @@ const Table: React.FC<TableProps> = ({
   totalResults,
   resultsPerPage,
   currentPage,
+  onPageChange,
+  clientPagination = false,
+  clientPageSize = 16,
   expandable = false,
   expandedRowId = null,
   renderExpandedRow,
   className = "",
+  initialSortKey = null,
+  initialSortDirection = "asc",
 }) => {
   const router = useRouter();
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<string | null>(initialSortKey);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(
+    initialSortDirection
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [localPage, setLocalPage] = useState(1);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(columns.map((col) => col.key))
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const debouncedSearchQuery = useDebounce(searchQuery, 180);
 
   useEffect(() => {
     setVisibleColumns((previousVisibleColumns) => {
@@ -193,11 +211,28 @@ const Table: React.FC<TableProps> = ({
     });
   }, [data]);
 
+  useEffect(() => {
+    setSortKey(initialSortKey);
+    setSortDirection(initialSortDirection);
+  }, [initialSortDirection, initialSortKey]);
+
+  useEffect(() => {
+    if (!clientPagination) {
+      return;
+    }
+    setLocalPage(1);
+  }, [clientPagination, debouncedSearchQuery]);
+
   const handleSort = (key: string) => {
-    const newSortDirection =
-      sortKey === key && sortDirection === "asc" ? "desc" : "asc";
+    if (sortKey === key) {
+      setSortDirection((previousDirection) =>
+        previousDirection === "asc" ? "desc" : "asc"
+      );
+      return;
+    }
+
     setSortKey(key);
-    setSortDirection(newSortDirection);
+    setSortDirection("asc");
   };
 
   const handleSearch = (data: { searchQuery: string }) =>
@@ -242,7 +277,7 @@ const Table: React.FC<TableProps> = ({
       return [];
     }
 
-    const normalizedQuery = normalizeString(searchQuery);
+    const normalizedQuery = normalizeString(debouncedSearchQuery);
 
     const rowsWithScores = data
       .map((row) => {
@@ -296,63 +331,116 @@ const Table: React.FC<TableProps> = ({
     });
 
     return rowsWithScores.map((entry) => entry.row);
-  }, [columns, data, searchQuery, sortDirection, sortKey]);
+  }, [columns, data, debouncedSearchQuery, sortDirection, sortKey]);
 
   const handleRefresh = useCallback(() => {
-    try {
-      onRefresh?.();
-    } finally {
-      router.refresh();
+    if (isRefreshing) {
+      return;
     }
-  }, [onRefresh, router]);
+
+    setIsRefreshing(true);
+    setSearchQuery("");
+    setSortKey(initialSortKey);
+    setSortDirection(initialSortDirection);
+    setSelectedRows(new Set());
+
+    Promise.resolve(onRefresh?.())
+      .finally(() => {
+        router.refresh();
+        setIsRefreshing(false);
+      });
+  }, [initialSortDirection, initialSortKey, isRefreshing, onRefresh, router]);
 
   const handleSelectRow = (rowId: string) => {
-    const newSelected = new Set(selectedRows);
-    if (newSelected.has(rowId)) {
-      newSelected.delete(rowId);
-    } else {
-      newSelected.add(rowId);
-    }
-    setSelectedRows(newSelected);
+    setSelectedRows((previousSelectedRows) => {
+      const nextSelectedRows = new Set(previousSelectedRows);
+      if (nextSelectedRows.has(rowId)) {
+        nextSelectedRows.delete(rowId);
+      } else {
+        nextSelectedRows.add(rowId);
+      }
+      return nextSelectedRows;
+    });
   };
 
-  const handleSelectAll = () => {
-    if (selectedRows.size === rankedAndSortedData.length) {
-      setSelectedRows(new Set());
-    } else {
-      const allRowIds = rankedAndSortedData
+  const allVisibleRowIds = useMemo(
+    () =>
+      rankedAndSortedData
         .map((row, index) => String(row.id || row._id || index))
-        .filter((rowId): rowId is string => typeof rowId === "string" && rowId.length > 0);
-      setSelectedRows(new Set(allRowIds));
-    }
+        .filter(
+          (rowId): rowId is string => typeof rowId === "string" && rowId.length > 0
+        ),
+    [rankedAndSortedData]
+  );
+
+  const handleSelectAll = () => {
+    setSelectedRows(new Set(allVisibleRowIds));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedRows(new Set());
   };
 
   const handleToggleColumn = (columnKey: string) => {
-    const newVisibleColumns = new Set(visibleColumns);
-    if (newVisibleColumns.has(columnKey)) {
-      if (newVisibleColumns.size > 1) {
-        // Prevent hiding all columns
-        newVisibleColumns.delete(columnKey);
+    setVisibleColumns((previousVisibleColumns) => {
+      const nextVisibleColumns = new Set(previousVisibleColumns);
+      if (nextVisibleColumns.has(columnKey)) {
+        if (nextVisibleColumns.size > 1) {
+          nextVisibleColumns.delete(columnKey);
+        }
+      } else {
+        nextVisibleColumns.add(columnKey);
       }
-    } else {
-      newVisibleColumns.add(columnKey);
-    }
-    setVisibleColumns(newVisibleColumns);
+      return nextVisibleColumns;
+    });
   };
+
+  const filteredColumns = columns.filter((col) => visibleColumns.has(col.key));
+  const normalizedClientPageSize = Math.max(1, Math.floor(clientPageSize));
+  const clientTotalResults = rankedAndSortedData.length;
+  const clientTotalPages = Math.max(
+    1,
+    Math.ceil(clientTotalResults / normalizedClientPageSize)
+  );
+  const resolvedCurrentPage = clientPagination
+    ? Math.min(Math.max(localPage, 1), clientTotalPages)
+    : typeof currentPage === "number" && currentPage > 0
+      ? currentPage
+      : 1;
+  const paginatedData = clientPagination
+    ? rankedAndSortedData.slice(
+        (resolvedCurrentPage - 1) * normalizedClientPageSize,
+        resolvedCurrentPage * normalizedClientPageSize
+      )
+    : rankedAndSortedData;
+  const resolvedTotalPages = clientPagination ? clientTotalPages : totalPages;
+  const resolvedResultsPerPage = clientPagination
+    ? normalizedClientPageSize
+    : resultsPerPage;
+
+  useEffect(() => {
+    if (!clientPagination) {
+      return;
+    }
+    setLocalPage((previousPage) =>
+      Math.min(Math.max(previousPage, 1), clientTotalPages)
+    );
+  }, [clientPagination, clientTotalPages]);
+
+  const displayedTotalResults =
+    clientPagination
+      ? rankedAndSortedData.length
+      : debouncedSearchQuery.trim().length > 0
+      ? rankedAndSortedData.length
+      : totalResults !== undefined
+        ? totalResults
+        : rankedAndSortedData.length;
 
   if (!Array.isArray(data)) {
     return (
       <div className="text-center py-12 text-gray-600">{emptyMessage}</div>
     );
   }
-
-  const filteredColumns = columns.filter((col) => visibleColumns.has(col.key));
-  const displayedTotalResults =
-    searchQuery.trim().length > 0
-      ? rankedAndSortedData.length
-      : totalResults !== undefined
-        ? totalResults
-        : rankedAndSortedData.length;
 
   return (
     <div
@@ -363,9 +451,10 @@ const Table: React.FC<TableProps> = ({
           title={title}
           subtitle={subtitle}
           totalResults={displayedTotalResults}
-          currentPage={currentPage}
-          resultsPerPage={resultsPerPage}
+          currentPage={resolvedCurrentPage}
+          resultsPerPage={resolvedResultsPerPage}
           onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
         />
       )}
       <TableActions
@@ -381,7 +470,7 @@ const Table: React.FC<TableProps> = ({
       />
       <div className="w-full overflow-x-auto">
         <TableBody
-          data={rankedAndSortedData}
+          data={paginatedData}
           columns={filteredColumns}
           isLoading={isLoading}
           emptyMessage={emptyMessage}
@@ -394,11 +483,23 @@ const Table: React.FC<TableProps> = ({
           selectedRows={selectedRows}
           onSelectRow={handleSelectRow}
           onSelectAll={handleSelectAll}
+          onClearSelection={handleClearSelection}
         />
       </div>
-      {showPaginationDetails && totalPages !== undefined && (
+      {showPaginationDetails &&
+        (clientPagination || totalPages !== undefined) && (
         <div className="p-4 border-t border-blue-100">
-          <PaginationComponent totalPages={totalPages} />
+          <PaginationComponent
+            totalPages={resolvedTotalPages || 1}
+            currentPage={resolvedCurrentPage}
+            onPageChange={(page) => {
+              if (clientPagination) {
+                setLocalPage(page);
+                return;
+              }
+              onPageChange?.(page);
+            }}
+          />
         </div>
       )}
     </div>

@@ -1,11 +1,14 @@
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsNotEmpty,
+  Matches,
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
@@ -27,8 +30,8 @@ export class UpdateUserDto {
   password?: string;
 
   @IsOptional()
-  @IsIn(["USER", "ADMIN", "SUPERADMIN"], {
-    message: "Role must be USER, ADMIN, or SUPERADMIN",
+  @IsIn(["USER", "DEALER", "ADMIN", "SUPERADMIN"], {
+    message: "Role must be USER, DEALER, ADMIN, or SUPERADMIN",
   })
   role?: string;
 }
@@ -37,6 +40,21 @@ export class UserIdDto {
   @IsNotEmpty({ message: "ID is required" })
   @IsString({ message: "ID must be a string" })
   id!: string;
+}
+
+export class UpdateOwnProfileDto {
+  @IsOptional()
+  @IsString({ message: "Name must be a string" })
+  @MinLength(2, { message: "Name must be at least 2 characters long" })
+  @MaxLength(80, { message: "Name must be at most 80 characters long" })
+  name?: string;
+
+  @IsOptional()
+  @IsString({ message: "Phone number must be a string" })
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
+  })
+  phone?: string;
 }
 
 export class UserEmailDto {
@@ -55,10 +73,21 @@ export class CreateAdminDto {
   @IsEmail({}, { message: "Invalid email format" })
   email!: string;
 
+  @IsNotEmpty({ message: "Phone number is required" })
+  @IsString({ message: "Phone number must be a string" })
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
+  })
+  phone!: string;
+
   @IsNotEmpty({ message: "Password is required" })
   @MinLength(6, { message: "Password must be at least 6 characters long" })
   @IsString({ message: "Password must be a string" })
   password!: string;
+
+  @IsOptional()
+  @IsBoolean({ message: "assignBillingSupervisor must be a boolean" })
+  assignBillingSupervisor?: boolean;
 }
 
 export class CreateDealerDto {
@@ -80,17 +109,31 @@ export class CreateDealerDto {
   @IsString({ message: "Business name must be a string" })
   businessName?: string;
 
-  @IsOptional()
+  @IsNotEmpty({ message: "Contact phone is required" })
   @IsString({ message: "Contact phone must be a string" })
-  contactPhone?: string;
+  @Matches(/^\d{10}$/, {
+    message: "Contact phone must be exactly 10 digits",
+  })
+  contactPhone!: string;
+
+  /**
+   * When true, creates a LEGACY pay-later dealer:
+   *   - DealerProfile.status = LEGACY
+   *   - DealerProfile.payLaterEnabled = true
+   *   - User.mustChangePassword = true
+   *   - Sends legacy credential email with forced password-change notice
+   */
+  @IsOptional()
+  @IsBoolean({ message: "isLegacy must be a boolean" })
+  isLegacy?: boolean;
 }
 
 export class UpdateDealerStatusDto {
   @IsNotEmpty({ message: "Status is required" })
-  @IsIn(["PENDING", "APPROVED", "REJECTED"], {
-    message: "Status must be PENDING, APPROVED, or REJECTED",
+  @IsIn(["PENDING", "APPROVED", "LEGACY", "REJECTED", "SUSPENDED"], {
+    message: "Status must be PENDING, APPROVED, LEGACY, REJECTED, or SUSPENDED",
   })
-  status!: "PENDING" | "APPROVED" | "REJECTED";
+  status!: "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 }
 
 export class DealerPriceItemDto {
@@ -108,4 +151,30 @@ export class SetDealerPricesDto {
   @ValidateNested({ each: true })
   @Type(() => DealerPriceItemDto)
   prices!: DealerPriceItemDto[];
+}
+
+export class UpdateBillingSupervisorDto {
+  @IsNotEmpty({ message: "isBillingSupervisor is required" })
+  @IsBoolean({ message: "isBillingSupervisor must be a boolean" })
+  isBillingSupervisor!: boolean;
+}
+
+export class UpdateAdminPasswordDto {
+  @IsNotEmpty({ message: "newPassword is required" })
+  @MinLength(8, {
+    message: "Password must be at least 8 characters long",
+  })
+  @Matches(/[A-Z]/, {
+    message: "Password must contain at least one uppercase letter",
+  })
+  @Matches(/[a-z]/, {
+    message: "Password must contain at least one lowercase letter",
+  })
+  @Matches(/[0-9]/, {
+    message: "Password must contain at least one number",
+  })
+  @Matches(/[!@#$%^&*]/, {
+    message: "Password must contain at least one special character (!@#$%^&*)",
+  })
+  newPassword!: string;
 }

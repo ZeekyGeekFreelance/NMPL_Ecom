@@ -9,6 +9,8 @@ interface ProductEditFormProps {
   onSubmit: (data: ProductFormData) => void;
   categories: { label: string; value: string }[];
   isUpdating: boolean;
+  onCancel?: () => void;
+  error?: unknown;
 }
 
 const ProductEditForm: React.FC<ProductEditFormProps> = ({
@@ -16,7 +18,11 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   onSubmit,
   categories,
   isUpdating,
+  onCancel,
+  error,
 }) => {
+  const isDirty = form.formState.isDirty;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -28,13 +34,18 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         <h2 className="text-lg font-semibold text-gray-800">Edit Product</h2>
       </div>
 
-      <div className="p-6">
+      <div className="p-6" data-product-form-scroll="true">
         <ProductForm
           form={form}
           onSubmit={onSubmit}
           categories={categories}
           isLoading={isUpdating}
+          error={error}
           submitLabel={isUpdating ? "Saving..." : "Save Changes"}
+          onCancel={onCancel || (() => form.reset())}
+          isEditMode
+          disableSubmit={!isDirty}
+          noChangesMessage="No changes detected."
         />
       </div>
     </motion.div>

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   useGetAllCategoriesQuery,
   useCreateCategoryMutation,
@@ -14,10 +14,16 @@ import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import CategoryForm, { CategoryFormData } from "./CategoryForm";
 import useToast from "@/app/hooks/ui/useToast";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 const CategoriesDashboard = () => {
   const { showToast } = useToast();
-  const { data, isLoading, error } = useGetAllCategoriesQuery({});
+  const [page, setPage] = useState(1);
+  const resultsPerPage = 16;
+  const { data, isLoading, error, refetch } = useGetAllCategoriesQuery({
+    page,
+    limit: resultsPerPage,
+  });
   const [createCategory, { isLoading: isCreating }] =
     useCreateCategoryMutation();
   const [deleteCategory, { isLoading: isDeleting }] =
@@ -28,7 +34,16 @@ const CategoriesDashboard = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!data?.currentPage || data.currentPage === page) {
+      return;
+    }
+    setPage(data.currentPage);
+  }, [data?.currentPage, page]);
+
   const form = useForm<CategoryFormData>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: { name: "", description: "", images: [] },
   });
 
@@ -46,7 +61,9 @@ const CategoriesDashboard = () => {
       label: "Description",
       sortable: true,
       render: (row) => (
-        <span className="font-medium text-gray-800">{row?.name || "N/A"}</span>
+        <span className="font-medium text-gray-800">
+          {row?.description || "N/A"}
+        </span>
       ),
     },
     {
@@ -55,6 +72,7 @@ const CategoriesDashboard = () => {
       render: (row) => (
         <div className="flex space-x-2">
           <button
+            type="button"
             onClick={() => handleDeletePrompt(row?.id)}
             className="p-1 text-red-500 hover:text-red-600 transition-colors duration-200"
             aria-label="Delete category"
@@ -92,23 +110,18 @@ const CategoriesDashboard = () => {
     payload.append("name", formData.name || "");
     payload.append("description", formData.description || "");
 
-    if (data.images && Array.isArray(data.images)) {
-      data.images.forEach((file: any) => {
+    if (formData.images && Array.isArray(formData.images)) {
+      formData.images.forEach((file: any) => {
         if (file instanceof File) {
           payload.append("images", file);
         }
       });
     }
 
-    console.log("FormData payload:");
-    for (const [key, value] of payload.entries()) {
-      console.log(`${key}: ${value instanceof File ? value.name : value}`);
-    }
-
     try {
       await createCategory(payload).unwrap();
       setIsCreateModalOpen(false);
-      form.reset({ name: "" });
+      form.reset({ name: "", description: "", images: [] });
       showToast("Category created successfully", "success");
     } catch (err) {
       console.error("Failed to create category:", err);
@@ -127,7 +140,7 @@ const CategoriesDashboard = () => {
       >
         <div className="flex items-center space-x-3">
           <Tag size={24} className="text-indigo-500" />
-          <h1 className="text-2xl font-bold text-gray-800">
+          <h1 className="type-h3 text-gray-800">
             Categories Dashboard
           </h1>
         </div>
@@ -150,7 +163,7 @@ const CategoriesDashboard = () => {
         <div className="text-center py-12">
           <p className="text-lg text-red-500">
             Error loading categories:{" "}
-            {(error as any)?.message || "Unknown error"}
+            {getApiErrorMessage(error, "Unknown error")}
           </p>
         </div>
       ) : categories.length === 0 ? (
@@ -164,6 +177,12 @@ const CategoriesDashboard = () => {
           columns={columns}
           isLoading={isLoading}
           className="bg-white rounded-xl shadow-md border border-gray-100"
+          onRefresh={refetch}
+          totalPages={data?.totalPages}
+          totalResults={data?.totalResults}
+          resultsPerPage={data?.resultsPerPage}
+          currentPage={data?.currentPage}
+          onPageChange={setPage}
         />
       )}
 
@@ -171,16 +190,23 @@ const CategoriesDashboard = () => {
       <Modal
         open={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+        contentClassName="max-w-3xl overflow-hidden p-0"
       >
-        <h2 className="text-xl font-bold text-gray-800 mb-6">
-          Create Category
-        </h2>
-        <CategoryForm
-          form={form}
-          onSubmit={onSubmit}
-          isLoading={isCreating}
-          submitLabel="Create"
-        />
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
+            <h2 className="pr-12 text-lg font-semibold text-gray-900">
+              Create Category
+            </h2>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <CategoryForm
+              form={form}
+              onSubmit={onSubmit}
+              isLoading={isCreating}
+              submitLabel="Create"
+            />
+          </div>
+        </div>
       </Modal>
 
       <ConfirmModal
@@ -190,6 +216,8 @@ const CategoriesDashboard = () => {
         onCancel={() => setIsConfirmModalOpen(false)}
         title="Delete Category"
         type="danger"
+        isConfirming={isDeleting}
+        disableCancelWhileConfirming
       />
     </div>
   );

@@ -2,6 +2,7 @@ import { Context } from "../resolver";
 import { ROLE } from "@prisma/client";
 import {
   fetchData,
+  buildDateFilter,
   shouldFetchPreviousPeriod,
   calculateEngagementScores,
   calculateRetentionRate,
@@ -11,6 +12,7 @@ import {
   getDateRange,
   calculateChanges,
 } from "@/shared/utils/analytics";
+import { CONFIRMED_ORDER_STATUS_VALUES } from "@/shared/utils/orderStatus";
 
 const userAnalytics = {
   Query: {
@@ -24,17 +26,40 @@ const userAnalytics = {
         yearEnd,
       } = getDateRange({ timePeriod, year, startDate, endDate });
 
-      const users = await fetchData(
-        prisma,
-        "user",
-        "createdAt",
+      const currentOrderDateFilter = buildDateFilter(
         currentStartDate,
         endDate,
         yearStart,
-        yearEnd,
-        ROLE.USER,
-        { orders: true }
+        yearEnd
       );
+      const users = await prisma.user.findMany({
+        where: {
+          role: ROLE.USER,
+          orders: {
+            some: {
+              orderDate: currentOrderDateFilter,
+              status: {
+                in: [...CONFIRMED_ORDER_STATUS_VALUES],
+              },
+            },
+          },
+        },
+        include: {
+          dealerProfile: {
+            select: {
+              status: true,
+            },
+          },
+          orders: {
+            where: {
+              orderDate: currentOrderDateFilter,
+              status: {
+                in: [...CONFIRMED_ORDER_STATUS_VALUES],
+              },
+            },
+          },
+        },
+      });
       const interactions = await fetchData(
         prisma,
         "interaction",
@@ -47,17 +72,44 @@ const userAnalytics = {
 
       const fetchPrevious = shouldFetchPreviousPeriod(timePeriod);
       const previousUsers = fetchPrevious
-        ? await fetchData(
-            prisma,
-            "user",
-            "createdAt",
-            previousStartDate,
-            previousEndDate,
-            yearStart,
-            yearEnd,
-            ROLE.USER,
-            { orders: true }
-          )
+        ? await prisma.user.findMany({
+            where: {
+              role: ROLE.USER,
+              orders: {
+                some: {
+                  orderDate: buildDateFilter(
+                    previousStartDate,
+                    previousEndDate,
+                    yearStart,
+                    yearEnd
+                  ),
+                  status: {
+                    in: [...CONFIRMED_ORDER_STATUS_VALUES],
+                  },
+                },
+              },
+            },
+            include: {
+              dealerProfile: {
+                select: {
+                  status: true,
+                },
+              },
+              orders: {
+                where: {
+                  orderDate: buildDateFilter(
+                    previousStartDate,
+                    previousEndDate,
+                    yearStart,
+                    yearEnd
+                  ),
+                  status: {
+                    in: [...CONFIRMED_ORDER_STATUS_VALUES],
+                  },
+                },
+              },
+            },
+          })
         : [];
 
       const {

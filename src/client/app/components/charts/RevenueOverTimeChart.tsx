@@ -1,79 +1,36 @@
 "use client";
+
 import React from "react";
 import Chart from "react-apexcharts";
-import { useQuery } from "@apollo/client";
-import { GET_ALL_ANALYTICS } from "@/app/gql/Dashboard";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 interface RevenueOverTimeChartProps {
-  startDate: string;
-  endDate: string;
-}
-
-interface MonthlyTrend {
   labels: string[];
   revenue: number[];
-}
-
-interface RevenueAnalytics {
   totalRevenue: number;
-  monthlyTrends: MonthlyTrend;
-}
-
-interface GetAllAnalyticsData {
-  revenueAnalytics: RevenueAnalytics;
-}
-
-interface GetAllAnalyticsVars {
-  params: {
-    startDate: string;
-    endDate: string;
-  };
 }
 
 const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
-  startDate,
-  endDate,
+  labels,
+  revenue,
+  totalRevenue,
 }) => {
-  const { data, loading, error } = useQuery<
-    GetAllAnalyticsData,
-    GetAllAnalyticsVars
-  >(GET_ALL_ANALYTICS, {
-    variables: {
-      params: { startDate, endDate },
-    },
-  });
+  const formatPrice = useFormatPrice();
 
-  if (loading) {
-    return <div>Loading chart...</div>;
-  }
-
-  if (error || !data?.revenueAnalytics) {
+  if (!labels.length || !revenue.length) {
     return (
-      <div>Error loading data: {error?.message || "No data available"}</div>
+      <div className="rounded-lg bg-white p-4 shadow-md">
+        <h2 className="mb-2 text-lg font-semibold text-gray-800">Revenue Over Time</h2>
+        <p className="text-sm text-gray-500">No revenue data available for the selected range.</p>
+      </div>
     );
   }
 
-  const { totalRevenue, monthlyTrends } = data.revenueAnalytics;
-  const { labels, revenue } = monthlyTrends;
-
-  const monthlyTarget = 10000;
-  const targetData = labels.map(() => monthlyTarget);
-  const totalTarget = targetData.reduce((sum, value) => sum + value, 0);
-
-  const total = totalRevenue + totalTarget;
-  const revenuePercentage = total ? (totalRevenue / total) * 100 : 0;
-  const targetPercentage = total ? (totalTarget / total) * 100 : 0;
-
   const series = [
     {
-      name: "Total Revenue",
+      name: "Revenue",
       data: revenue,
-      color: "#6366F1",
-    },
-    {
-      name: "Total Target",
-      data: targetData,
-      color: "#FBBF24",
+      color: "#1d3461",
     },
   ];
 
@@ -81,6 +38,7 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
     chart: {
       type: "line",
       height: 350,
+      toolbar: { show: false },
     },
     stroke: {
       curve: "smooth",
@@ -89,6 +47,10 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
     xaxis: {
       categories: labels.map((label) => {
         const date = new Date(label);
+        if (Number.isNaN(date.getTime())) {
+          return label;
+        }
+
         return `${date.toLocaleString("default", {
           month: "short",
         })} ${date.getFullYear()}`;
@@ -101,62 +63,29 @@ const RevenueOverTimeChart: React.FC<RevenueOverTimeChartProps> = ({
     },
     yaxis: {
       labels: {
-        formatter: (value: number) => {
-          if (value >= 1000) {
-            return `$${(value / 1000).toFixed(0)}K`;
-          }
-          return `$${value.toFixed(0)}`;
-        },
+        formatter: (value: number) => formatPrice(value),
       },
     },
     tooltip: {
-      shared: true,
-      intersect: false,
       y: {
-        formatter: (value: number) =>
-          `$${value.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+        formatter: (value: number) => formatPrice(value),
       },
     },
     markers: {
       size: 4,
     },
     legend: {
-      position: "top",
-      horizontalAlign: "left",
-      labels: {
-        colors: ["#00C4B4", "#F59E0B"],
-      },
+      show: false,
     },
   };
 
   return (
-    <div className="bg-white p-4 rounded-lg shadow-md">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">
-          Revenue Over Time
-        </h2>
-        <div className="flex space-x-4">
-          <div className="flex items-center">
-            <span className="w-4 h-4 rounded-full bg-indigo-500 mr-2"></span>
-            <span className="text-sm font-medium text-gray-700">
-              Total Revenue: $
-              {totalRevenue.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-              })}{" "}
-              {revenuePercentage.toFixed(0)}%
-            </span>
-          </div>
-          <div className="flex items-center">
-            <span className="w-4 h-4 rounded-full bg-[#FBBF24] mr-2"></span>
-            <span className="text-sm font-medium text-gray-700">
-              Total Target: $
-              {totalTarget.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-              })}{" "}
-              {targetPercentage.toFixed(0)}%
-            </span>
-          </div>
-        </div>
+    <div className="rounded-lg bg-white p-4 shadow-md">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">Revenue Over Time</h2>
+        <span className="text-sm font-medium text-gray-700">
+          Total: {formatPrice(totalRevenue)}
+        </span>
       </div>
       <Chart options={options} series={series} type="line" height={350} />
     </div>

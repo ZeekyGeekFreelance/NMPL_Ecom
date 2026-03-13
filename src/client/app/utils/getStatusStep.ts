@@ -1,12 +1,20 @@
 export default function getStatusStep(status) {
-  switch (status) {
+  const normalized = String(status || "").toUpperCase();
+
+  switch (normalized) {
     case "DELIVERED":
       return 4;
-    case "SHIPPED":
+    case "CONFIRMED":
       return 3;
-    case "PAID":
+    case "AWAITING_PAYMENT":
       return 2;
-    case "PENDING":
+    case "WAITLISTED":
+      return 2;
+    case "QUOTATION_REJECTED":
+    case "QUOTATION_EXPIRED":
+      return 3;
+    case "PENDING_VERIFICATION":
+    case "PLACED":
     default:
       return 1;
   }

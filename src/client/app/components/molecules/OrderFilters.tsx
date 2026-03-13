@@ -1,5 +1,6 @@
 import React from "react";
 import { Filter, SortAsc, SortDesc } from "lucide-react";
+import Dropdown from "@/app/components/molecules/Dropdown";
 
 interface OrderFiltersProps {
   statusFilter: string;
@@ -16,14 +17,13 @@ const OrderFilters: React.FC<OrderFiltersProps> = ({
 }) => {
   const statusOptions = [
     { value: "", label: "All Orders" },
-    { value: "PENDING", label: "Pending" },
-    { value: "PROCESSING", label: "Processing" },
-    { value: "SHIPPED", label: "Shipped" },
-    { value: "IN_TRANSIT", label: "In Transit" },
+    { value: "PENDING_VERIFICATION", label: "Pending Verification" },
+    { value: "WAITLISTED", label: "Waitlisted" },
+    { value: "AWAITING_PAYMENT", label: "Awaiting Payment / Payment Due" },
+    { value: "QUOTATION_REJECTED", label: "Quotation Rejected" },
+    { value: "QUOTATION_EXPIRED", label: "Quotation Expired" },
+    { value: "CONFIRMED", label: "Confirmed" },
     { value: "DELIVERED", label: "Delivered" },
-    { value: "CANCELED", label: "Canceled" },
-    { value: "RETURNED", label: "Returned" },
-    { value: "REFUNDED", label: "Refunded" },
   ];
 
   return (
@@ -31,17 +31,13 @@ const OrderFilters: React.FC<OrderFiltersProps> = ({
       {/* Status Filter */}
       <div className="flex items-center space-x-2">
         <Filter size={14} className="sm:w-4 sm:h-4 text-gray-500" />
-        <select
+        <Dropdown
+          label="All Orders"
+          options={statusOptions}
           value={statusFilter}
-          onChange={(e) => onStatusFilterChange(e.target.value)}
-          className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-        >
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => onStatusFilterChange(value || "")}
+          className="h-10 flex-1 rounded-lg border-gray-300 px-2 text-xs sm:px-3 sm:text-sm"
+        />
       </div>
 
       {/* Sort Order */}

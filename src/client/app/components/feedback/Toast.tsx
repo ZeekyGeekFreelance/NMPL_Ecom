@@ -34,7 +34,7 @@ const toastVariants = {
 const Toast = () => {
   const dispatch = useAppDispatch();
   const { toasts } = useAppSelector((state) => state.toasts);
-  const timeoutRefs = useRef({});
+  const timeoutRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     toasts.forEach((toast) => {
@@ -42,32 +42,43 @@ const Toast = () => {
         const timeoutId = setTimeout(() => {
           dispatch(removeToast(toast.id));
           delete timeoutRefs.current[toast.id];
-        }, toast.duration ?? 1500);
+        }, toast.duration ?? 3000);
         timeoutRefs.current[toast.id] = timeoutId;
       }
     });
 
+    const activeToastIds = new Set(toasts.map((toast) => toast.id));
+    Object.keys(timeoutRefs.current).forEach((id) => {
+      if (activeToastIds.has(id)) {
+        return;
+      }
+      clearTimeout(timeoutRefs.current[id]);
+      delete timeoutRefs.current[id];
+    });
+  }, [toasts, dispatch]);
+
+  useEffect(() => {
     return () => {
       Object.values(timeoutRefs.current).forEach(clearTimeout);
       timeoutRefs.current = {};
     };
-  }, [toasts, dispatch]);
+  }, []);
 
-  const handleClose = (id) => {
+  const handleClose = (id: string) => {
     clearTimeout(timeoutRefs.current[id]);
     delete timeoutRefs.current[id];
     dispatch(removeToast(id));
   };
 
   return (
-    <div className="fixed top-4 right-4 flex flex-col gap-3 z-50">
+    <div className="pointer-events-none fixed left-3 right-3 top-3 z-[120] flex flex-col gap-3 sm:left-auto sm:right-4 sm:top-4">
       {toasts.map((toast) => {
         const variant = toastVariants[toast.type] || toastVariants.info;
 
         return (
           <div
             key={toast.id}
-            className={`flex items-center gap-3 w-72 p-3 rounded-lg shadow-lg border-l-4 ${variant.borderColor} bg-white backdrop-blur-md animate-slideIn`}
+            className={`pointer-events-auto flex w-full items-center gap-3 rounded-lg border-l-4 bg-white p-3 shadow-lg backdrop-blur-md sm:w-80 ${variant.borderColor}`}
             style={{
               animation: "slideIn 0.3s ease-out forwards",
               boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",

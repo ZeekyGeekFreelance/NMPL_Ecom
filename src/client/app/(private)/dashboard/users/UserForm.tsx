@@ -3,13 +3,23 @@
 import { Controller, UseFormReturn } from "react-hook-form";
 import { Users, Shield, Crown } from "lucide-react";
 import { useAuth } from "@/app/hooks/useAuth";
+import Dropdown from "@/app/components/molecules/Dropdown";
+import {
+  resolveDisplayRole,
+  isExternalDisplayRole,
+} from "@/app/lib/userRole";
+import {
+  normalizeEmailValue,
+  sanitizeLooseTextInput,
+  validateDisplayName,
+  validateEmailValue,
+} from "@/app/lib/validators/common";
 
 export interface UserFormData {
   id: string | number;
   name: string;
   email: string;
-  role: "USER" | "ADMIN" | "SUPERADMIN";
-  emailVerified: boolean;
+  role: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
 }
 
 interface UserFormProps {
@@ -17,6 +27,14 @@ interface UserFormProps {
   onSubmit: (data: UserFormData) => void;
   isLoading?: boolean;
   submitLabel?: string;
+  targetUser?: {
+    role?: string | null;
+    effectiveRole?: string | null;
+    dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null | string;
+    dealerProfile?: {
+      status?: "PENDING" | "APPROVED" | "REJECTED" | null | string;
+    } | null;
+  } | null;
 }
 
 const UserForm: React.FC<UserFormProps> = ({
@@ -24,6 +42,7 @@ const UserForm: React.FC<UserFormProps> = ({
   onSubmit,
   isLoading,
   submitLabel = "Save",
+  targetUser = null,
 }) => {
   const { user: currentUser } = useAuth();
   const {
@@ -34,11 +53,22 @@ const UserForm: React.FC<UserFormProps> = ({
   } = form;
 
   const selectedRole = watch("role");
+  const watchedName = watch("name");
+  const watchedEmail = watch("email");
+  const targetDisplayRole = resolveDisplayRole({
+    role: targetUser?.role ?? selectedRole,
+    effectiveRole: targetUser?.effectiveRole,
+    dealerStatus: targetUser?.dealerStatus,
+    dealerProfile: targetUser?.dealerProfile,
+  });
+  const isExternalTarget = isExternalDisplayRole(targetDisplayRole);
+  const isInternalTarget = !isExternalTarget;
 
   // Get role color for display
   const getRoleColor = (role: string) => {
     const colors = {
       USER: "bg-blue-100 text-blue-800 border-blue-200",
+      DEALER: "bg-emerald-100 text-emerald-800 border-emerald-200",
       ADMIN: "bg-purple-100 text-purple-800 border-purple-200",
       SUPERADMIN: "bg-red-100 text-red-800 border-red-200",
     };
@@ -49,10 +79,21 @@ const UserForm: React.FC<UserFormProps> = ({
   const getAvailableRoles = () => {
     if (!currentUser) return [];
 
+    if (isExternalTarget) {
+      const externalRoleValue =
+        targetDisplayRole === "DEALER" ? "DEALER" : "USER";
+      return [
+        {
+          value: externalRoleValue,
+          label: targetDisplayRole === "DEALER" ? "Dealer Account" : "Customer Account",
+          icon: <Users className="w-4 h-4" />,
+        },
+      ];
+    }
+
     switch (currentUser.role) {
       case "SUPERADMIN":
         return [
-          { value: "USER", label: "User", icon: <Users className="w-4 h-4" /> },
           {
             value: "ADMIN",
             label: "Admin",
@@ -66,7 +107,6 @@ const UserForm: React.FC<UserFormProps> = ({
         ];
       case "ADMIN":
         return [
-          { value: "USER", label: "User", icon: <Users className="w-4 h-4" /> },
           {
             value: "ADMIN",
             label: "Admin",
@@ -74,13 +114,15 @@ const UserForm: React.FC<UserFormProps> = ({
           },
         ];
       default:
-        return [
-          { value: "USER", label: "User", icon: <Users className="w-4 h-4" /> },
-        ];
+        return [{ value: "USER", label: "User", icon: <Users className="w-4 h-4" /> }];
     }
   };
 
   const availableRoles = getAvailableRoles();
+  const canSubmitForm =
+    validateDisplayName(watchedName || "", 2, 120, "Name") === true &&
+    validateEmailValue(watchedEmail || "") === true &&
+    Boolean(selectedRole);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -93,12 +135,26 @@ const UserForm: React.FC<UserFormProps> = ({
           <Controller
             name="name"
             control={control}
-            rules={{ required: "Name is required" }}
-            render={({ field }) => (
+            rules={{
+              required: "Name is required",
+              validate: (value: string) =>
+                validateDisplayName(value, 2, 120, "Name"),
+            }}
+            render={({ field, fieldState }) => (
               <input
                 {...field}
                 type="text"
-                className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                readOnly={isInternalTarget}
+                onChange={(event) =>
+                  field.onChange(sanitizeLooseTextInput(event.target.value))
+                }
+                className={`w-full pl-10 p-3 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
+                  fieldState.error
+                    ? "border border-red-500 bg-red-50 focus:ring-red-200"
+                    : isInternalTarget
+                    ? "border border-gray-200 bg-gray-50 text-gray-500 focus:ring-gray-200"
+                    : "border border-gray-300 focus:ring-blue-500"
+                }`}
                 placeholder="John Doe"
               />
             )}
@@ -120,16 +176,21 @@ const UserForm: React.FC<UserFormProps> = ({
           control={control}
           rules={{
             required: "Email is required",
-            pattern: {
-              value: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
-              message: "Invalid email format",
-            },
+            validate: (value: string) => validateEmailValue(value),
           }}
-          render={({ field }) => (
+          render={({ field, fieldState }) => (
             <input
               {...field}
               type="email"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+              readOnly={isInternalTarget}
+              onChange={(event) => field.onChange(normalizeEmailValue(event.target.value))}
+              className={`w-full p-3 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
+                fieldState.error
+                  ? "border border-red-500 bg-red-50 focus:ring-red-200"
+                  : isInternalTarget
+                  ? "border border-gray-200 bg-gray-50 text-gray-500 focus:ring-gray-200"
+                  : "border border-gray-300 focus:ring-blue-500"
+              }`}
               placeholder="john.doe@example.com"
             />
           )}
@@ -150,16 +211,25 @@ const UserForm: React.FC<UserFormProps> = ({
           rules={{ required: "Role is required" }}
           render={({ field }) => (
             <div className="space-y-2">
-              <select
-                {...field}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-              >
-                {availableRoles.map((role) => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                label="Select role"
+                options={availableRoles.map((role) => ({
+                  label: role.label,
+                  value: role.value,
+                }))}
+                value={field.value}
+                onChange={(value) => {
+                  if (!value) return;
+                  field.onChange(value);
+                  field.onBlur();
+                }}
+                clearable={false}
+                className={`w-full rounded-lg text-gray-800 ${
+                  errors.role
+                    ? "border border-red-500 bg-red-50 focus-visible:ring-red-200"
+                    : "border border-gray-300 focus-visible:ring-blue-500/20"
+                }`}
+              />
 
               {/* Role Preview */}
               {selectedRole && (
@@ -185,35 +255,25 @@ const UserForm: React.FC<UserFormProps> = ({
         )}
       </div>
 
-      {/* Email Verified */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Email Verified
-        </label>
-        <Controller
-          name="emailVerified"
-          control={control}
-          render={({ field }) => (
-            <select
-              {...field}
-              value={field.value ? "true" : "false"}
-              onChange={(e) => field.onChange(e.target.value === "true")}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-            >
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </select>
-          )}
-        />
-      </div>
-
       {/* Submit */}
+      {isExternalTarget ? (
+        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          This is an external account. Internal role promotions are blocked by policy.
+          Use dealer approval/rejection workflow for customer/dealer transitions.
+        </p>
+      ) : null}
+      {isInternalTarget ? (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Internal account identity fields cannot be changed.
+        </p>
+      ) : null}
+
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || !canSubmitForm}
           className={`px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-300 ${
-            isLoading ? "opacity-50 cursor-not-allowed" : ""
+            isLoading || !canSubmitForm ? "opacity-50 cursor-not-allowed" : ""
           }`}
         >
           {isLoading ? "Saving..." : submitLabel}

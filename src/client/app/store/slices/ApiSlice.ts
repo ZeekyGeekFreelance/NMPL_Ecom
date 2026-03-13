@@ -2,54 +2,78 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { logout } from "./AuthSlice";
 import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
+import { clearPendingAuthIntent } from "@/app/lib/authIntent";
+import { normalizePayloadTextFields } from "@/app/lib/textNormalization";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const ENABLE_NATIVE_CONFIRMATION =
-  process.env.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM === "true";
 
-const CONFIRMATION_REQUIRED_PATHS = [
-  /^\/users(\/|$)/,
-  /^\/products(\/|$)/,
-  /^\/categories(\/|$)/,
-  /^\/variants(\/|$)/,
-  /^\/attributes(\/|$)/,
-  /^\/sections(\/|$)/,
-  /^\/transactions(\/|$)/,
-  /^\/reports(\/|$)/,
-  /^\/shipments(\/|$)/,
-  /^\/orders(\/|$)/,
-];
-
-const hasConfirmationHandledHeader = (headers: unknown) => {
+const getHeaderEntries = (headers: unknown): Array<[string, string]> => {
   if (!headers) {
-    return false;
+    return [];
   }
 
-  if (
-    typeof Headers !== "undefined" &&
-    headers instanceof Headers &&
-    headers.get("x-confirmation-handled") === "true"
-  ) {
-    return true;
+  if (typeof Headers !== "undefined" && headers instanceof Headers) {
+    return Array.from(headers.entries()).map(([key, value]) => [key, String(value)]);
   }
 
   if (Array.isArray(headers)) {
-    return headers.some(
-      ([key, value]) =>
-        String(key).toLowerCase() === "x-confirmation-handled" &&
-        String(value).toLowerCase() === "true"
-    );
+    return headers.map(([key, value]) => [String(key), String(value)]);
   }
 
   if (typeof headers === "object") {
-    return Object.entries(headers as Record<string, unknown>).some(
-      ([key, value]) =>
-        key.toLowerCase() === "x-confirmation-handled" &&
-        String(value).toLowerCase() === "true"
-    );
+    return Object.entries(headers as Record<string, unknown>).map(([key, value]) => [
+      key,
+      String(value),
+    ]);
   }
 
-  return false;
+  return [];
+};
+
+const hasHeaderValue = (
+  headers: unknown,
+  headerName: string,
+  expectedValue?: string
+) => {
+  const normalizedName = headerName.toLowerCase();
+  const normalizedExpectedValue = expectedValue?.toLowerCase();
+
+  return getHeaderEntries(headers).some(([key, value]) => {
+    if (key.toLowerCase() !== normalizedName) {
+      return false;
+    }
+
+    if (!normalizedExpectedValue) {
+      return true;
+    }
+
+    return value.toLowerCase() === normalizedExpectedValue;
+  });
+};
+
+const mergeHeaders = (
+  headers: unknown,
+  updates: Record<string, string>
+): Record<string, string> => {
+  const merged = new Map<string, string>();
+
+  getHeaderEntries(headers).forEach(([key, value]) => {
+    merged.set(key.toLowerCase(), value);
+  });
+
+  Object.entries(updates).forEach(([key, value]) => {
+    merged.set(key.toLowerCase(), value);
+  });
+
+  return Object.fromEntries(merged.entries());
+};
+
+const createIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `mut-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
 const getRequestMeta = (args: any) => {
@@ -83,10 +107,79 @@ const normalizeUrlPath = (url: unknown) => {
 
 const isAuthEndpoint = (normalizedUrl: string) =>
   normalizedUrl.startsWith("/auth/");
+const isBootstrapAuthProfileEndpoint = (normalizedUrl: string) =>
+  normalizedUrl === "/users/me";
 
 const getAuthUserFromState = (api: any) => {
   const state = api.getState() as { auth?: { user?: unknown | null } };
   return state?.auth?.user;
+};
+
+const withMutationSafetyHeaders = (args: any) => {
+  if (typeof args === "string") {
+    return args;
+  }
+
+  const { method, headers } = getRequestMeta(args);
+
+  if (!MUTATION_METHODS.has(method)) {
+    return args;
+  }
+
+  if (!hasHeaderValue(headers, "x-idempotency-key")) {
+    return {
+      ...args,
+      headers: mergeHeaders(headers, {
+        "x-idempotency-key": createIdempotencyKey(),
+      }),
+    };
+  }
+
+  return args;
+};
+
+const shouldNormalizeRequestBody = (body: unknown): boolean => {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    return false;
+  }
+
+  if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) {
+    return false;
+  }
+
+  if (typeof Blob !== "undefined" && body instanceof Blob) {
+    return false;
+  }
+
+  if (body instanceof ArrayBuffer) {
+    return false;
+  }
+
+  return true;
+};
+
+const withNormalizedMutationBody = (args: any) => {
+  if (typeof args === "string") {
+    return args;
+  }
+
+  const { method } = getRequestMeta(args);
+  if (!MUTATION_METHODS.has(method)) {
+    return args;
+  }
+
+  if (!shouldNormalizeRequestBody(args?.body)) {
+    return args;
+  }
+
+  return {
+    ...args,
+    body: normalizePayloadTextFields(args.body),
+  };
 };
 
 const shouldAttemptTokenRefresh = (
@@ -98,7 +191,7 @@ const shouldAttemptTokenRefresh = (
   }
 
   if (!normalizedUrl) {
-    return true;
+    return authUser !== null && authUser !== undefined;
   }
 
   if (normalizedUrl === "/auth/refresh-token") {
@@ -109,11 +202,25 @@ const shouldAttemptTokenRefresh = (
     return false;
   }
 
-  if (normalizedUrl === "/users/me") {
-    return false;
+  // Before auth bootstrap resolves (authUser === undefined), only
+  // `/users/me` may legitimately require refresh. This avoids refresh spam
+  // for unrelated public/optional requests that return 401.
+  if (authUser === undefined) {
+    return isBootstrapAuthProfileEndpoint(normalizedUrl);
   }
 
   return true;
+};
+
+const shouldSyncUnauthorizedState = (
+  normalizedUrl: string,
+  authUser: unknown | null | undefined
+) => {
+  if (authUser) {
+    return true;
+  }
+
+  return authUser === undefined && isBootstrapAuthProfileEndpoint(normalizedUrl);
 };
 
 const handleUnauthorizedState = (api: any) => {
@@ -124,53 +231,13 @@ const handleUnauthorizedState = (api: any) => {
     return;
   }
 
+  api.dispatch(apiSlice.util.resetApiState());
   api.dispatch(logout());
+  clearPendingAuthIntent();
 
   if (authUser) {
     emitAuthSyncEvent("SIGNED_OUT");
   }
-};
-
-const shouldConfirmMutation = (args: any) => {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  // Dedicated modal confirmations are used throughout the dashboard.
-  // Keep native confirm opt-in to avoid duplicate prompts and false success flows.
-  if (!ENABLE_NATIVE_CONFIRMATION) {
-    return false;
-  }
-
-  const { url, method, headers } = getRequestMeta(args);
-
-  if (!MUTATION_METHODS.has(method)) {
-    return false;
-  }
-
-  const normalizedUrl = typeof url === "string" ? url : "";
-
-  if (normalizedUrl === "/auth/refresh-token") {
-    return false;
-  }
-
-  if (hasConfirmationHandledHeader(headers)) {
-    return false;
-  }
-
-  return CONFIRMATION_REQUIRED_PATHS.some((pattern) =>
-    pattern.test(normalizedUrl)
-  );
-};
-
-const getConfirmationMessage = (args: any) => {
-  const { method } = getRequestMeta(args);
-
-  if (method === "DELETE") {
-    return "Are you sure you want to permanently delete this entry?";
-  }
-
-  return "Are you sure you want to continue? This action will be saved to the database.";
 };
 
 const baseQuery = fetchBaseQuery({
@@ -178,46 +245,60 @@ const baseQuery = fetchBaseQuery({
   credentials: "include",
 });
 
-const baseQueryWithReauth = async (args, api, extraOptions) => {
-  if (shouldConfirmMutation(args)) {
-    const isConfirmed = window.confirm(getConfirmationMessage(args));
+let refreshRequestPromise: Promise<any> | null = null;
 
-    if (!isConfirmed) {
-      return {
-        error: {
-          status: 499,
-          data: { message: "Action cancelled by user." },
-        },
-      };
-    }
+const refreshAuthToken = (api: any, extraOptions: any) => {
+  if (!refreshRequestPromise) {
+    refreshRequestPromise = Promise.resolve(
+      baseQuery(
+        { url: "/auth/refresh-token", method: "POST" },
+        api,
+        extraOptions
+      )
+    ).finally(() => {
+      refreshRequestPromise = null;
+    });
   }
 
-  let result = await baseQuery(args, api, extraOptions);
+  return refreshRequestPromise;
+};
+
+const baseQueryWithReauth = async (args, api, extraOptions) => {
+  const requestArgs = withMutationSafetyHeaders(withNormalizedMutationBody(args));
+
+  let result = await baseQuery(requestArgs, api, extraOptions);
 
   if (result.error?.status === 401) {
-    const normalizedUrl = normalizeUrlPath(getRequestMeta(args).url);
+    const normalizedUrl = normalizeUrlPath(getRequestMeta(requestArgs).url);
     const authUser = getAuthUserFromState(api);
 
     if (!shouldAttemptTokenRefresh(normalizedUrl, authUser)) {
-      if (!isAuthEndpoint(normalizedUrl)) {
+      if (
+        !isAuthEndpoint(normalizedUrl) &&
+        shouldSyncUnauthorizedState(normalizedUrl, authUser)
+      ) {
         handleUnauthorizedState(api);
       }
       return result;
     }
 
     // Try refresh the token
-    const refreshResult = await baseQuery(
-      { url: "/auth/refresh-token", method: "POST" },
-      api,
-      extraOptions
-    );
+    const refreshResult = await refreshAuthToken(api, extraOptions);
 
     if (refreshResult.data) {
       // If there's data, retry the original req with the new token
-      result = await baseQuery(args, api, extraOptions);
+      result = await baseQuery(requestArgs, api, extraOptions);
+      if (
+        result.error?.status === 401 &&
+        shouldSyncUnauthorizedState(normalizedUrl, authUser)
+      ) {
+        handleUnauthorizedState(api);
+      }
     } else {
       // If refresh fails, clear local auth state once.
-      handleUnauthorizedState(api);
+      if (shouldSyncUnauthorizedState(normalizedUrl, authUser)) {
+        handleUnauthorizedState(api);
+      }
     }
   }
 
@@ -231,15 +312,21 @@ export const apiSlice = createApi({
     "User",
     "Product",
     "Category",
+    "Address",
     "Cart",
     "Order",
-    "Review",
     "Section",
     "Transactions",
     "Logs",
     "Attribute",
     "Variant",
+    "DeliveryRate",
+    // Payment-related tags (used by paymentApiSlice which injects into this slice)
+    "OutstandingPayments",
+    "CreditLedger",
+    "PaymentAudit",
+    "Dealers",
+    "DealerPrices",
   ],
   endpoints: () => ({}),
 });
-

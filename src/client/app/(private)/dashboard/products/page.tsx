@@ -4,6 +4,7 @@ import {
   useCreateProductMutation,
   useDeleteProductMutation,
   useGetAllProductsQuery,
+  useLazyGetProductByIdQuery,
   useUpdateProductMutation,
 } from "@/app/store/apis/ProductApi";
 import { useState } from "react";
@@ -15,6 +16,75 @@ import ProductFileUpload from "./ProductFileUpload";
 import { usePathname } from "next/navigation";
 import { ProductFormData } from "./product.types";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import usePageQuery from "@/app/hooks/network/usePageQuery";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+
+const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
+
+const normalizeVariantAttributes = (
+  attributes: any[] | undefined
+): { attributeId: string; valueId: string }[] =>
+  (Array.isArray(attributes) ? attributes : [])
+    .map((attribute) => ({
+      attributeId: String(
+        attribute?.attributeId || attribute?.attribute?.id || ""
+      ).trim(),
+      valueId: String(attribute?.valueId || attribute?.value?.id || "").trim(),
+    }))
+    .filter((attribute) => attribute.attributeId && attribute.valueId);
+
+const mapProductToFormData = (product: any): ProductFormData => ({
+  id: String(product?.id || ""),
+  name: product?.name || "",
+  isNew: Boolean(product?.isNew),
+  isTrending: Boolean(product?.isTrending),
+  isBestSeller: Boolean(product?.isBestSeller),
+  isFeatured: Boolean(product?.isFeatured),
+  categoryId: product?.categoryId || "",
+  description: product?.description || "",
+  variants: (Array.isArray(product?.variants) ? product.variants : []).map(
+    (variant: any) => ({
+      ...variant,
+      id: String(variant?.id || ""),
+      sku: variant?.sku ?? "",
+      price: Number(variant?.price ?? 0),
+    defaultDealerPrice:
+      variant?.defaultDealerPrice === null ||
+      variant?.defaultDealerPrice === undefined
+        ? null
+        : Number(variant.defaultDealerPrice),
+    stock: Number(variant?.stock ?? 0),
+    lowStockThreshold: Number(variant?.lowStockThreshold ?? 10),
+    barcode: variant?.barcode ?? "",
+    attributes: normalizeVariantAttributes(variant?.attributes),
+      images: Array.isArray(variant?.images) ? variant.images : [],
+    })
+  ),
+});
+
+const extractProductPayload = (response: any): any | null => {
+  if (!response || typeof response !== "object") {
+    return null;
+  }
+
+  if (response.id) {
+    return response;
+  }
+
+  if (response.product?.id) {
+    return response.product;
+  }
+
+  if (response.data?.id) {
+    return response.data;
+  }
+
+  if (response.data?.product?.id) {
+    return response.data.product;
+  }
+
+  return null;
+};
 
 const ProductsDashboard = () => {
   const { showToast } = useToast();
@@ -23,12 +93,15 @@ const ProductsDashboard = () => {
   const [updateProduct, { isLoading: isUpdating, error: updateError }] =
     useUpdateProductMutation();
   const [deleteProduct, { isLoading: isDeleting }] = useDeleteProductMutation();
+  const [fetchProductById, { isFetching: isFetchingEditProduct }] =
+    useLazyGetProductByIdQuery();
 
   const pathname = usePathname();
   const shouldFetchProducts = pathname === "/dashboard/products";
+  const { page, setPage } = usePageQuery();
 
-  const { data, isLoading } = useGetAllProductsQuery(
-    { select: { variants: true } }, // Ensure variants are included
+  const { data, isLoading, refetch } = useGetAllProductsQuery(
+    { page },
     { skip: !shouldFetchProducts }
   );
   const products = data?.products || [];
@@ -55,20 +128,24 @@ const ProductsDashboard = () => {
     data.variants.forEach((variant, index) => {
       payload.append(`variants[${index}][sku]`, variant.sku || "");
       payload.append(`variants[${index}][price]`, variant.price.toString());
+      payload.append(
+        `variants[${index}][defaultDealerPrice]`,
+        variant.defaultDealerPrice === null ||
+          variant.defaultDealerPrice === undefined
+          ? ""
+          : String(variant.defaultDealerPrice)
+      );
       payload.append(`variants[${index}][stock]`, variant.stock.toString());
       payload.append(
         `variants[${index}][lowStockThreshold]`,
         variant.lowStockThreshold?.toString() || "10"
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
-      payload.append(
-        `variants[${index}][warehouseLocation]`,
-        variant.warehouseLocation || ""
-      );
+      const normalizedAttributes = normalizeVariantAttributes(variant.attributes);
       // Append attributes as JSON
       payload.append(
         `variants[${index}][attributes]`,
-        JSON.stringify(variant.attributes || [])
+        JSON.stringify(normalizedAttributes)
       );
       // Track image indexes for this variant
       if (Array.isArray(variant.images) && variant.images.length > 0) {
@@ -90,12 +167,6 @@ const ProductsDashboard = () => {
       }
     });
 
-    // Log the payload for debugging
-    console.log("Creating product with payload:");
-    for (const [key, value] of payload.entries()) {
-      console.log(`${key}:`, value);
-    }
-
     try {
       await createProduct(payload).unwrap();
       setIsModalOpen(false);
@@ -107,7 +178,7 @@ const ProductsDashboard = () => {
   };
 
   const handleUpdateProduct = async (data: ProductFormData) => {
-    if (!editingProduct) return;
+    if (!editingProduct || isUpdating) return;
 
     const payload = new FormData();
     payload.append("name", data.name || "");
@@ -123,37 +194,42 @@ const ProductsDashboard = () => {
       payload.append(`variants[${index}][id]`, variant.id || "");
       payload.append(`variants[${index}][sku]`, variant.sku || "");
       payload.append(`variants[${index}][price]`, String(variant.price ?? 0));
+      payload.append(
+        `variants[${index}][defaultDealerPrice]`,
+        variant.defaultDealerPrice === null ||
+          variant.defaultDealerPrice === undefined
+          ? ""
+          : String(variant.defaultDealerPrice)
+      );
       payload.append(`variants[${index}][stock]`, String(variant.stock ?? 0));
       payload.append(
         `variants[${index}][lowStockThreshold]`,
         String(variant.lowStockThreshold ?? 10)
       );
       payload.append(`variants[${index}][barcode]`, variant.barcode || "");
-      payload.append(
-        `variants[${index}][warehouseLocation]`,
-        variant.warehouseLocation || ""
-      );
+      const normalizedAttributes = normalizeVariantAttributes(variant.attributes);
       payload.append(
         `variants[${index}][attributes]`,
-        JSON.stringify(variant.attributes || [])
+        JSON.stringify(normalizedAttributes)
       );
 
-      const existingImages: string[] = [];
+      const orderedImages: string[] = [];
       const imageIndexes: number[] = [];
 
       (variant.images || []).forEach((image) => {
         if (image instanceof File) {
           payload.append("images", image);
+          orderedImages.push(`${UPLOADED_IMAGE_TOKEN_PREFIX}${imageIndex}`);
           imageIndexes.push(imageIndex);
           imageIndex += 1;
         } else if (typeof image === "string" && image.trim()) {
-          existingImages.push(image);
+          orderedImages.push(image);
         }
       });
 
       payload.append(
         `variants[${index}][images]`,
-        JSON.stringify(existingImages)
+        JSON.stringify(orderedImages)
       );
       payload.append(
         `variants[${index}][imageIndexes]`,
@@ -162,22 +238,63 @@ const ProductsDashboard = () => {
     });
 
     try {
-      await updateProduct({
+      const response = await updateProduct({
         id: editingProduct.id!,
         data: payload,
       }).unwrap();
+      const didChange = Boolean(
+        (response as any)?.didChange ?? (response as any)?.data?.didChange ?? true
+      );
+
+      if (!didChange) {
+        showToast("No changes detected.", "info");
+        return;
+      }
+
       setIsModalOpen(false);
       setEditingProduct(null);
       showToast("Product updated successfully", "success");
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to update product:", err);
-      showToast("Failed to update product", "error");
+      showToast(getApiErrorMessage(err, "Failed to update product"), "error");
     }
   };
 
   const handleDeleteProduct = (id: string) => {
     setProductToDelete(id);
     setIsConfirmModalOpen(true);
+  };
+
+  const handleOpenEditProduct = async (row: any) => {
+    try {
+      const response = await fetchProductById(String(row.id)).unwrap();
+      const fullProduct = extractProductPayload(response);
+
+      if (!fullProduct) {
+        throw new Error("Invalid product payload received for edit mode.");
+      }
+
+      setEditingProduct(mapProductToFormData(fullProduct));
+      setIsModalOpen(true);
+    } catch (error) {
+      console.error("Failed to fetch product details for edit:", error);
+      const fallbackProduct = mapProductToFormData(row);
+
+      if (fallbackProduct.variants.length > 0) {
+        setEditingProduct(fallbackProduct);
+        setIsModalOpen(true);
+        showToast(
+          "Loaded cached product data. Some latest variant details may be missing.",
+          "info"
+        );
+        return;
+      }
+
+      showToast(
+        getApiErrorMessage(error, "Failed to load full product details for editing."),
+        "error"
+      );
+    }
   };
 
   const confirmDelete = async () => {
@@ -198,7 +315,9 @@ const ProductsDashboard = () => {
     setProductToDelete(null);
   };
 
-  const handleFileUploadSuccess = () => {};
+  const handleFileUploadSuccess = () => {
+    void refetch();
+  };
 
   const columns = [
     {
@@ -216,12 +335,12 @@ const ProductsDashboard = () => {
       label: "Variants",
       sortable: false,
       render: (row: any) => (
-        <div>
+        <div className="flex flex-wrap gap-2">
           {row.variants?.length > 0 ? (
             row.variants.map((v: any) => (
               <span
                 key={v.id}
-                className="inline-block mr-2 bg-gray-100 px-2 py-1 rounded"
+                className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700"
               >
                 {v.sku}
               </span>
@@ -236,36 +355,27 @@ const ProductsDashboard = () => {
       key: "salesCount",
       label: "Sales Count",
       sortable: true,
-      render: (row: any) => row.salesCount,
+      render: (row: any) => <span className="tabular-nums">{row.salesCount}</span>,
+      align: "right" as const,
     },
     {
       key: "actions",
       label: "Actions",
       render: (row: any) => (
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => {
-              setEditingProduct({
-                id: row.id,
-                name: row.name,
-                isNew: row.isNew,
-                isTrending: row.isTrending,
-                isBestSeller: row.isBestSeller,
-                isFeatured: row.isFeatured,
-                categoryId: row.categoryId,
-                description: row.description || "",
-                variants: row.variants || [],
-              });
-              setIsModalOpen(true);
-            }}
-            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            type="button"
+            onClick={() => void handleOpenEditProduct(row)}
+            disabled={isFetchingEditProduct}
+            className="flex items-center gap-1 text-primary hover:text-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:text-[var(--color-primary-muted)]"
           >
             <Edit size={16} />
-            Edit
+            {isFetchingEditProduct ? "Loading..." : "Edit"}
           </button>
           <button
+            type="button"
             onClick={() => handleDeleteProduct(row.id)}
-            className="text-red-600 hover:text-red-800 flex items-center gap-1"
+            className="flex items-center gap-1 text-red-600 hover:text-red-800"
             disabled={isDeleting}
           >
             <Trash2 size={16} />
@@ -279,26 +389,28 @@ const ProductsDashboard = () => {
   ];
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
+    <div className="p-4 sm:p-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Product List</h1>
-          <p className="text-sm text-gray-500">Manage and view your products</p>
+          <h1 className="type-h4 text-gray-900">Product List</h1>
+          <p className="type-body-sm text-gray-500">Manage and view your products</p>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex flex-wrap gap-3">
           <button
+            type="button"
             onClick={() => setIsFileUploadOpen(!isFileUploadOpen)}
-            className="px-4 py-2 bg-[#5d8a02] text-white rounded-md flex items-center"
+            className="btn-base h-10 rounded-md bg-success px-4 text-white hover:bg-[var(--color-success-hover)]"
           >
             <Upload className="mr-2 h-4 w-4" />
             Excel Sheet
           </button>
           <button
+            type="button"
             onClick={() => {
               setEditingProduct(null);
               setIsModalOpen(true);
             }}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+            className="btn-primary h-10 rounded-md px-4"
           >
             Create Product
           </button>
@@ -308,7 +420,7 @@ const ProductsDashboard = () => {
       {isFileUploadOpen && (
         <div className="mb-6 bg-white p-5 rounded-lg shadow-sm border border-gray-200">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-medium">Import Products</h2>
+            <h2 className="text-base sm:text-lg font-semibold">Import Products</h2>
             <button
               onClick={() => setIsFileUploadOpen(false)}
               className="text-gray-500 hover:text-gray-700"
@@ -325,11 +437,12 @@ const ProductsDashboard = () => {
         columns={columns}
         isLoading={isLoading}
         emptyMessage="No products available"
-        onRefresh={() => console.log("refreshed")}
+        onRefresh={refetch}
         totalPages={data?.totalPages}
         totalResults={data?.totalResults}
         resultsPerPage={data?.resultsPerPage}
         currentPage={data?.currentPage}
+        onPageChange={setPage}
       />
 
       <ProductModal
@@ -349,6 +462,9 @@ const ProductsDashboard = () => {
         message="Are you sure you want to delete this product? This action cannot be undone."
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+        type="danger"
+        isConfirming={isDeleting}
+        disableCancelWhileConfirming
       />
     </div>
   );

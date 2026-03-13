@@ -44,6 +44,7 @@ export const GET_ANALYTICS_OVERVIEW = gql`
       id
       productId
       productSlug
+      sku
       name
       quantity
       revenue
@@ -94,6 +95,7 @@ export const GET_ALL_ANALYTICS = gql`
         id
         name
         email
+        customerType
         orderCount
         totalSpent
         engagementScore
@@ -109,6 +111,7 @@ export const GET_ALL_ANALYTICS = gql`
       id
       productId
       productSlug
+      sku
       name
       quantity
       revenue
@@ -123,6 +126,7 @@ export const GET_ALL_ANALYTICS = gql`
       mostViewedProducts {
         productId
         productSlug
+        productSku
         productName
         viewCount
       }

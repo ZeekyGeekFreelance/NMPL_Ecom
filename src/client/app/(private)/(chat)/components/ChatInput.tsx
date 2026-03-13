@@ -1,25 +1,23 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { 
-  Send, 
-  Mic, 
-  Image as ImageIcon, 
-  Paperclip, 
-  Smile, 
-  X, 
-  Check,
+import {
+  Send,
+  Mic,
+  Image as ImageIcon,
+  Paperclip,
+  Smile,
+  X,
   Pause,
-  Square
+  Square,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface ChatInputProps {
   message: string;
   setMessage: (message: string) => void;
-  onSendMessage: (file?: File, content?: string) => void;
+  onSendMessage: (file?: File) => void;
   disabled?: boolean;
-  isTyping?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -27,7 +25,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   setMessage,
   onSendMessage,
   disabled = false,
-  isTyping = false
 }) => {
   const [recording, setRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -36,27 +33,27 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioChunks = useRef<Blob[]>([]);
   const recordingInterval = useRef<NodeJS.Timeout | null>(null);
 
-  // Cleanup preview URL when file changes
   useEffect(() => {
-    if (selectedFile) {
-      const url = URL.createObjectURL(selectedFile);
-      setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
-    } else {
+    if (!selectedFile || !selectedFile.type.startsWith("image/")) {
       setPreviewUrl(null);
+      return;
     }
+
+    const url = URL.createObjectURL(selectedFile);
+    setPreviewUrl(url);
+
+    return () => URL.revokeObjectURL(url);
   }, [selectedFile]);
 
-  // Recording timer
   useEffect(() => {
     if (recording) {
       recordingInterval.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime((prev) => prev + 1);
       }, 1000);
     } else {
       if (recordingInterval.current) {
@@ -76,7 +73,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const formatRecordingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,8 +96,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
       };
 
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunks.current, { type: "audio/mp3" });
-        setAudioBlob(audioBlob);
+        const nextAudioBlob = new Blob(audioChunks.current, { type: "audio/mp3" });
+        setAudioBlob(nextAudioBlob);
         stream.getTracks().forEach((track) => track.stop());
       };
 
@@ -128,32 +125,31 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const confirmSend = () => {
-    if (selectedFile) {
-      onSendMessage(selectedFile, message);
-      setSelectedFile(null);
-      setPreviewUrl(null);
-    } else if (audioBlob) {
-      const file = new File([audioBlob], "voice_message.mp3", {
-        type: "audio/mp3",
-      });
-      onSendMessage(file, message);
-      setAudioBlob(null);
+  const buildAudioFile = () => {
+    if (!audioBlob) {
+      return undefined;
     }
-    setMessage("");
+
+    return new File([audioBlob], "voice_message.mp3", {
+      type: "audio/mp3",
+    });
   };
 
   const handleSend = () => {
-    if (message.trim() || selectedFile || audioBlob) {
-      onSendMessage(selectedFile || audioBlob ? undefined : undefined, message.trim());
-      setMessage("");
-      setSelectedFile(null);
-      setAudioBlob(null);
-      setPreviewUrl(null);
+    if (!message.trim() && !selectedFile && !audioBlob) {
+      return;
     }
+
+    const attachment = selectedFile || buildAudioFile();
+    onSendMessage(attachment);
+
+    setMessage("");
+    setSelectedFile(null);
+    setAudioBlob(null);
+    setPreviewUrl(null);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -163,13 +159,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const emojis = ["😊", "😂", "❤️", "👍", "🎉", "🔥", "😎", "🤔", "😢", "😡"];
 
   const addEmoji = (emoji: string) => {
-    setMessage(prev => prev + emoji);
+    setMessage(`${message}${emoji}`);
     setShowEmojiPicker(false);
   };
 
   return (
     <div className="border-t border-gray-200 bg-white p-4">
-      {/* Media Preview */}
       <AnimatePresence>
         {(selectedFile || audioBlob) && (
           <motion.div
@@ -181,10 +176,19 @@ const ChatInput: React.FC<ChatInputProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {selectedFile && (
-                  <>
-                    <ImageIcon size={20} className="text-blue-500" />
+                  <div className="flex items-center gap-2">
+                    {previewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={previewUrl}
+                        alt="Attachment preview"
+                        className="h-10 w-10 rounded object-cover border border-gray-200"
+                      />
+                    ) : (
+                      <ImageIcon size={20} className="text-blue-500" />
+                    )}
                     <span className="text-sm font-medium">{selectedFile.name}</span>
-                  </>
+                  </div>
                 )}
                 {audioBlob && (
                   <>
@@ -204,7 +208,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Recording Indicator */}
       <AnimatePresence>
         {recording && (
           <motion.div
@@ -231,9 +234,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Input Area */}
       <div className="flex items-end gap-2">
-        {/* File Upload */}
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
@@ -242,7 +243,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           <Paperclip size={20} />
         </button>
 
-        {/* Emoji Picker */}
         <div className="relative">
           <button
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -251,7 +251,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           >
             <Smile size={20} />
           </button>
-          
+
           <AnimatePresence>
             {showEmojiPicker && (
               <motion.div
@@ -276,20 +276,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
           </AnimatePresence>
         </div>
 
-        {/* Text Input */}
         <div className="flex-1 relative">
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             disabled={disabled}
             className="w-full resize-none border border-gray-300 rounded-lg px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 max-h-32"
             rows={1}
-            style={{ minHeight: '44px' }}
+            style={{ minHeight: "44px" }}
           />
-          
-          {/* Send Button */}
+
           <button
             onClick={handleSend}
             disabled={disabled || (!message.trim() && !selectedFile && !audioBlob)}
@@ -299,21 +297,19 @@ const ChatInput: React.FC<ChatInputProps> = ({
           </button>
         </div>
 
-        {/* Voice Recording */}
         <button
           onClick={recording ? stopRecording : startRecording}
           disabled={disabled}
           className={`p-3 rounded-lg transition-colors disabled:opacity-50 ${
-            recording 
-              ? 'bg-red-500 text-white hover:bg-red-600' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            recording
+              ? "bg-red-500 text-white hover:bg-red-600"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
           {recording ? <Pause size={20} /> : <Mic size={20} />}
         </button>
       </div>
 
-      {/* Hidden File Input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -321,17 +317,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt"
         className="hidden"
       />
-
-      {/* Typing Indicator */}
-      {isTyping && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="mt-2 text-sm text-gray-500"
-        >
-          Customer is typing...
-        </motion.div>
-      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Wrench, Clock, RefreshCw, Mail, Wifi, WifiOff } from "lucide-react";
+import { PLATFORM_NAME, SUPPORT_EMAIL } from "@/app/lib/constants/config";
 
 const MaintenancePage = () => {
   const [isOnline, setIsOnline] = useState(true);
@@ -118,8 +119,8 @@ const MaintenancePage = () => {
           </h1>
           <p className="text-gray-600 text-lg leading-relaxed max-w-md mx-auto">
             {isOnline
-              ? "We're currently performing scheduled maintenance to improve your experience. Please check back soon."
-              : "It looks like you've lost your internet connection. Please check your network and try again."}
+              ? `We're currently performing scheduled maintenance on ${PLATFORM_NAME} to improve your experience. Please check back soon.`
+              : "It looks like you&apos;ve lost your internet connection. Please check your network and try again."}
           </p>
         </motion.div>
 
@@ -214,7 +215,7 @@ const MaintenancePage = () => {
 
           {retryCount > 0 && (
             <p className="text-sm text-gray-500">
-              Attempt {retryCount} - We're working to restore service
+              Attempt {retryCount} - We&apos;re working to restore service
             </p>
           )}
         </motion.div>
@@ -234,8 +235,7 @@ const MaintenancePage = () => {
               </span>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Contact our support team at support@ss-commerce.com for urgent
-              matters
+              Contact our support team at {SUPPORT_EMAIL} for urgent matters
             </p>
           </div>
         </motion.div>

@@ -49,7 +49,7 @@ const DropdownMultiSelect: React.FC<DropdownMultiSelectProps> = ({
     <div className="relative" ref={dropdownRef}>
       <div
         ref={buttonRef}
-        className={`flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-gray-200 transition-all duration-200 cursor-pointer hover:border-gray-300 focus:ring-2 focus:ring-blue-100 ${className}`}
+        className={`flex h-11 items-center justify-between rounded-lg border border-gray-200 bg-white px-3.5 transition-all duration-200 cursor-pointer hover:border-gray-300 focus:ring-2 focus:ring-blue-100 ${className || ""}`}
         onClick={() => setIsOpen((prev) => !prev)}
         aria-disabled={disabled}
       >

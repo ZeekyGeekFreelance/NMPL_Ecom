@@ -4,12 +4,16 @@ import { apiSlice } from "../slices/ApiSlice";
 interface Variant {
   id: string;
   productId: string;
+  product?: {
+    id: string;
+    name: string;
+  };
   sku: string;
   price: number;
+  defaultDealerPrice?: number | null;
   stock: number;
   lowStockThreshold?: number;
   barcode?: string;
-  warehouseLocation?: string;
   attributes: Array<{
     attributeId: string;
     valueId: string;
@@ -51,7 +55,6 @@ interface CreateVariantRequest {
   stock: number;
   lowStockThreshold?: number;
   barcode?: string;
-  warehouseLocation?: string;
   attributes: Array<{
     attributeId: string;
     valueId: string;
@@ -64,7 +67,6 @@ interface UpdateVariantRequest {
   stock?: number;
   lowStockThreshold?: number;
   barcode?: string;
-  warehouseLocation?: string;
   attributes?: Array<{
     attributeId: string;
     valueId: string;

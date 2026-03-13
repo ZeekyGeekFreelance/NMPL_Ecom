@@ -6,10 +6,13 @@ import authorizeRoleHierarchy from "@/shared/middlewares/authorizeRoleHierarchy"
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
   UpdateUserDto,
+  UpdateOwnProfileDto,
   CreateAdminDto,
   CreateDealerDto,
   UpdateDealerStatusDto,
   SetDealerPricesDto,
+  UpdateBillingSupervisorDto,
+  UpdateAdminPasswordDto,
 } from "./user.dto";
 
 const router = Router();
@@ -30,6 +33,43 @@ const userController = makeUserController();
  *         description: Unauthorized. Token is invalid or missing.
  */
 router.get("/me", protect, userController.getMe);
+
+/**
+ * @swagger
+ * /users/me:
+ *   patch:
+ *     summary: Update authenticated profile
+ *     description: Updates the display name and/or phone number of the authenticated user.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 80
+ *               phone:
+ *                 type: string
+ *                 pattern: "^[0-9()+\\-\\s]{7,20}$"
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully.
+ *       400:
+ *         description: Invalid input data.
+ *       401:
+ *         description: Unauthorized. Token is invalid or missing.
+ */
+router.patch(
+  "/me",
+  protect,
+  validateDto(UpdateOwnProfileDto),
+  userController.updateCurrentUserProfile
+);
 
 /**
  * @swagger
@@ -71,6 +111,22 @@ router.post(
   authorizeRole("SUPERADMIN"),
   validateDto(CreateAdminDto),
   userController.createAdmin
+);
+
+router.patch(
+  "/:id/billing-supervisor",
+  protect,
+  authorizeRole("SUPERADMIN"),
+  validateDto(UpdateBillingSupervisorDto),
+  userController.updateBillingSupervisor
+);
+
+router.patch(
+  "/:id/admin-password",
+  protect,
+  authorizeRole("SUPERADMIN"),
+  validateDto(UpdateAdminPasswordDto),
+  userController.updateAdminPassword
 );
 
 /**
@@ -171,7 +227,7 @@ router.get(
 router.get(
   "/:id",
   protect,
-  authorizeRole("SUPERADMIN"),
+  authorizeRole("ADMIN", "SUPERADMIN"),
   userController.getUserById
 );
 
@@ -204,8 +260,8 @@ router.get(
  * @swagger
  * /users/{id}:
  *   put:
- *     summary: Update the authenticated user's profile
- *     description: Updates the profile of the authenticated user.
+ *     summary: Update a user by ID
+ *     description: Updates a user by ID (SuperAdmin only, role hierarchy enforced).
  *     parameters:
  *       - in: path
  *         name: id

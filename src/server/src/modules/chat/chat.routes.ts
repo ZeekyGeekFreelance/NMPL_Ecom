@@ -1,12 +1,11 @@
 import express from "express";
-import { Server as SocketIOServer } from "socket.io";
 import { makeChatController } from "./chat.factory";
 import protect from "@/shared/middlewares/protect";
 import upload from "@/shared/middlewares/upload";
 
-export const configureChatRoutes = (io: SocketIOServer) => {
+export const configureChatRoutes = () => {
   const router = express.Router();
-  const chatController = makeChatController(io);
+  const chatController = makeChatController();
 
   /**
    * @swagger

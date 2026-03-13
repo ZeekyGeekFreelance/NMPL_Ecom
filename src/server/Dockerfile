@@ -1,28 +1,26 @@
-# Use lightweight Node.js base
 FROM node:22-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Install dependencies only — source is mounted as a volume at runtime
 COPY package*.json ./
-
-# Install dependencies (including Prisma & TS)
 RUN npm ci
 
-# Copy Prisma schema and generate client
+# Copy prisma schema so the Prisma client can be generated at image-build time.
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copy project files
-COPY . .
+# Copy load-env.js and other server-side scripts required at runtime.
+# This is critical for production builds where source is NOT volume-mounted:
+# scripts/load-env.js must be present for nodemon (and ts-node) to pre-load
+# environment variables before any TypeScript module is evaluated.
+COPY scripts ./scripts
 
-# Build TypeScript
-RUN npm run build
+# Remaining source files arrive via docker-compose volume mount (./server:/app)
+# in development, so no COPY . . is needed here.
+# For production, the Dockerfile.production image handles the full COPY + tsc build.
 
-# Set environment variables
-ENV PORT=5000
 EXPOSE 5000
 
-# Run compiled server
-CMD ["npm", "start"]
+# Default CMD — overridden by docker-compose command in development.
+CMD ["npm", "run", "dev"]

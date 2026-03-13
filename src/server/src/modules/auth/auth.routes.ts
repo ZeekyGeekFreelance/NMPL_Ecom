@@ -2,31 +2,34 @@ import express from "express";
 import { makeAuthController } from "./auth.factory";
 import passport from "passport";
 import { cookieOptions } from "@/shared/constants";
-import { CartService } from "../cart/cart.service";
-import { CartRepository } from "../cart/cart.repository";
 import handleSocialLogin from "@/shared/utils/auth/handleSocialLogin";
 import AppError from "@/shared/errors/AppError";
+import optionalAuth from "@/shared/middlewares/optionalAuth";
+import protect from "@/shared/middlewares/protect";
 import {
   authRateLimiter,
+  otpRateLimiter,
   passwordResetLimiter,
+  refreshTokenLimiter,
   registrationLimiter,
 } from "@/shared/middlewares/rateLimiter";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
-  ForgotPasswordDto,
+  ApplyDealerAccessDto,
+  ChangePasswordOnFirstLoginDto,
   RegisterDto,
   RequestRegistrationOtpDto,
+  ForgotPasswordDto,
   ResetPasswordDto,
   SigninDto,
 } from "./auth.dto";
+import { config } from "@/config";
 
 const router = express.Router();
 const authController = makeAuthController();
-const cartService = new CartService(new CartRepository());
-const CLIENT_URL_DEV = process.env.CLIENT_URL_DEV;
-const CLIENT_URL_PROD = process.env.CLIENT_URL_PROD;
-const env = process.env.NODE_ENV;
-const clientRedirectUrl = env === "production" ? CLIENT_URL_PROD : CLIENT_URL_DEV;
+const env = config.nodeEnv;
+const clientRedirectUrl =
+  env === "production" ? config.urls.clientProd : config.urls.clientDev;
 
 if (!clientRedirectUrl) {
   throw new Error("CLIENT_URL_DEV/CLIENT_URL_PROD must be configured.");
@@ -42,26 +45,26 @@ const isProviderConfigured = (provider: "google" | "facebook" | "twitter") => {
 
   if (provider === "google") {
     return isConfigured(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      isProd ? process.env.GOOGLE_CALLBACK_URL_PROD : process.env.GOOGLE_CALLBACK_URL_DEV
+      config.raw.GOOGLE_CLIENT_ID,
+      config.raw.GOOGLE_CLIENT_SECRET,
+      isProd ? config.raw.GOOGLE_CALLBACK_URL_PROD : config.raw.GOOGLE_CALLBACK_URL_DEV
     );
   }
 
   if (provider === "facebook") {
     return isConfigured(
-      process.env.FACEBOOK_APP_ID,
-      process.env.FACEBOOK_APP_SECRET,
+      config.raw.FACEBOOK_APP_ID,
+      config.raw.FACEBOOK_APP_SECRET,
       isProd
-        ? process.env.FACEBOOK_CALLBACK_URL_PROD
-        : process.env.FACEBOOK_CALLBACK_URL_DEV
+        ? config.raw.FACEBOOK_CALLBACK_URL_PROD
+        : config.raw.FACEBOOK_CALLBACK_URL_DEV
     );
   }
 
   return isConfigured(
-    process.env.TWITTER_CONSUMER_KEY,
-    process.env.TWITTER_CONSUMER_SECRET,
-    isProd ? process.env.TWITTER_CALLBACK_URL_PROD : process.env.TWITTER_CALLBACK_URL_DEV
+    config.raw.TWITTER_CONSUMER_KEY,
+    config.raw.TWITTER_CONSUMER_SECRET,
+    isProd ? config.raw.TWITTER_CALLBACK_URL_PROD : config.raw.TWITTER_CALLBACK_URL_DEV
   );
 };
 
@@ -99,12 +102,6 @@ router.get(
 
     res.cookie("refreshToken", refreshToken, cookieOptions);
     res.cookie("accessToken", accessToken, cookieOptions);
-
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
 
     res.redirect(clientRedirectUrl);
   }
@@ -147,12 +144,6 @@ router.get(
 
     res.cookie("refreshToken", refreshToken, cookieOptions);
     res.cookie("accessToken", accessToken, cookieOptions);
-
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
 
     res.redirect(clientRedirectUrl);
   }
@@ -199,12 +190,6 @@ router.get(
     res.cookie("refreshToken", refreshToken, cookieOptions);
     res.cookie("accessToken", accessToken, cookieOptions);
 
-    const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
-
     res.redirect(clientRedirectUrl);
   }
 );
@@ -231,7 +216,7 @@ router.get(
  */
 router.post(
   "/request-registration-otp",
-  registrationLimiter,
+  otpRateLimiter,
   validateDto(RequestRegistrationOtpDto),
   authController.requestRegistrationOtp
 );
@@ -267,6 +252,13 @@ router.post(
   registrationLimiter,
   validateDto(RegisterDto),
   authController.signup
+);
+
+router.post(
+  "/dealer/apply",
+  protect,
+  validateDto(ApplyDealerAccessDto),
+  authController.applyDealerAccess
 );
 
 /**
@@ -353,7 +345,7 @@ router.post("/sign-in", authRateLimiter, validateDto(SigninDto), authController.
  *       200:
  *         description: Successfully refreshed the token.
  */
-router.post("/refresh-token", authController.refreshToken);
+router.post("/refresh-token", refreshTokenLimiter, authController.refreshToken);
 
 /**
  * @swagger
@@ -413,6 +405,20 @@ router.post(
 );
 
 /**
+ * POST /change-password
+ * Forced first-login password change for legacy dealer accounts.
+ * No auth required — the user provides their email + temporary password for
+ * re-verification, and the new password they want to set.
+ * On success, full session cookies are issued so the dealer can proceed.
+ */
+router.post(
+  "/change-password",
+  authRateLimiter,
+  validateDto(ChangePasswordOnFirstLoginDto),
+  authController.changePasswordOnFirstLogin
+);
+
+/**
  * @swagger
  * /sign-out:
  *   get:
@@ -422,6 +428,6 @@ router.post(
  *       200:
  *         description: User successfully signed out.
  */
-router.get("/sign-out", authController.signout);
+router.get("/sign-out", optionalAuth, authController.signout);
 
 export default router;

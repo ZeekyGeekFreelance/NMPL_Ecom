@@ -3,23 +3,32 @@ import { makeExecutableSchema } from "@graphql-tools/schema";
 import { productResolvers } from "./resolver";
 
 const typeDefs = gql`
-  scalar DateTime
-
   type Product {
     id: String!
     slug: String!
     name: String!
+    thumbnail: String
+    price: Float!
     description: String
     salesCount: Int!
     isNew: Boolean!
     isFeatured: Boolean!
     isTrending: Boolean!
     isBestSeller: Boolean!
-    averageRating: Float!
-    reviewCount: Int!
-    variants: [ProductVariant!]!
+    variants(first: Int, skip: Int): [ProductVariant!]!
     category: Category
-    reviews: [Review!]!
+  }
+
+  type ProductCard {
+    id: String!
+    name: String!
+    slug: String!
+    thumbnail: String
+    minPrice: Float!
+    maxPrice: Float!
+    dealerMinPrice: Float
+    dealerMaxPrice: Float
+    category: Category
   }
 
   type ProductVariant {
@@ -27,10 +36,10 @@ const typeDefs = gql`
     sku: String!
     images: [String!]!
     price: Float!
+    retailPrice: Float!
     stock: Int!
     lowStockThreshold: Int!
     barcode: String
-    warehouseLocation: String
     attributes: [ProductVariantAttribute!]!
   }
 
@@ -52,14 +61,6 @@ const typeDefs = gql`
     slug: String!
   }
 
-  type Review {
-    id: String!
-    rating: Int!
-    comment: String
-    user: User
-    createdAt: DateTime!
-  }
-
   type User {
     id: String!
     name: String!
@@ -75,9 +76,9 @@ const typeDefs = gql`
   }
 
   type ProductConnection {
-    products: [Product!]!
+    products: [ProductCard!]!
     hasMore: Boolean!
-    totalCount: Int!
+    totalCount: Int
   }
 
   input ProductFilters {
@@ -99,7 +100,7 @@ const typeDefs = gql`
     featuredProducts(first: Int, skip: Int): ProductConnection!
     trendingProducts(first: Int, skip: Int): ProductConnection!
     bestSellerProducts(first: Int, skip: Int): ProductConnection!
-    categories: [Category!]!
+    categories(first: Int, skip: Int, search: String): [Category!]!
   }
 `;
 

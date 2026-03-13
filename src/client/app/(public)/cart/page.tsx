@@ -2,9 +2,11 @@
 import BreadCrumb from "@/app/components/feedback/BreadCrumb";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { Trash2, ShoppingCart, Minus, Plus, ShieldAlert } from "lucide-react";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import CartSummary from "@/app/(public)/cart/CartSummary";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import {
   useGetCartQuery,
   useRemoveFromCartMutation,
@@ -14,13 +16,17 @@ import { motion } from "framer-motion";
 import CartSkeletonLoader from "@/app/components/feedback/CartSkeletonLoader";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 import { useAuth } from "@/app/hooks/useAuth";
-import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import useToast from "@/app/hooks/ui/useToast";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import {
-  removeGuestCartItem,
-  updateGuestCartQuantity,
-} from "@/app/store/slices/GuestCartSlice";
+  isAdminDisplayRole,
+  isCustomerDisplayRole,
+  resolveDisplayRole,
+} from "@/app/lib/userRole";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = runtimeEnv.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);
@@ -39,41 +45,32 @@ const formatVariantName = (item: any) => {
 
 const Cart = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const isCustomerUser = isAuthenticated && user?.role === "USER";
-  const isAdminOrSuperAdmin = isAuthenticated && user?.role !== "USER";
-
-  const dispatch = useAppDispatch();
-  const guestItems = useAppSelector((state) => state.guestCart.items);
+  const formatPrice = useFormatPrice();
+  const { showToast } = useToast();
+  const displayRole = resolveDisplayRole(user);
+  const isCustomerUser =
+    isAuthenticated && isCustomerDisplayRole(displayRole);
+  const isAdminOrSuperAdmin =
+    isAuthenticated && isAdminDisplayRole(displayRole);
+  const shouldLoadCart = isCustomerUser;
 
   const { data, isLoading: userCartLoading } = useGetCartQuery(undefined, {
-    skip: !isCustomerUser,
+    skip: !shouldLoadCart,
   });
-  const [removeFromCart] = useRemoveFromCartMutation();
+  const [removeFromCart, { isLoading: isRemovingFromCart }] =
+    useRemoveFromCartMutation();
   const [updateCartItem] = useUpdateCartItemMutation();
+  const [itemPendingRemoval, setItemPendingRemoval] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
-  const cartItems = useMemo(() => {
-    if (isCustomerUser) {
-      return data?.cart?.cartItems || [];
-    }
+  const cartItems = useMemo(
+    () => (shouldLoadCart ? data?.cart?.cartItems || [] : []),
+    [data?.cart?.cartItems, shouldLoadCart]
+  );
 
-    return guestItems.map((item) => ({
-      id: item.variantId,
-      quantity: item.quantity,
-      variantId: item.variantId,
-      variant: {
-        id: item.variantId,
-        sku: item.sku,
-        price: item.price,
-        images: [item.image],
-        stock: item.stock,
-        product: {
-          name: item.name,
-        },
-      },
-    }));
-  }, [data?.cart?.cartItems, guestItems, isCustomerUser]);
-
-  const isLoading = authLoading || (isCustomerUser && userCartLoading);
+  const isLoading = authLoading || (shouldLoadCart && userCartLoading);
   debugLog("items => ", cartItems);
 
   const subtotal = useMemo(() => {
@@ -90,17 +87,31 @@ const Cart = () => {
   }, [cartItems]);
   debugLog("subtotal => ", subtotal);
 
-  const handleRemoveFromCart = async (item: any) => {
-    if (isCustomerUser) {
-      try {
-        await removeFromCart(item.id).unwrap();
-      } catch (error) {
-        console.error("Error removing item:", error);
-      }
+  const requestRemoveFromCart = (item: any) => {
+    setItemPendingRemoval({
+      id: item.id,
+      name: formatVariantName(item),
+    });
+  };
+
+  const handleRemoveFromCart = async () => {
+    const pendingRemoval = itemPendingRemoval;
+    if (!pendingRemoval) {
       return;
     }
 
-    dispatch(removeGuestCartItem(item.variant.id));
+    setItemPendingRemoval(null);
+
+    try {
+      await removeFromCart(pendingRemoval.id).unwrap();
+      showToast("Item removed from cart", "success");
+    } catch (error) {
+      showToast(
+        getApiErrorMessage(error, "Failed to remove item from cart"),
+        "error"
+      );
+      console.error("Error removing item:", error);
+    }
   };
 
   const handleQuantityChange = async (item: any, delta: number) => {
@@ -109,26 +120,20 @@ const Cart = () => {
       return;
     }
 
-    if (isCustomerUser) {
-      try {
-        await updateCartItem({ id: item.id, quantity: nextQuantity }).unwrap();
-      } catch (error) {
-        console.error("Error updating item:", error);
-      }
-      return;
+    try {
+      await updateCartItem({ id: item.id, quantity: nextQuantity }).unwrap();
+    } catch (error) {
+      showToast(
+        getApiErrorMessage(error, "Failed to update item quantity"),
+        "error"
+      );
+      console.error("Error updating item:", error);
     }
-
-    dispatch(
-      updateGuestCartQuantity({
-        variantId: item.variant.id,
-        quantity: nextQuantity,
-      })
-    );
   };
 
   return (
     <MainLayout>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <BreadCrumb />
 
         {/* Cart Header */}
@@ -139,14 +144,26 @@ const Cart = () => {
           className="flex items-center space-x-2 mt-4 mb-6"
         >
           <h1 className="text-xl sm:text-2xl font-semibold text-gray-800">
-            Your Cart
+            Cart
           </h1>
           <span className="text-gray-500 text-sm">
             ({totalItems} items)
           </span>
         </motion.div>
 
-        {isAdminOrSuperAdmin ? (
+        {!authLoading && !isAuthenticated ? (
+          <div className="rounded-lg border border-gray-200 bg-white p-6 mb-6 text-center">
+            <p className="text-sm text-gray-700">
+              Sign in to view your cart.
+            </p>
+            <Link
+              href="/sign-in?next=%2Fcart"
+              className="mt-3 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Sign in
+            </Link>
+          </div>
+        ) : isAdminOrSuperAdmin ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6">
             <div className="flex items-start gap-3">
               <ShieldAlert size={18} className="text-amber-700 mt-0.5" />
@@ -163,7 +180,7 @@ const Cart = () => {
         ) : null}
 
         {/* Cart Content */}
-        {isAdminOrSuperAdmin ? null : isLoading ? (
+        {!isAuthenticated || isAdminOrSuperAdmin ? null : isLoading ? (
           <CartSkeletonLoader />
         ) : cartItems.length === 0 ? (
           <div className="text-center py-10">
@@ -173,101 +190,127 @@ const Cart = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(320px,1fr)] lg:items-start">
             {/* Cart Items */}
-            <div className="space-y-4">
-              {cartItems.map((item) => (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="bg-white rounded-lg p-4 sm:p-6 border border-gray-200 flex flex-col sm:flex-row items-start sm:items-center gap-4"
-                >
-                  {/* Product Image */}
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-50 rounded flex items-center justify-center overflow-hidden">
-                    <Image
-                      src={
-                        item?.variant?.images[0] ||
-                        generateProductPlaceholder(item.variant.product.name)
-                      }
-                      alt={formatVariantName(item)}
-                      width={80}
-                      height={80}
-                      className="object-cover"
-                      sizes="(max-width: 640px) 64px, 80px"
-                      onError={(e) => {
-                        e.currentTarget.src = generateProductPlaceholder(
-                          item.variant.product.name
-                        );
-                      }}
-                    />
-                  </div>
+            <section className="space-y-4">
+              {cartItems.map((item) => {
+                const productSlug = item?.variant?.product?.slug;
+                const productHref = productSlug ? `/product/${productSlug}` : "/shop";
 
-                  {/* Variant Details */}
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800 text-sm sm:text-base">
-                      {formatVariantName(item)}
-                    </p>
-                    <p className="text-xs text-gray-500">SKU: {item.variant.sku}</p>
-                    <p className="text-xs sm:text-sm text-gray-500">
-                      ${item.variant.price.toFixed(2)}
-                    </p>
-                  </div>
+                return (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="rounded-lg border border-gray-200 bg-white p-4 sm:p-5 lg:p-6"
+                  >
+                    <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(0,1fr)_auto_auto]">
+                      {/* Product Image */}
+                      <Link
+                        href={productHref}
+                        className="h-16 w-16 overflow-hidden rounded bg-gray-50 sm:h-20 sm:w-20"
+                      >
+                        <Image
+                          src={
+                            item?.variant?.images[0] ||
+                            generateProductPlaceholder(item.variant.product.name)
+                          }
+                          alt={formatVariantName(item)}
+                          width={80}
+                          height={80}
+                          className="h-full w-full object-cover"
+                          sizes="(max-width: 640px) 64px, 80px"
+                          onError={(e) => {
+                            e.currentTarget.src = generateProductPlaceholder(
+                              item.variant.product.name
+                            );
+                          }}
+                        />
+                      </Link>
 
-                  {/* Quantity Selector */}
-                  <div className="flex items-center gap-2 rounded-full max-w-fit border border-gray-300 bg-white px-2 py-1">
-                    <button
-                      type="button"
-                      onClick={() => handleQuantityChange(item, -1)}
-                      disabled={item.quantity <= 1}
-                      className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
-                    >
-                      <Minus size={16} />
-                    </button>
+                      {/* Variant Details */}
+                      <div className="min-w-0">
+                        <Link
+                          href={productHref}
+                          className="text-sm font-medium text-gray-800 transition-colors hover:text-indigo-600 sm:text-base"
+                        >
+                          {formatVariantName(item)}
+                        </Link>
+                        <p className="mt-1 text-xs text-gray-500">
+                          SKU: {item.variant.sku}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 sm:text-sm">
+                          {formatPrice(item.variant.price)}
+                        </p>
+                      </div>
 
-                    <span className="min-w-[32px] text-center font-semibold text-gray-800">
-                      {item.quantity}
-                    </span>
+                      {/* Quantity Selector */}
+                      <div className="inline-flex max-w-fit items-center gap-2 rounded-full border border-gray-300 bg-white px-2 py-1 lg:justify-self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleQuantityChange(item, -1)}
+                          disabled={item.quantity <= 1}
+                          className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
+                        >
+                          <Minus size={16} />
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleQuantityChange(item, 1)}
-                      disabled={item.quantity >= item.variant.stock}
-                      className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
+                        <span className="min-w-[32px] text-center font-semibold text-gray-800">
+                          {item.quantity}
+                        </span>
 
-                  {/* Subtotal and Remove */}
-                  <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 w-full sm:w-auto">
-                    <p className="font-medium text-gray-800 text-sm sm:text-base">
-                      ${(item.variant.price * item.quantity).toFixed(2)}
-                    </p>
-                    <button
-                      onClick={() => handleRemoveFromCart(item)}
-                      className="text-red-500 hover:text-red-600 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                        <button
+                          type="button"
+                          onClick={() => handleQuantityChange(item, 1)}
+                          className="rounded-full p-2 transition hover:bg-gray-100"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+
+                      {/* Subtotal and Remove */}
+                      <div className="flex w-full items-center justify-between gap-2 lg:w-auto lg:flex-col lg:items-end lg:justify-self-end">
+                        <p className="text-sm font-medium text-gray-800 sm:text-base">
+                          {formatPrice(item.variant.price * item.quantity)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => requestRemoveFromCart(item)}
+                          className="text-red-500 transition-colors hover:text-red-600"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </section>
 
             {/* Cart Summary */}
-            <CartSummary
-              subtotal={subtotal}
-              totalItems={totalItems}
-              cartId={isCustomerUser ? data?.cart?.id : undefined}
-            />
+            <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
+              <CartSummary
+                subtotal={subtotal}
+                totalItems={totalItems}
+              />
+            </aside>
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={itemPendingRemoval !== null}
+        title="Remove item from cart?"
+        message={`Do you want to remove \"${itemPendingRemoval?.name || "this item"}\" from your cart?`}
+        type="danger"
+        confirmLabel="Remove"
+        onConfirm={() => void handleRemoveFromCart()}
+        onCancel={() => setItemPendingRemoval(null)}
+        isConfirming={isRemovingFromCart}
+        disableCancelWhileConfirming
+      />
     </MainLayout>
   );
 };
 
 export default Cart;
-

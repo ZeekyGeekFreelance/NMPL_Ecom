@@ -1,33 +1,27 @@
 import { Request, Response, NextFunction } from "express";
 import AppError from "../errors/AppError";
-import prisma from "@/infra/database/database.config";
 
+/**
+ * Authorizes the request based on the user's effective role already set by
+ * the `protect` middleware. Avoids a redundant DB round-trip per request.
+ * Falls back to `req.user.role` when `effectiveRole` is not available.
+ */
 const authorizeRole = (...allowedRoles: string[]) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.user || !req.user.id) {
-        return next(new AppError(401, "Unauthorized: No user found"));
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: { role: true },
-      });
-
-      if (!user) {
-        return next(new AppError(401, "Unauthorized: User not found"));
-      }
-
-      if (!allowedRoles.includes(user.role)) {
-        return next(
-          new AppError(403, "You are not authorized to perform this action")
-        );
-      }
-
-      next();
-    } catch (error) {
-      return next(new AppError(500, "Internal server error"));
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user || !req.user.id) {
+      return next(new AppError(401, "Unauthorized: No user found"));
     }
+
+    // effectiveRole is set by protect / optionalAuth and reflects dealer escalation.
+    const roleToCheck = req.user.effectiveRole || req.user.role;
+
+    if (!allowedRoles.includes(roleToCheck)) {
+      return next(
+        new AppError(403, "You are not authorized to perform this action")
+      );
+    }
+
+    next();
   };
 };
 

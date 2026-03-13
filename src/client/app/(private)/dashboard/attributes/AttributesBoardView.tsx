@@ -12,13 +12,39 @@ import {
 import useToast from "@/app/hooks/ui/useToast";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 
-const AttributesBoardView = ({ attributes = [] }) => {
+interface AttributeCategory {
+  id: string;
+  category?: {
+    id?: string;
+    name?: string;
+  };
+  isRequired: boolean;
+}
+
+interface AttributeValue {
+  id: string;
+  value: string;
+}
+
+interface AttributeItem {
+  id: string;
+  name: string;
+  categories?: AttributeCategory[];
+  values?: AttributeValue[];
+}
+
+interface AttributesBoardViewProps {
+  attributes?: AttributeItem[];
+}
+
+const AttributesBoardView = ({ attributes = [] }: AttributesBoardViewProps) => {
   const { showToast } = useToast();
   const [createAttributeValue, { isLoading: isCreatingValue }] =
     useCreateAttributeValueMutation();
-  const [deleteAttribute, { error: deleteAttributeError }] =
+  const [deleteAttribute, { isLoading: isDeletingAttribute }] =
     useDeleteAttributeMutation();
-  const [deleteAttributeValue] = useDeleteAttributeValueMutation();
+  const [deleteAttributeValue, { isLoading: isDeletingAttributeValue }] =
+    useDeleteAttributeValueMutation();
   const [newValue, setNewValue] = useState<Record<string, string>>({});
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
@@ -29,8 +55,6 @@ const AttributesBoardView = ({ attributes = [] }) => {
     type: "attribute",
     id: null,
   });
-  console.log("deleteModal => ", deleteModal);
-  console.log("deleteAttributeError => ", deleteAttributeError);
 
   // Handle adding a new value
   const handleAddValue = async (attributeId: string) => {
@@ -162,6 +186,12 @@ const AttributesBoardView = ({ attributes = [] }) => {
             deleteModal.type.charAt(0).toUpperCase() + deleteModal.type.slice(1)
           }`}
           type={deleteModal.type === "attribute" ? "danger" : "warning"}
+          isConfirming={
+            deleteModal.type === "attribute"
+              ? isDeletingAttribute
+              : isDeletingAttributeValue
+          }
+          disableCancelWhileConfirming
         />
       </div>
     </div>

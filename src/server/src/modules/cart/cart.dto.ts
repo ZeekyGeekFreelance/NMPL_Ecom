@@ -1,9 +1,9 @@
 import { IsNotEmpty, IsNumber, IsString, Min } from "class-validator";
 
 export class AddToCartDto {
-  @IsNotEmpty({ message: "Product ID is required" })
-  @IsString({ message: "Product ID must be a string" })
-  productId!: string;
+  @IsNotEmpty({ message: "Variant ID is required" })
+  @IsString({ message: "Variant ID must be a string" })
+  variantId!: string;
 
   @IsNotEmpty({ message: "Quantity is required" })
   @IsNumber({}, { message: "Quantity must be a number" })
@@ -12,9 +12,9 @@ export class AddToCartDto {
 }
 
 export class UpdateCartItemDto {
-  @IsNotEmpty({ message: "Product ID is required" })
-  @IsString({ message: "Product ID must be a string" })
-  productId!: string;
+  @IsNotEmpty({ message: "Variant ID is required" })
+  @IsString({ message: "Variant ID must be a string" })
+  variantId!: string;
 
   @IsNotEmpty({ message: "Quantity is required" })
   @IsNumber({}, { message: "Quantity must be a number" })
@@ -23,7 +23,7 @@ export class UpdateCartItemDto {
 }
 
 export class RemoveFromCartDto {
-  @IsNotEmpty({ message: "Product ID is required" })
-  @IsString({ message: "Product ID must be a string" })
-  productId!: string;
+  @IsNotEmpty({ message: "Variant ID is required" })
+  @IsString({ message: "Variant ID must be a string" })
+  variantId!: string;
 }

@@ -11,7 +11,7 @@ const DashboardHeader: React.FC = () => {
           <div className="p-2 bg-primary rounded-lg">
             <Database size={20} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="type-h3 text-gray-900">
             Attributes Dashboard
           </h1>
         </div>

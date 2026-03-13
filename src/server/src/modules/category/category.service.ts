@@ -3,35 +3,55 @@ import slugify from "@/shared/utils/slugify";
 import ApiFeatures from "@/shared/utils/ApiFeatures";
 import { CategoryRepository } from "./category.repository";
 import prisma from "@/infra/database/database.config";
+import { clearCategoryCache } from "@/modules/product/graphql/resolver";
+import { normalizeHumanTextForField } from "@/shared/utils/textNormalization";
 
 export class CategoryService {
   constructor(private categoryRepository: CategoryRepository) {}
 
   async getAllCategories(queryString: Record<string, any>) {
-    const apiFeatures = new ApiFeatures(queryString)
+    const hasExplicitPagination =
+      queryString?.page !== undefined || queryString?.limit !== undefined;
+
+    const apiFeaturesBuilder = new ApiFeatures(queryString)
       .filter()
       .sort()
-      .limitFields()
-      .paginate()
-      .build();
+      .limitFields();
+
+    const apiFeatures = hasExplicitPagination
+      ? apiFeaturesBuilder.paginate().build()
+      : apiFeaturesBuilder.build();
 
     const { where, orderBy, skip, take } = apiFeatures;
 
-    const categories = await this.categoryRepository.findManyCategories({
-      where,
-      orderBy,
-      skip,
-      take,
-      includeProducts: true,
-    });
+    const [categories, totalResults] = await Promise.all([
+      this.categoryRepository.findManyCategories({
+        where,
+        orderBy,
+        skip: hasExplicitPagination ? skip : undefined,
+        take: hasExplicitPagination ? take : undefined,
+        includeProducts: true,
+      }),
+      this.categoryRepository.countCategories(where),
+    ]);
 
-    // const categoriesWithCounts = categories.map((category) => ({
-    //   ...category,
-    //   productCount: category.products?.length || 0,
-    //   variantCount: category.products?.reduce((sum, product) => sum + (product.variants?.length || 0), 0) || 0,
-    // }));
+    const requestedPage = Number(queryString?.page) || 1;
+    const requestedLimit = Number(queryString?.limit) || 16;
+    const resultsPerPage = hasExplicitPagination
+      ? requestedLimit
+      : Math.max(totalResults, 1);
+    const totalPages = Math.max(1, Math.ceil(totalResults / resultsPerPage));
+    const currentPage = hasExplicitPagination
+      ? Math.min(Math.max(requestedPage, 1), totalPages)
+      : 1;
 
-    return categories;
+    return {
+      categories,
+      totalResults,
+      totalPages,
+      currentPage,
+      resultsPerPage,
+    };
   }
 
   async getCategory(categoryId: string) {
@@ -52,7 +72,8 @@ export class CategoryService {
     images?: string[];
     attributes?: { attributeId: string; isRequired: boolean }[];
   }) {
-    const slug = slugify(data.name);
+    const normalizedName = normalizeHumanTextForField(data.name, "name");
+    const slug = slugify(normalizedName);
     const existingCategory = await prisma.category.findUnique({ where: { slug } });
     if (existingCategory) {
       throw new AppError(400, "Category with this name already exists");
@@ -69,12 +90,13 @@ export class CategoryService {
     }
 
     const category = await this.categoryRepository.createCategory({
-      name: data.name,
+      name: normalizedName,
       slug,
       description: data.description,
       images: data.images,
       attributes: data.attributes,
     });
+    await clearCategoryCache();
     return { category };
   }
 
@@ -88,7 +110,11 @@ export class CategoryService {
       throw new AppError(404, "Category not found");
     }
 
-    const slug = data.name ? slugify(data.name) : undefined;
+    const normalizedName =
+      data.name !== undefined
+        ? normalizeHumanTextForField(data.name, "name")
+        : undefined;
+    const slug = normalizedName ? slugify(normalizedName) : undefined;
     if (slug && slug !== category.slug) {
       const existingCategory = await prisma.category.findUnique({ where: { slug } });
       if (existingCategory) {
@@ -97,11 +123,12 @@ export class CategoryService {
     }
 
     const updatedCategory = await this.categoryRepository.updateCategory(categoryId, {
-      name: data.name,
+      name: normalizedName,
       slug,
       description: data.description,
       images: data.images,
     });
+    await clearCategoryCache();
     return { category: updatedCategory };
   }
 
@@ -111,6 +138,7 @@ export class CategoryService {
       throw new AppError(404, "Category not found");
     }
     await this.categoryRepository.deleteCategory(categoryId);
+    await clearCategoryCache();
   }
 
   async addCategoryAttribute(categoryId: string, attributeId: string, isRequired: boolean) {

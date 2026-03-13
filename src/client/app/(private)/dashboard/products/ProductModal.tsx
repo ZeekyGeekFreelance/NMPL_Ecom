@@ -1,12 +1,11 @@
 "use client";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   useGetAllCategoriesQuery,
   useGetCategoryAttributesQuery,
 } from "@/app/store/apis/CategoryApi";
+import Modal from "@/app/components/organisms/Modal";
 import { ProductFormData } from "./product.types";
 import ProductForm from "./ProductForm";
 
@@ -35,6 +34,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
     })) || [];
 
   const form = useForm<ProductFormData>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       id: "",
       name: "",
@@ -50,8 +51,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
           images: [],
           lowStockThreshold: 10,
           barcode: "",
-          warehouseLocation: "",
           price: 0,
+          defaultDealerPrice: null,
           sku: "",
           stock: 0,
           attributes: [],
@@ -68,6 +69,16 @@ const ProductModal: React.FC<ProductModalProps> = ({
     }
   );
   const categoryAttributes = categoryAttributesData?.attributes || [];
+  const isEditMode = Boolean(initialData?.id);
+  const isFormDirty = form.formState.isDirty;
+
+  const handleFormSubmit = (data: ProductFormData) => {
+    if (isEditMode && !form.formState.isDirty) {
+      return;
+    }
+
+    onSubmit(data);
+  };
 
   useEffect(() => {
     if (initialData) {
@@ -97,54 +108,42 @@ const ProductModal: React.FC<ProductModalProps> = ({
     }
   }, [initialData, form]);
 
-  if (!isOpen) return null;
-
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          className="fixed inset-0 bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.1 }}
-        >
-          <motion.div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[88vh] overflow-hidden border border-gray-100 flex flex-col"
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          >
-            <div className="sticky top-0 z-20 bg-white px-8 pt-8 pb-4 border-b border-gray-200">
-              <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent">
-                {initialData ? "Edit Product" : "Create Product"}
-              </h2>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-700 transition-colors duration-200 rounded-full p-1 hover:bg-gray-100"
-              >
-                <X size={24} />
-              </button>
-              </div>
-            </div>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      contentClassName="max-w-6xl h-[calc(100dvh-2rem)] overflow-hidden p-0"
+    >
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="shrink-0 border-b border-[var(--color-border)] px-6 pb-4 pt-6">
+          <h2 className="pr-12 text-lg font-semibold text-[var(--color-text)]">
+            {initialData ? "Edit Product" : "Create Product"}
+          </h2>
+          <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+            Configure product details, variants, pricing, and metadata.
+          </p>
+        </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto px-8">
-              <ProductForm
-                form={form}
-                onSubmit={onSubmit}
-                categories={categories}
-                categoryAttributes={categoryAttributes}
-                isLoading={isLoading}
-                error={error}
-                submitLabel={initialData ? "Update" : "Create"}
-              />
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        <div
+          className="min-h-0 flex-1 overflow-hidden px-6 py-4"
+          data-product-form-scroll="true"
+        >
+          <ProductForm
+            form={form}
+            onSubmit={handleFormSubmit}
+            categories={categories}
+            categoryAttributes={categoryAttributes}
+            isLoading={isLoading}
+            error={error}
+            submitLabel={initialData ? "Update" : "Create"}
+            onCancel={onClose}
+            isEditMode={isEditMode}
+            disableSubmit={isEditMode && !isFormDirty}
+            noChangesMessage={isEditMode ? "No changes detected." : undefined}
+          />
+        </div>
+      </div>
+    </Modal>
   );
 };
 

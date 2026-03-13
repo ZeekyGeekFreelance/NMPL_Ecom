@@ -1,14 +1,13 @@
 "use client";
 
-import { Trash2, Upload } from "lucide-react";
-import Image from "next/image";
+import { ChevronLeft, ChevronRight, Trash2, Upload } from "lucide-react";
 import {
-  Controller,
   Control,
   FieldErrors,
   UseFormSetValue,
+  useWatch,
 } from "react-hook-form";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 
 interface ImageUploaderProps {
   control: Control<any>;
@@ -22,7 +21,9 @@ interface ImageUploaderProps {
 
 interface ImagePreview {
   url: string;
-  file: File;
+  value: File | string;
+  isFile: boolean;
+  filename: string;
 }
 
 const ImageUploader = ({
@@ -35,15 +36,87 @@ const ImageUploader = ({
   disabled = false,
 }: ImageUploaderProps) => {
   const [previews, setPreviews] = useState<ImagePreview[]>([]);
+  const filePreviewUrlsRef = useRef<string[]>([]);
+  const watchedValue = useWatch({ control, name }) as
+    | Array<File | string>
+    | undefined;
 
-  // Cleanup blob URLs on unmount
+  const currentValues = useMemo(
+    () =>
+      Array.isArray(watchedValue)
+        ? watchedValue.filter(
+            (value): value is File | string =>
+              value instanceof File ||
+              (typeof value === "string" && value.trim().length > 0)
+          )
+        : [],
+    [watchedValue]
+  );
+
+  const getFilenameFromUrl = (url: string) => {
+    try {
+      const withoutQuery = url.split("?")[0];
+      const segments = withoutQuery.split("/").filter(Boolean);
+      const lastSegment = segments[segments.length - 1];
+      return lastSegment || "Image";
+    } catch {
+      return "Image";
+    }
+  };
+
+  const resolveFieldErrorMessage = () => {
+    const pathSegments = name.replace(/\[(\d+)\]/g, ".$1").split(".");
+    let cursor: any = errors;
+
+    for (const segment of pathSegments) {
+      if (!cursor || typeof cursor !== "object") {
+        return undefined;
+      }
+      cursor = cursor[segment];
+    }
+
+    if (cursor && typeof cursor.message === "string") {
+      return cursor.message as string;
+    }
+
+    return undefined;
+  };
+
   useEffect(() => {
-    return () => {
-      previews.forEach((preview) => {
-        URL.revokeObjectURL(preview.url);
-      });
-    };
-  }, [previews]);
+    filePreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    filePreviewUrlsRef.current = [];
+
+    const mappedPreviews = currentValues.map((value) => {
+      if (value instanceof File) {
+        const objectUrl = URL.createObjectURL(value);
+        filePreviewUrlsRef.current.push(objectUrl);
+
+        return {
+          url: objectUrl,
+          value,
+          isFile: true,
+          filename: value.name,
+        };
+      }
+
+      return {
+        url: value,
+        value,
+        isFile: false,
+        filename: getFilenameFromUrl(value),
+      };
+    });
+
+    setPreviews(mappedPreviews);
+  }, [currentValues]);
+
+  useEffect(
+    () => () => {
+      filePreviewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      filePreviewUrlsRef.current = [];
+    },
+    []
+  );
 
   const handleFileUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,8 +124,7 @@ const ImageUploader = ({
 
       if (!files.length) return;
 
-      const currentFiles = previews.map((p) => p.file);
-      const remainingSlots = maxFiles - currentFiles.length;
+      const remainingSlots = maxFiles - currentValues.length;
       const filesToAdd = files.slice(0, remainingSlots);
 
       if (filesToAdd.length < files.length) {
@@ -61,49 +133,47 @@ const ImageUploader = ({
         );
       }
 
-      const newPreviews = filesToAdd.map((file) => ({
-        url: URL.createObjectURL(file),
-        file,
-      }));
+      const updatedFiles = [...currentValues, ...filesToAdd];
+      setValue(name, updatedFiles, { shouldValidate: true, shouldDirty: true });
 
-      const updatedFiles = [...currentFiles, ...filesToAdd];
-      console.log(
-        "handleFileUpload files:",
-        files,
-        "updatedFiles:",
-        updatedFiles
-      );
-      const updatedPreviews = [...previews, ...newPreviews];
-
-      setPreviews(updatedPreviews);
-      setValue(name, updatedFiles, { shouldValidate: true });
-
-      // Clear the input
       e.target.value = "";
     },
-    [previews, setValue, name, maxFiles]
+    [currentValues, maxFiles, name, setValue]
   );
 
   const removeImage = useCallback(
     (index: number) => {
-      const updatedPreviews = [...previews];
-      const removedPreview = updatedPreviews.splice(index, 1)[0];
-
-      // Revoke blob URL
-      URL.revokeObjectURL(removedPreview.url);
-
-      setPreviews(updatedPreviews);
-      setValue(
-        name,
-        updatedPreviews.map((p) => p.file),
-        { shouldValidate: true }
+      const nextValues = currentValues.filter(
+        (_, currentIndex) => currentIndex !== index
       );
+      setValue(name, nextValues, { shouldValidate: true, shouldDirty: true });
     },
-    [previews, setValue, name]
+    [currentValues, name, setValue]
   );
 
-  const canAddMore = previews.length < maxFiles;
-  const errorMessage = errors[name]?.message as string;
+  const moveImage = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= currentValues.length ||
+        toIndex >= currentValues.length ||
+        fromIndex === toIndex
+      ) {
+        return;
+      }
+
+      const nextValues = [...currentValues];
+      const [movedImage] = nextValues.splice(fromIndex, 1);
+      nextValues.splice(toIndex, 0, movedImage);
+
+      setValue(name, nextValues, { shouldValidate: true, shouldDirty: true });
+    },
+    [currentValues, name, setValue]
+  );
+
+  const canAddMore = currentValues.length < maxFiles;
+  const errorMessage = resolveFieldErrorMessage();
 
   return (
     <div className="space-y-3">
@@ -111,12 +181,11 @@ const ImageUploader = ({
         {label}
         {maxFiles > 1 && (
           <span className="text-gray-500 text-xs ml-1">
-            ({previews.length}/{maxFiles})
+            ({currentValues.length}/{maxFiles})
           </span>
         )}
       </label>
 
-      {/* Image Previews */}
       {previews.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {previews.map((preview, index) => (
@@ -124,15 +193,14 @@ const ImageUploader = ({
               key={`${preview.url}-${index}`}
               className="relative group aspect-square rounded-lg border-2 border-gray-200 overflow-hidden bg-gray-50 hover:border-gray-300 transition-colors"
             >
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={preview.url}
                 alt={`Preview ${index + 1}`}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                className="h-full w-full object-cover"
+                loading="lazy"
               />
 
-              {/* Remove Button */}
               <button
                 type="button"
                 onClick={() => removeImage(index)}
@@ -143,33 +211,55 @@ const ImageUploader = ({
                 <Trash2 size={14} />
               </button>
 
-              {/* File indicator */}
-              <div className="absolute bottom-1 left-1 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded">
-                New
+              <div className="absolute top-1 left-1 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => moveImage(index, index - 1)}
+                  disabled={disabled || index === 0}
+                  className="bg-white/90 hover:bg-white text-gray-700 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Move image earlier"
+                  title="Move earlier"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveImage(index, index + 1)}
+                  disabled={disabled || index === previews.length - 1}
+                  className="bg-white/90 hover:bg-white text-gray-700 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Move image later"
+                  title="Move later"
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+
+              <div
+                className={`absolute bottom-1 left-1 text-white text-xs px-1.5 py-0.5 rounded ${
+                  preview.isFile ? "bg-green-500" : "bg-blue-500"
+                }`}
+                title={preview.filename}
+              >
+                {preview.isFile ? "New" : "Saved"} #{index + 1}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* File Input */}
-      <Controller
-        name={name}
-        control={control}
-        render={() => (
-          <div className="relative">
-            <input
-              type="file"
-              accept="image/*"
-              multiple={maxFiles > 1}
-              onChange={handleFileUpload}
-              disabled={disabled || !canAddMore}
-              className="hidden"
-              id={`file-input-${name}`}
-            />
-            <label
-              htmlFor={`file-input-${name}`}
-              className={`
+      <div className="relative">
+        <input
+          type="file"
+          accept="image/*"
+          multiple={maxFiles > 1}
+          onChange={handleFileUpload}
+          disabled={disabled || !canAddMore}
+          className="hidden"
+          id={`file-input-${name}`}
+        />
+        <label
+          htmlFor={`file-input-${name}`}
+          className={`
                 flex flex-col items-center justify-center w-full p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors
                 ${
                   disabled || !canAddMore
@@ -177,34 +267,31 @@ const ImageUploader = ({
                     : "border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400"
                 }
               `}
-            >
-              <Upload
-                size={24}
-                className={
-                  disabled || !canAddMore ? "text-gray-400" : "text-gray-500"
-                }
-              />
-              <p
-                className={`mt-2 text-sm ${
-                  disabled || !canAddMore ? "text-gray-400" : "text-gray-600"
-                }`}
-              >
-                {!canAddMore
-                  ? `Maximum ${maxFiles} files reached`
-                  : "Click to upload images or drag and drop"}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                PNG, JPG, GIF up to 10MB each
-              </p>
-            </label>
-          </div>
-        )}
-      />
+        >
+          <Upload
+            size={24}
+            className={
+              disabled || !canAddMore ? "text-gray-400" : "text-gray-500"
+            }
+          />
+          <p
+            className={`mt-2 text-sm ${
+              disabled || !canAddMore ? "text-gray-400" : "text-gray-600"
+            }`}
+          >
+            {!canAddMore
+              ? `Maximum ${maxFiles} files reached`
+              : "Click to upload images or drag and drop"}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            PNG, JPG, GIF, WEBP up to 10MB each
+          </p>
+        </label>
+      </div>
 
-      {/* Error Message */}
       {errorMessage && (
         <p className="text-red-500 text-sm flex items-center gap-1">
-          <span className="text-red-500">⚠</span>
+          <span className="text-red-500">!</span>
           {errorMessage}
         </p>
       )}

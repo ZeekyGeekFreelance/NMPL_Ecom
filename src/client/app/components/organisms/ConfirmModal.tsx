@@ -1,16 +1,20 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useId, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, X, Check } from "lucide-react";
 
 interface ConfirmModalProps {
   isOpen: boolean;
   message: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
   title?: string;
   type?: "warning" | "danger" | "info";
+  confirmLabel?: string;
+  cancelLabel?: string;
+  isConfirming?: boolean;
+  disableCancelWhileConfirming?: boolean;
 }
 
 const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -20,7 +24,17 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onCancel,
   title = "Confirm Action",
   type = "warning",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  isConfirming = false,
+  disableCancelWhileConfirming = false,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const messageId = useId();
+
   // Define colors based on type
   const getTypeStyles = () => {
     switch (type) {
@@ -47,6 +61,69 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   };
 
   const { icon, confirmButton, iconBackground } = getTypeStyles();
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+
+    const timer = window.setTimeout(() => {
+      confirmButtonRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!dialogRef.current) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (isConfirming && disableCancelWhileConfirming) {
+          return;
+        }
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'
+      );
+      if (focusableElements.length === 0) {
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+
+      if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus?.();
+    };
+  }, [
+    disableCancelWhileConfirming,
+    isConfirming,
+    isOpen,
+    onCancel,
+    previousFocusRef,
+  ]);
 
   const modalVariants = {
     hidden: {
@@ -76,9 +153,14 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-opacity-50 backdrop-blur-xs z-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs sm:p-6">
           <motion.div
-            className="bg-white p-6 rounded-lg shadow-xl w-96 border border-gray-200"
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={messageId}
+            className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 shadow-xl sm:p-6"
             variants={modalVariants}
             initial="hidden"
             animate="visible"
@@ -89,25 +171,32 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 {icon}
               </div>
               <div className="flex-1">
-                <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
-                <p className="mt-2 text-gray-600">{message}</p>
+                <h2 id={titleId} className="text-lg font-semibold text-gray-800">
+                  {title}
+                </h2>
+                <p id={messageId} className="mt-2 text-sm leading-relaxed text-gray-600 whitespace-pre-line">
+                  {message}
+                </p>
               </div>
             </div>
 
-            <div className="flex justify-end space-x-4 mt-6">
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 flex items-center font-medium transition-colors"
+                className="flex w-full items-center justify-center rounded-md bg-gray-200 px-4 py-2 font-medium text-gray-800 transition-colors hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 onClick={onCancel}
+                disabled={isConfirming && disableCancelWhileConfirming}
               >
                 <X size={16} className="mr-1" />
-                Cancel
+                {cancelLabel}
               </button>
               <button
-                className={`px-4 py-2 text-white rounded-md flex items-center font-medium transition-colors ${confirmButton}`}
+                ref={confirmButtonRef}
+                className={`flex w-full items-center justify-center rounded-md px-4 py-2 font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto ${confirmButton}`}
                 onClick={onConfirm}
+                disabled={isConfirming}
               >
                 <Check size={16} className="mr-1" />
-                Confirm
+                {isConfirming ? "Processing..." : confirmLabel}
               </button>
             </div>
           </motion.div>

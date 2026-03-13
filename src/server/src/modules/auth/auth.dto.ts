@@ -10,10 +10,13 @@ import {
 } from "class-validator";
 
 export class RegisterDto {
+  @IsString()
   @IsNotEmpty({
     message: "Name is required",
   })
-  @MinLength(3)
+  @MinLength(2, {
+    message: "Name must be at least 2 characters long",
+  })
   name!: string;
 
   @IsEmail()
@@ -21,6 +24,15 @@ export class RegisterDto {
     message: "Email is required",
   })
   email!: string;
+
+  @IsString()
+  @IsNotEmpty({
+    message: "Phone number is required",
+  })
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
+  })
+  phone!: string;
 
   @MinLength(8, {
     message: "Password must be at least 8 characters long",
@@ -41,11 +53,17 @@ export class RegisterDto {
 
   @IsNotEmpty()
   @IsString()
-  otpCode!: string;
+  @Matches(/^\d{6}$/, {
+    message: "Email OTP must be a valid 6-digit code",
+  })
+  emailOtpCode!: string;
 
   @IsOptional()
-  @IsIn(["USER", "ADMIN", "SUPERADMIN"])
-  role?: string;
+  @IsString()
+  @Matches(/^\d{6}$/, {
+    message: "Phone OTP must be a valid 6-digit code",
+  })
+  phoneOtpCode?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -57,6 +75,25 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{10}$/, {
+    message: "Contact phone must be exactly 10 digits",
+  })
+  contactPhone?: string;
+}
+
+export class ApplyDealerAccessDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({
+    message: "Business name cannot be empty",
+  })
+  businessName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{10}$/, {
+    message: "Contact phone must be exactly 10 digits",
+  })
   contactPhone?: string;
 }
 
@@ -66,6 +103,15 @@ export class RequestRegistrationOtpDto {
     message: "Email is required",
   })
   email!: string;
+
+  @IsString()
+  @IsNotEmpty({
+    message: "Phone number is required",
+  })
+  @Matches(/^\d{10}$/, {
+    message: "Phone number must be exactly 10 digits",
+  })
+  phone!: string;
 
   @IsOptional()
   @IsIn(["USER_PORTAL", "DEALER_PORTAL"])
@@ -84,6 +130,12 @@ export class SigninDto {
     message: "Password is required",
   })
   password!: string;
+
+  @IsOptional()
+  @IsIn(["USER_PORTAL", "DEALER_PORTAL"], {
+    message: "portal must be USER_PORTAL or DEALER_PORTAL",
+  })
+  portal?: "USER_PORTAL" | "DEALER_PORTAL";
 }
 
 export class VerifyEmailDto {
@@ -114,6 +166,35 @@ export class ResetPasswordDto {
   })
   @Matches(/[!@#$%^&*]/, {
     message: "Password must contain at least one special character (!@#$%^&*)",
+  })
+  newPassword!: string;
+}
+
+/**
+ * Validates the forced first-login password change flow for legacy dealer accounts.
+ * The client re-submits the original temporary password for re-verification alongside
+ * the new password they want to set.
+ */
+export class ChangePasswordOnFirstLoginDto {
+  @IsEmail()
+  @IsNotEmpty({ message: "Email is required" })
+  email!: string;
+
+  @IsNotEmpty({ message: "Current (temporary) password is required" })
+  currentPassword!: string;
+
+  @MinLength(8, { message: "New password must be at least 8 characters long" })
+  @Matches(/[A-Z]/, {
+    message: "New password must contain at least one uppercase letter",
+  })
+  @Matches(/[a-z]/, {
+    message: "New password must contain at least one lowercase letter",
+  })
+  @Matches(/[0-9]/, {
+    message: "New password must contain at least one number",
+  })
+  @Matches(/[!@#$%^&*]/, {
+    message: "New password must contain at least one special character (!@#$%^&*)",
   })
   newPassword!: string;
 }

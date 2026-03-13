@@ -1,19 +1,13 @@
 import { useState, useEffect } from "react";
-import { Socket } from "socket.io-client";
 
 export const useChatMessages = (
   chatId: string,
-  user: { id: string; name: string; role: string },
   chat: any,
-  socket: Socket | null,
   sendMessage: any
 ) => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingTimeout, setTypingTimeoutRef] = useState<NodeJS.Timeout | null>(
-    null
-  );
+  const [isTyping] = useState(false);
 
   // Update messages when chat data is fetched
   useEffect(() => {
@@ -31,73 +25,41 @@ export const useChatMessages = (
     }
   }, [chat]);
 
-  // Handle real-time messages
-  useEffect(() => {
-    if (!socket) return;
+  const appendMessage = (newMessage: any) => {
+    if (!newMessage) return;
 
-    socket.on("newMessage", (newMessage) => {
-      setMessages((prev) => {
-        // Normalize sender field
-        // Normalization is the process of ensuring that the sender field is an object
-        const normalizedMessage = {
-          ...newMessage,
-          sender: newMessage.sender || { id: newMessage.senderId }, // ensure sender is an object
-        };
-        // Update existing message or append new one
-        const existingIndex = prev.findIndex(
-          (msg) => msg.id === normalizedMessage.id
-        );
-        // if message already exists
-        if (existingIndex !== -1) {
-          // Replace existing message with normalized version
-          const updatedMessages = [...prev]; // create a copy
-          updatedMessages[existingIndex] = normalizedMessage; // replace
-          return updatedMessages.sort(
-            (a, b) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() // a - b sorts in ascending order, while b - a sorts in descending order
-          );
-        }
-        // Append new message
-        return [...prev, normalizedMessage].sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-      });
-    });
-
-    socket.on("userTyping", (typingUser) => {
-      if (typingUser.id !== user.id) {
-        setIsTyping(true);
-        const timeout = setTimeout(() => setIsTyping(false), 3000);
-        setTypingTimeoutRef(timeout);
-      }
-    });
-
-    return () => {
-      socket.off("newMessage");
-      socket.off("userTyping");
-      if (typingTimeout) clearTimeout(typingTimeout);
+    const normalizedMessage = {
+      ...newMessage,
+      sender: newMessage.sender || { id: newMessage.senderId },
     };
-  }, [socket, user.id, typingTimeout]);
 
-  // Emit typing event
-  useEffect(() => {
-    if (message && socket) {
-      socket.emit("typing", { chatId, user });
-    }
-  }, [message, socket, chatId, user]);
+    setMessages((prev) => {
+      const exists = prev.some((msg) => msg.id === normalizedMessage.id);
+      if (exists) {
+        return prev;
+      }
+      return [...prev, normalizedMessage].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+    });
+  };
 
   // Send a message
-  const handleSendMessage = async (file?: File) => {
-    if (!message.trim() && !file) return;
+  const handleSendMessage = async (file?: File, content?: string) => {
+    const contentToSend = typeof content === "string" ? content : message;
+    if (!contentToSend.trim() && !file) return;
 
     try {
       const result = await sendMessage({
         chatId,
-        content: message || undefined,
+        content: contentToSend || undefined,
         file,
       }).unwrap();
-      console.log("result => ", result);
+      if (result) {
+        const newMessage = result.message ?? result.data?.message;
+        appendMessage(newMessage);
+      }
       setMessage("");
     } catch (err) {
       console.error("Failed to send message:", err);

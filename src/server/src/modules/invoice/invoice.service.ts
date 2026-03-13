@@ -4,8 +4,16 @@ import { makeLogsService } from "@/modules/logs/logs.factory";
 import { buildInvoiceEmailTemplate } from "@/shared/templates/invoiceEmail";
 import generateInvoicePdf from "@/shared/utils/invoice/generateInvoicePdf";
 import { getPlatformName } from "@/shared/utils/branding";
-import { toAccountReference } from "@/shared/utils/accountReference";
+import {
+  toAccountReference,
+  toOrderReference,
+} from "@/shared/utils/accountReference";
 import { InvoiceRepository, InvoiceWithDetails } from "./invoice.repository";
+import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
+import { ORDER_LIFECYCLE_STATUS } from "@/shared/utils/orderLifecycle";
+import { getPickupLocationSnapshot } from "@/shared/utils/pricing/checkoutPricing";
+import { config } from "@/config";
+import { resolveBillingNotificationEmails } from "@/shared/utils/billingNotificationEmails";
 
 interface RequesterContext {
   id: string;
@@ -46,22 +54,20 @@ export class InvoiceService {
       return;
     }
 
-    if (requester.role === "USER" && requester.id === ownerUserId) {
+    if (
+      (requester.role === "USER" || requester.role === "DEALER") &&
+      requester.id === ownerUserId
+    ) {
       return;
     }
 
     throw new AppError(403, "You are not authorized to access this invoice.");
   }
 
-  private getInternalRecipients(customerEmail: string): string[] {
-    const configuredRecipients = (process.env.BILLING_NOTIFICATION_EMAILS || "")
-      .split(",")
-      .map((email) => email.trim())
-      .filter(Boolean);
+  private async getInternalRecipients(customerEmail: string): Promise<string[]> {
+    const configuredRecipients = (await resolveBillingNotificationEmails()).emails;
 
-    const fallback = process.env.EMAIL_USER?.trim()
-      ? [process.env.EMAIL_USER.trim()]
-      : [];
+    const fallback = config.email.smtpUser?.trim() ? [config.email.smtpUser.trim()] : [];
 
     const recipients =
       configuredRecipients.length > 0 ? configuredRecipients : fallback;
@@ -78,12 +84,27 @@ export class InvoiceService {
   }
 
   private getCustomerCopyLabel(invoice: InvoiceWithDetails): string {
-    const isDealer = invoice.user.dealerProfile?.status === "APPROVED";
-    return isDealer ? "Dealer Copy" : "Client Copy";
+    return this.resolveCustomerType(invoice) === "DEALER"
+      ? "Dealer Copy"
+      : "User Copy";
+  }
+
+  private resolveCustomerType(invoice: InvoiceWithDetails): "DEALER" | "USER" {
+    if (invoice.order.customerRoleSnapshot === "DEALER") {
+      return "DEALER";
+    }
+
+    if (invoice.order.customerRoleSnapshot === "USER") {
+      return "USER";
+    }
+
+    return resolveCustomerTypeFromUser(invoice.user);
   }
 
   private async sendInvoiceEmails(invoice: InvoiceWithDetails): Promise<void> {
-    const internalRecipients = this.getInternalRecipients(invoice.customerEmail);
+    const internalRecipients = await this.getInternalRecipients(
+      invoice.customerEmail
+    );
     const shouldSendCustomerCopy = !invoice.customerEmailSentAt;
     const shouldSendInternalCopy =
       internalRecipients.length > 0 && !invoice.internalEmailSentAt;
@@ -94,8 +115,11 @@ export class InvoiceService {
 
     const pdfBuffer = await this.buildInvoicePdf(invoice);
     const copyLabel = this.getCustomerCopyLabel(invoice);
+    const customerType = this.resolveCustomerType(invoice);
     const platformName = getPlatformName();
     const accountReference = toAccountReference(invoice.user.id);
+    const orderReference = toOrderReference(invoice.orderId);
+    const invoiceAttachmentName = `${invoice.invoiceNumber}_${orderReference}.pdf`;
 
     let customerEmailSent = !shouldSendCustomerCopy;
     let internalEmailSent = !shouldSendInternalCopy;
@@ -107,9 +131,16 @@ export class InvoiceService {
         accountReference,
         copyLabel,
         invoiceNumber: invoice.invoiceNumber,
-        orderId: invoice.orderId,
+        orderId: orderReference,
+        customerType,
         orderDate: invoice.order.orderDate,
+        subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+        deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+        deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
+        paymentStatus: invoice.paymentStatus,
+        paymentTerms: invoice.paymentTerms,
+        paymentDueDate: invoice.paymentDueDate,
       });
 
       customerEmailSent = await sendEmail({
@@ -119,7 +150,7 @@ export class InvoiceService {
         html: customerTemplate.html,
         attachments: [
           {
-            filename: `${invoice.invoiceNumber}.pdf`,
+            filename: invoiceAttachmentName,
             content: pdfBuffer,
             contentType: "application/pdf",
           },
@@ -137,9 +168,16 @@ export class InvoiceService {
         accountReference,
         copyLabel: "Billing Copy",
         invoiceNumber: invoice.invoiceNumber,
-        orderId: invoice.orderId,
+        orderId: orderReference,
+        customerType,
         orderDate: invoice.order.orderDate,
+        subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+        deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+        deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
+        paymentStatus: invoice.paymentStatus,
+        paymentTerms: invoice.paymentTerms,
+        paymentDueDate: invoice.paymentDueDate,
       });
 
       const internalResults = await Promise.all(
@@ -151,7 +189,7 @@ export class InvoiceService {
             html: internalTemplate.html,
             attachments: [
               {
-                filename: `${invoice.invoiceNumber}.pdf`,
+                filename: invoiceAttachmentName,
                 content: pdfBuffer,
                 contentType: "application/pdf",
               },
@@ -180,7 +218,13 @@ export class InvoiceService {
 
   private async ensureInvoiceForOrder(
     orderId: string,
-    options?: { sendEmails?: boolean }
+    options?: {
+      sendEmails?: boolean;
+      /** True when the order is a pay-later order; invoice is created with PAYMENT_DUE status. */
+      isPayLater?: boolean;
+      /** Payment due date for pay-later invoices (set by transaction repo at delivery). */
+      paymentDueDate?: Date;
+    }
   ): Promise<InvoiceWithDetails> {
     const order = await this.invoiceRepository.findOrderForInvoice(orderId);
 
@@ -188,14 +232,42 @@ export class InvoiceService {
       throw new AppError(404, "Order not found");
     }
 
-    const transactionStatus = order.transaction?.status || order.status;
-    if (transactionStatus === "PENDING") {
+    const transactionStatus = String(
+      order.transaction?.status || order.status || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    const normalizedStatusByLegacyValue: Record<string, string> = {
+      PLACED: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+      PENDING: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+      PROCESSING: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      SHIPPED: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      IN_TRANSIT: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      PAID: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      DELIVERED: ORDER_LIFECYCLE_STATUS.DELIVERED,
+      REJECTED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      CANCELED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      RETURNED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      REFUNDED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+    };
+
+    const normalizedStatus =
+      normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
+
+    const isInvoiceEligible =
+      normalizedStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED ||
+      normalizedStatus === ORDER_LIFECYCLE_STATUS.DELIVERED;
+
+    if (!isInvoiceEligible) {
       throw new AppError(
         409,
-        "Invoice will be available after admin confirmation."
+        "Invoice is available only after payment is confirmed."
       );
     }
 
+    // For pay-later orders: create invoice with PAYMENT_DUE status and due date.
+    // For prepaid orders: paymentStatus defaults to PAID (no fields needed).
     const invoice =
       (await this.invoiceRepository.findInvoiceByOrderId(orderId)) ||
       (await this.invoiceRepository.ensureInvoiceRecord({
@@ -203,6 +275,13 @@ export class InvoiceService {
         userId: order.userId,
         customerEmail: order.user.email,
         year: new Date().getFullYear(),
+        ...(options?.isPayLater
+          ? {
+              paymentStatus: "PAYMENT_DUE",
+              paymentDueDate: options.paymentDueDate,
+              paymentTerms: "NET 30 from delivery date",
+            }
+          : {}),
       }));
 
     if (options?.sendEmails !== false) {
@@ -221,34 +300,79 @@ export class InvoiceService {
       subtotal: item.price * item.quantity,
     }));
 
-    const customerType =
-      invoice.user.dealerProfile?.status === "APPROVED" ? "DEALER" : "CLIENT";
+    const paymentTransactions = Array.isArray(invoice.paymentTransactions)
+      ? invoice.paymentTransactions.filter(
+          (transaction) => transaction.status === "CONFIRMED"
+        )
+      : [];
+
+    const customerType = this.resolveCustomerType(invoice);
+    const normalizedDeliveryMode = String(
+      invoice.order.deliveryMode || "DELIVERY"
+    )
+      .trim()
+      .toUpperCase();
+    const isPickup = normalizedDeliveryMode === "PICKUP";
+    const snapshotAddress = invoice.order.address;
+    const pickupLocation = isPickup ? getPickupLocationSnapshot() : null;
+    const locationAddress = snapshotAddress
+      ? {
+          fullName: snapshotAddress.fullName,
+          phoneNumber: snapshotAddress.phoneNumber,
+          line1: snapshotAddress.line1,
+          line2: snapshotAddress.line2,
+          landmark: snapshotAddress.landmark,
+          city: snapshotAddress.city,
+          state: snapshotAddress.state,
+          pincode: snapshotAddress.pincode,
+          country: snapshotAddress.country,
+        }
+      : isPickup
+      ? {
+          // Legacy compatibility only: modern orders always snapshot pickup address.
+          fullName: pickupLocation?.fullName,
+          phoneNumber: pickupLocation?.phoneNumber,
+          line1: pickupLocation?.line1 || "",
+          line2: pickupLocation?.line2 || null,
+          landmark: pickupLocation?.landmark || null,
+          city: pickupLocation?.city || "",
+          state: pickupLocation?.state || "",
+          pincode: pickupLocation?.pincode || "",
+          country: pickupLocation?.country || "",
+        }
+      : null;
 
     return generateInvoicePdf({
       invoiceNumber: invoice.invoiceNumber,
-      orderId: invoice.orderId,
+      orderId: toOrderReference(invoice.orderId),
       orderDate: invoice.order.orderDate,
       customerName: invoice.user.name,
+      customerPhone: invoice.user.phone || invoice.order.address?.phoneNumber || null,
       accountReference: toAccountReference(invoice.user.id),
       customerEmail: invoice.customerEmail,
       customerType,
       items,
+      subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+      deliveryCharge: Number(invoice.order.deliveryCharge || 0),
+      deliveryMode: normalizedDeliveryMode,
       totalAmount: invoice.order.amount,
-      billingAddress: invoice.order.address
-        ? {
-            street: invoice.order.address.street,
-            city: invoice.order.address.city,
-            state: invoice.order.address.state,
-            zip: invoice.order.address.zip,
-            country: invoice.order.address.country,
-          }
-        : null,
+      paymentStatus: invoice.paymentStatus,
+      paymentTerms: invoice.paymentTerms,
+      paymentDueDate: invoice.paymentDueDate,
+      paymentTransactions,
+      locationLabel: isPickup ? "Pickup Location" : "Delivery To",
+      locationAddress,
     });
   }
 
-  async generateAndSendInvoiceForOrder(orderId: string): Promise<InvoiceWithDetails> {
+  async generateAndSendInvoiceForOrder(
+    orderId: string,
+    options?: { isPayLater?: boolean; paymentDueDate?: Date }
+  ): Promise<InvoiceWithDetails> {
     const invoice = await this.ensureInvoiceForOrder(orderId, {
       sendEmails: true,
+      isPayLater: options?.isPayLater,
+      paymentDueDate: options?.paymentDueDate,
     });
 
     await this.logsService.info("Invoice generated successfully", {
@@ -284,10 +408,11 @@ export class InvoiceService {
   async downloadInvoiceByOrder(orderId: string, requester?: RequesterContext) {
     const invoice = await this.getInvoiceByOrder(orderId, requester);
     const content = await this.buildInvoicePdf(invoice);
+    const orderReference = toOrderReference(invoice.orderId);
 
     return {
       invoiceNumber: invoice.invoiceNumber,
-      filename: `${invoice.invoiceNumber}.pdf`,
+      filename: `${invoice.invoiceNumber}_${orderReference}.pdf`,
       content,
     };
   }
@@ -303,10 +428,11 @@ export class InvoiceService {
     this.assertOrderAccess(invoice.userId, requester);
 
     const content = await this.buildInvoicePdf(invoice);
+    const orderReference = toOrderReference(invoice.orderId);
 
     return {
       invoiceNumber: invoice.invoiceNumber,
-      filename: `${invoice.invoiceNumber}.pdf`,
+      filename: `${invoice.invoiceNumber}_${orderReference}.pdf`,
       content,
     };
   }

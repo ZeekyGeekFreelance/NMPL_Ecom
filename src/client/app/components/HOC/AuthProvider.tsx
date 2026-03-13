@@ -1,10 +1,20 @@
+"use client";
+
 import { useLazyGetMeQuery } from "@/app/store/apis/UserApi";
+import { useAddToCartMutation } from "@/app/store/apis/CartApi";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { logout, setUser } from "@/app/store/slices/AuthSlice";
+import { apiSlice } from "@/app/store/slices/ApiSlice";
 import { subscribeAuthSyncEvents } from "@/app/lib/authSyncChannel";
+import { clearPendingAuthIntent, getPendingAuthIntent } from "@/app/lib/authIntent";
+import { isCustomerDisplayRole, resolveDisplayRole } from "@/app/lib/userRole";
+import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import useToast from "@/app/hooks/ui/useToast";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = runtimeEnv.isDevelopment;
 const MIN_REVALIDATE_INTERVAL_MS = 800;
 
 const debugLog = (...args: unknown[]) => {
@@ -29,10 +39,18 @@ type AuthUser = {
   accountReference?: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: string;
+  effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
   avatar: string | null;
   isDealer?: boolean;
-  dealerStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  dealerStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "LEGACY"
+    | "REJECTED"
+    | "SUSPENDED"
+    | null;
   dealerBusinessName?: string | null;
   dealerContactPhone?: string | null;
 };
@@ -69,8 +87,10 @@ const shouldUpdateUserState = (
     currentUser.id !== nextUser.id ||
     currentUser.accountReference !== nextUser.accountReference ||
     currentUser.email !== nextUser.email ||
+    currentUser.phone !== nextUser.phone ||
     currentUser.name !== nextUser.name ||
     currentUser.role !== nextUser.role ||
+    currentUser.effectiveRole !== nextUser.effectiveRole ||
     currentUser.avatar !== nextUser.avatar ||
     currentUser.isDealer !== nextUser.isDealer ||
     currentUser.dealerStatus !== nextUser.dealerStatus ||
@@ -84,26 +104,122 @@ export default function AuthProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const dispatch = useAppDispatch();
-  const currentUser = useAppSelector((state) => state.auth.user);
+  const { showToast } = useToast();
+  const { user: currentUser, isAuthChecking } = useAppSelector(
+    (state) => state.auth
+  );
   const [triggerGetMe] = useLazyGetMeQuery();
+  const [addToCart] = useAddToCartMutation();
   const isRevalidatingRef = useRef(false);
   const lastRevalidatedAtRef = useRef(0);
   const currentUserRef = useRef(currentUser);
+  const isHandlingAuthIntentRef = useRef(false);
+  const lastHandledAuthIntentIdRef = useRef<string | null>(null);
+
+  const applyLocalSignedOutState = useCallback(() => {
+    dispatch(apiSlice.util.resetApiState());
+    dispatch(logout());
+    // Only wipe a pending add-to-cart intent when a user was actually logged in
+    // (explicit sign-out or session expiry). During the initial bootstrap auth
+    // check the user was never authenticated, so currentUserRef.current is
+    // undefined — clearing here would destroy an intent the guest just set
+    // seconds before being redirected to the sign-in page.
+    if (currentUserRef.current) {
+      clearPendingAuthIntent();
+    }
+  }, [dispatch]);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    if (isHandlingAuthIntentRef.current) {
+      return;
+    }
+
+    const pendingIntent = getPendingAuthIntent();
+    if (!pendingIntent) {
+      return;
+    }
+
+    if (lastHandledAuthIntentIdRef.current === pendingIntent.id) {
+      return;
+    }
+
+    const canUseCart = isCustomerDisplayRole(resolveDisplayRole(currentUser));
+    if (!canUseCart) {
+      clearPendingAuthIntent();
+      lastHandledAuthIntentIdRef.current = pendingIntent.id;
+      showToast(
+        "Pending cart action was cleared because this account cannot use cart.",
+        "error"
+      );
+      return;
+    }
+
+    const variantId = pendingIntent.variantId || pendingIntent.productId;
+    if (!variantId) {
+      clearPendingAuthIntent();
+      lastHandledAuthIntentIdRef.current = pendingIntent.id;
+      return;
+    }
+
+    isHandlingAuthIntentRef.current = true;
+    lastHandledAuthIntentIdRef.current = pendingIntent.id;
+
+    (async () => {
+      try {
+        await addToCart({
+          variantId,
+          quantity: pendingIntent.quantity,
+        }).unwrap();
+
+        clearPendingAuthIntent();
+
+        if (pendingIntent.actionType === "buy_now") {
+          showToast("Item added to cart. Continue to checkout.", "success");
+          router.push("/cart");
+          return;
+        }
+
+        showToast("Item added to cart.", "success");
+        if (pendingIntent.returnTo && pathname !== pendingIntent.returnTo) {
+          router.push(pendingIntent.returnTo);
+        }
+      } catch (error) {
+        showToast(
+          getApiErrorMessage(
+            error,
+            "Unable to restore your pending cart action. Please retry."
+          ),
+          "error"
+        );
+      } finally {
+        isHandlingAuthIntentRef.current = false;
+      }
+    })();
+  }, [addToCart, currentUser, pathname, router, showToast]);
+
   const revalidateAuth = useCallback(
-    async (reason: string) => {
+    async (reason: string, options?: { force?: boolean }) => {
       const now = Date.now();
 
       if (isRevalidatingRef.current) {
         return;
       }
 
-      if (now - lastRevalidatedAtRef.current < MIN_REVALIDATE_INTERVAL_MS) {
+      if (
+        !options?.force &&
+        now - lastRevalidatedAtRef.current < MIN_REVALIDATE_INTERVAL_MS
+      ) {
         return;
       }
 
@@ -121,43 +237,74 @@ export default function AuthProvider({
           return;
         }
 
-        dispatch(logout());
+        applyLocalSignedOutState();
       } catch (error) {
         if (isUnauthorizedError(error)) {
-          dispatch(logout());
+          applyLocalSignedOutState();
           return;
         }
 
         if (currentUserRef.current === undefined) {
-          dispatch(logout());
+          applyLocalSignedOutState();
         }
-
         debugLog(`[AuthProvider] Auth revalidation failed (${reason})`, error);
       } finally {
         isRevalidatingRef.current = false;
       }
     },
-    [dispatch, triggerGetMe]
+    [applyLocalSignedOutState, dispatch, triggerGetMe]
   );
 
   useEffect(() => {
-    void revalidateAuth("mount");
+    if (!isAuthChecking) {
+      return;
+    }
+    if (currentUserRef.current !== undefined) {
+      return;
+    }
+    void revalidateAuth("bootstrap", { force: true });
+  }, [isAuthChecking, revalidateAuth]);
 
+  useEffect(() => {
     const unsubscribe = subscribeAuthSyncEvents((event) => {
-      void revalidateAuth(`auth-sync:${event.type}`);
+      if (event.type === "SIGNED_OUT") {
+        applyLocalSignedOutState();
+        return;
+      }
+
+      if (event.type === "SIGNED_IN" || event.type === "SESSION_REFRESHED") {
+        void revalidateAuth(`auth-sync:${event.type}`, { force: true });
+      }
     });
 
+    const shouldRevalidateFromLifecycleEvent = () => {
+      if (isAuthChecking) {
+        return false;
+      }
+
+      return !!currentUserRef.current;
+    };
+
     const handleFocus = () => {
+      if (!shouldRevalidateFromLifecycleEvent()) {
+        return;
+      }
       void revalidateAuth("window-focus");
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        if (!shouldRevalidateFromLifecycleEvent()) {
+          return;
+        }
         void revalidateAuth("visibility-visible");
       }
     };
 
     const handleOnline = () => {
+      if (!shouldRevalidateFromLifecycleEvent()) {
+        return;
+      }
       void revalidateAuth("network-online");
     };
 
@@ -171,7 +318,7 @@ export default function AuthProvider({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
     };
-  }, [revalidateAuth]);
+  }, [applyLocalSignedOutState, dispatch, isAuthChecking, revalidateAuth]);
 
   return <>{children}</>;
 }

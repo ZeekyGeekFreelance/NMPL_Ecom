@@ -1,11 +1,10 @@
-import { Server as SocketIOServer } from "socket.io";
 import { ChatController } from "./chat.controller";
 import { ChatRepository } from "./chat.repository";
 import { ChatService } from "./chat.service";
 
-export const makeChatController = (io: SocketIOServer) => {
+export const makeChatController = () => {
   const repo = new ChatRepository();
-  const service = new ChatService(repo, io);
+  const service = new ChatService(repo);
   const controller = new ChatController(service);
 
   return controller;

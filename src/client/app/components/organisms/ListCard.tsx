@@ -85,7 +85,7 @@ const ListItem = ({
   const detailUrl =
     itemType === "product"
       ? item.href ||
-        (item.slug ? `/product/${item.slug}` : `/shop?searchQuery=${encodeURIComponent(item.name)}`)
+        (item.slug ? `/product/${item.slug}` : `/shop?search=${encodeURIComponent(item.name)}`)
       : item.href || "/dashboard/users";
 
   const subtitle =

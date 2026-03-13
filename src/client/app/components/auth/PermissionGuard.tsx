@@ -2,6 +2,7 @@
 import { ReactNode } from "react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { Shield, AlertTriangle } from "lucide-react";
+import { resolveDisplayRole } from "@/app/lib/userRole";
 
 interface PermissionGuardProps {
   children: ReactNode;
@@ -35,7 +36,7 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
     ) : null;
   }
 
-  const hasPermission = allowedRoles.includes(user.role);
+  const hasPermission = allowedRoles.includes(resolveDisplayRole(user));
 
   if (!hasPermission) {
     return showFallback

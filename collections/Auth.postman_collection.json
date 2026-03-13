@@ -98,7 +98,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"email\": \"bgbody5@gmail.com\"\n}",
+					"raw": "{\n    \"email\": \"user@example.com\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -183,13 +183,13 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "{{URL}}auth/verification-email/bgbody5@gmail.com",
+					"raw": "{{URL}}auth/verification-email/user@example.com",
 					"host": [
 						"{{URL}}auth"
 					],
 					"path": [
 						"verification-email",
-						"bgbody5@gmail.com"
+						"user@example.com"
 					]
 				}
 			},

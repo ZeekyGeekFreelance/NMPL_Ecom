@@ -3,6 +3,7 @@ import { Archive, Loader2, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { toProductReference } from "@/app/lib/utils/accountReference";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 interface ProductSummaryProps {
   product: {
@@ -13,8 +14,15 @@ interface ProductSummaryProps {
     categoryId: string;
   };
   categories: { label: string; value: string }[];
+  selectedVariant?: unknown;
+  attributeGroups?: unknown[];
+  selectedAttributes?: Record<string, string>;
+  onVariantChange?: (attributeName: string, value: string) => void;
+  resetSelections?: () => void;
   isUpdating: boolean;
   onSave: () => void;
+  canSave?: boolean;
+  submitError?: string | null;
 }
 
 const ProductSummary: React.FC<ProductSummaryProps> = ({
@@ -22,15 +30,18 @@ const ProductSummary: React.FC<ProductSummaryProps> = ({
   categories,
   isUpdating,
   onSave,
+  canSave = true,
+  submitError = null,
 }) => {
   const router = useRouter();
+  const formatPrice = useFormatPrice();
   const formattedPrice =
     typeof product.price === "number"
-      ? `$${product.price.toFixed(2)}`
-      : "$0.00";
+      ? formatPrice(product.price)
+      : formatPrice(0);
   const hasDiscount = product.discount && product.discount > 0;
   const discountedPrice = hasDiscount
-    ? `$${(product.price * (1 - product.discount / 100)).toFixed(2)}`
+    ? formatPrice(product.price * (1 - product.discount / 100))
     : null;
 
   return (
@@ -117,26 +128,29 @@ const ProductSummary: React.FC<ProductSummaryProps> = ({
           <h3 className="text-base font-medium text-gray-800 mb-4">
             Quick Actions
           </h3>
+          {submitError ? (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+              <p className="text-sm font-medium text-red-700">{submitError}</p>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-2">
             <button
               type="button"
               className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
               onClick={onSave}
-              disabled={isUpdating}
+              disabled={isUpdating || !canSave}
             >
               {isUpdating ? (
                 <Loader2 size={16} className="animate-spin" />
               ) : (
                 <Save size={16} />
               )}
-              {isUpdating ? "Saving..." : "Save Changes"}
+              {isUpdating ? "Saving..." : canSave ? "Save Changes" : "No Changes"}
             </button>
             <button
               type="button"
               className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              onClick={() =>
-                router.push(`/dashboard/products/inventory/${product.id}`)
-              }
+              onClick={() => router.push("/dashboard/inventory")}
             >
               <Archive size={16} />
               Manage Inventory

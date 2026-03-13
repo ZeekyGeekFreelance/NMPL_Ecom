@@ -1,12 +1,14 @@
+import { config } from "@/config";
+
 export const cookieParserOptions = {};
 
 export const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite:
-    process.env.NODE_ENV === "production"
-      ? ("none" as const)
-      : ("lax" as const),
+  secure: config.isProduction,
+  sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
   path: "/",
-  domain: undefined,
+  maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+  // Only set domain if explicitly configured (production)
+  // Leave undefined for localhost to work correctly
+  ...(config.security.cookieDomain ? { domain: config.security.cookieDomain } : {}),
 };

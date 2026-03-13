@@ -8,12 +8,18 @@ import {
 import React, { useState } from "react";
 import LogContext from "./LogContext";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import { toPrefixedReference } from "@/app/lib/utils/accountReference";
+import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 
 const LogsDashboard = () => {
-  const { data, isLoading, error } = useGetAllLogsQuery({});
+  const { data, isLoading, error, refetch } = useGetAllLogsQuery({});
   const [clearLogs, { isLoading: isClearingLogs }] = useClearLogsMutation();
   const [deleteLog, { isLoading: isDeletingLog }] = useDeleteLogMutation();
-  const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<
+    { type: "delete-log"; logId: string } | { type: "clear-all" } | null
+  >(null);
+  const [isConfirmingAction, setIsConfirmingAction] = useState(false);
 
   if (error) {
     console.log("error: ", error);
@@ -36,21 +42,49 @@ const LogsDashboard = () => {
   // Shortens IDs for display
   const shortenId = (id) => {
     if (!id) return "";
-    return `${id.substring(0, 8)}...`;
+    return toPrefixedReference("LOG", id);
   };
 
   // Handle delete single log
   const handleDeleteLog = (e, logId) => {
     e.stopPropagation(); // Prevent row click
-    if (confirm("Are you sure you want to delete this log?")) {
-      deleteLog(logId);
-    }
+    setConfirmTarget({ type: "delete-log", logId });
+    setIsConfirmOpen(true);
   };
 
   // Handle clear all logs
-  const handleClearLogs = async () => {
-    await clearLogs(undefined);
-    setShowConfirmClear(false);
+  const requestClearLogs = () => {
+    setConfirmTarget({ type: "clear-all" });
+    setIsConfirmOpen(true);
+  };
+
+  const closeConfirmation = () => {
+    if (isConfirmingAction) {
+      return;
+    }
+    setIsConfirmOpen(false);
+    setConfirmTarget(null);
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmTarget) {
+      return;
+    }
+
+    setIsConfirmingAction(true);
+
+    try {
+      if (confirmTarget.type === "delete-log") {
+        await deleteLog(confirmTarget.logId).unwrap();
+      } else {
+        await clearLogs(undefined).unwrap();
+      }
+      await refetch();
+    } finally {
+      setIsConfirmingAction(false);
+      setIsConfirmOpen(false);
+      setConfirmTarget(null);
+    }
   };
 
   const columns = [
@@ -121,33 +155,15 @@ const LogsDashboard = () => {
   return (
     <div className="p-4">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">System Logs</h1>
+        <h1 className="type-h3 text-gray-900">System Logs</h1>
         <div className="flex space-x-2">
-          {showConfirmClear ? (
-            <div className="flex items-center bg-gray-100 p-2 rounded">
-              <span className="text-sm text-gray-700 mr-2">Are you sure?</span>
-              <button
-                onClick={handleClearLogs}
-                className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors"
-                disabled={isClearingLogs}
-              >
-                {isClearingLogs ? "Clearing..." : "Yes, Clear All"}
-              </button>
-              <button
-                onClick={() => setShowConfirmClear(false)}
-                className="px-3 py-1 ml-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded text-sm transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowConfirmClear(true)}
-              className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded text-sm transition-colors"
-            >
-              Clear All Logs
-            </button>
-          )}
+          <button
+            onClick={requestClearLogs}
+            className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded text-sm transition-colors"
+            disabled={isClearingLogs || isConfirmingAction}
+          >
+            Clear All Logs
+          </button>
         </div>
       </div>
 
@@ -169,6 +185,26 @@ const LogsDashboard = () => {
       ) : (
         <div className="text-center py-8 text-red-600">Failed to load logs</div>
       )}
+
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        title={
+          confirmTarget?.type === "clear-all"
+            ? "Clear All Logs?"
+            : "Delete Log Entry?"
+        }
+        message={
+          confirmTarget?.type === "clear-all"
+            ? "You are about to permanently remove all log records. This action cannot be undone."
+            : "You are about to permanently remove this log record. This action cannot be undone."
+        }
+        type="danger"
+        confirmLabel={confirmTarget?.type === "clear-all" ? "Clear Logs" : "Delete"}
+        onConfirm={handleConfirmAction}
+        onCancel={closeConfirmation}
+        isConfirming={isConfirmingAction}
+        disableCancelWhileConfirming
+      />
     </div>
   );
 };

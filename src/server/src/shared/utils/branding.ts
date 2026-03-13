@@ -1,32 +1,5 @@
-const DEFAULT_PLATFORM_NAME = "W-PDMS";
-const DEFAULT_SUPPORT_EMAIL = "support@example.com";
+import { config } from "@/config";
 
-const firstNonEmpty = (values: Array<string | undefined | null>): string | null => {
-  for (const value of values) {
-    const normalized = value?.trim();
-    if (normalized) {
-      return normalized;
-    }
-  }
+export const getPlatformName = (): string => config.branding.platformName;
 
-  return null;
-};
-
-export const getPlatformName = (): string => {
-  return firstNonEmpty([process.env.PLATFORM_NAME]) || DEFAULT_PLATFORM_NAME;
-};
-
-export const getSupportEmail = (): string => {
-  const billingNotificationEmail = process.env.BILLING_NOTIFICATION_EMAILS
-    ?.split(",")
-    .map((email) => email.trim())
-    .find(Boolean);
-
-  return (
-    firstNonEmpty([
-      process.env.SUPPORT_EMAIL,
-      billingNotificationEmail,
-      process.env.EMAIL_USER,
-    ]) || DEFAULT_SUPPORT_EMAIL
-  );
-};
+export const getSupportEmail = (): string => config.branding.supportEmail;

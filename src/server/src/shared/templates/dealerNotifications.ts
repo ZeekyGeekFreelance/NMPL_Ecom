@@ -1,26 +1,24 @@
 import { getPlatformName } from "@/shared/utils/branding";
+import { formatINRCurrency } from "@/shared/utils/currency";
 
-export type DealerStatusEmail = "PENDING" | "APPROVED" | "REJECTED";
+export type DealerStatusEmail = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 
 export interface DealerPricingChangeRow {
   sku: string;
   productName: string;
-  previousPrice: number | null;
-  nextPrice: number | null;
+  previousPrice: number | null; // null when this is a first-time assignment
+  nextPrice: number | null;     // null when the mapping is being removed
+  basePrice: number;            // ProductVariant.price — always a real numeric value
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(value);
+const formatCurrency = (value: number) => formatINRCurrency(value);
 
-const formatOptionalCurrency = (value: number | null) => {
-  if (value === null) {
-    return "Base price";
-  }
-  return formatCurrency(value);
+/**
+ * Formats a nullable price. When null, falls back to the provided basePrice.
+ * The directive prohibits emitting symbolic labels — every price shown must be numeric.
+ */
+const formatOptionalCurrency = (value: number | null, basePrice: number) => {
+  return formatCurrency(value !== null ? value : basePrice);
 };
 
 const platformName = getPlatformName();
@@ -73,19 +71,29 @@ const statusMeta: Record<
   { title: string; copy: string; subject: string }
 > = {
   PENDING: {
-    subject: withPlatformSubject("Dealer Application In Review"),
-    title: "Application In Review",
-    copy: "Your dealer application is currently in review by our admin team.",
+    subject: withPlatformSubject("Dealer Application Under Evaluation"),
+    title: "Application Under Evaluation",
+    copy: "Your dealer application is currently being evaluated by our admin team.",
   },
   APPROVED: {
     subject: withPlatformSubject("Dealer Application Approved"),
     title: "Application Approved",
     copy: "Your dealer account is now approved and ready to use.",
   },
+  LEGACY: {
+    subject: withPlatformSubject("Dealer Account Migrated to Legacy"),
+    title: "Account Migrated to Legacy",
+    copy: "Your dealer account has been migrated to legacy status. Your existing pricing and access remain active.",
+  },
   REJECTED: {
     subject: withPlatformSubject("Dealer Application Update"),
     title: "Application Update",
     copy: "Your dealer application has been reviewed and is currently marked as rejected.",
+  },
+  SUSPENDED: {
+    subject: withPlatformSubject("Dealer Account Suspended"),
+    title: "Account Suspended",
+    copy: "Your dealer account has been temporarily suspended. Please contact support for details.",
   },
 };
 
@@ -125,7 +133,7 @@ export const buildDealerApplicationSubmittedEmail = ({
       summary,
       businessName ? `Business: ${businessName}` : null,
       accountReference ? `Account Reference: ${accountReference}` : null,
-      "Status: PENDING REVIEW",
+      "Status: PENDING EVALUATION",
       `Portal: ${portalUrl}`,
       `Support: ${supportEmail}`,
     ]
@@ -141,7 +149,7 @@ export const buildDealerApplicationSubmittedEmail = ({
         <p style="margin:0 0 14px;">
           ${businessLine}
           ${accountReference ? `Account Reference: <strong>${accountReference}</strong><br />` : ""}
-          Status: <strong>PENDING REVIEW</strong>
+          Status: <strong>PENDING EVALUATION</strong>
         </p>
         <p style="margin:0 0 10px;">You can sign in after an admin approves your request.</p>
         <p style="margin:0;">
@@ -244,12 +252,9 @@ export const buildDealerPricingUpdatedEmail = ({
         <tr>
           <td style="padding:8px;border:1px solid #e5e7eb;">${row.productName}</td>
           <td style="padding:8px;border:1px solid #e5e7eb;">${row.sku}</td>
-          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(
-            row.previousPrice
-          )}</td>
-          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(
-            row.nextPrice
-          )}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;">${formatCurrency(row.basePrice)}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(row.previousPrice, row.basePrice)}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;">${formatOptionalCurrency(row.nextPrice, row.basePrice)}</td>
         </tr>
       `
     )
@@ -272,9 +277,7 @@ export const buildDealerPricingUpdatedEmail = ({
       "Recent changes:",
       ...visibleRows.map(
         (row) =>
-          `- ${row.productName} (${row.sku}): ${formatOptionalCurrency(
-            row.previousPrice
-          )} -> ${formatOptionalCurrency(row.nextPrice)}`
+          `- ${row.productName} (${row.sku}): base ${formatCurrency(row.basePrice)} | prev ${formatOptionalCurrency(row.previousPrice, row.basePrice)} -> new ${formatOptionalCurrency(row.nextPrice, row.basePrice)}`
       ),
       hasMore ? `...and ${changes.length - visibleRows.length} more changes.` : null,
       "",
@@ -302,11 +305,12 @@ export const buildDealerPricingUpdatedEmail = ({
             ? `
               <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin:8px 0 14px;">
                 <thead>
-                  <tr style="background:#f3f4f6;">
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Product</th>
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">SKU</th>
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Previous</th>
-                    <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Updated</th>
+                <tr style="background:#f3f4f6;">
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Product</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">SKU</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Base Price</th>
+                <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Previous</th>
+                  <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;">Updated</th>
                   </tr>
                 </thead>
                 <tbody>${tableRowsHtml}</tbody>
@@ -338,6 +342,7 @@ export const buildDealerAccountCreatedEmail = ({
   temporaryPassword,
   portalUrl,
   supportEmail,
+  isLegacy = false,
 }: {
   recipientName: string;
   businessName: string | null;
@@ -346,9 +351,88 @@ export const buildDealerAccountCreatedEmail = ({
   temporaryPassword: string;
   portalUrl: string;
   supportEmail: string;
+  /**
+   * When true, renders the legacy-dealer variant:
+   * - Subject: "Dealer Account Created" (per spec)
+   * - Body: temporary credentials block with forced password-change notice
+   */
+  isLegacy?: boolean;
 }) => {
   const salutation = recipientName?.trim() || "Dealer";
 
+  if (isLegacy) {
+    // ── Legacy dealer account created email ─────────────────────────────────
+    // Spec: Subject "Dealer Account Created", body shows credentials, must
+    // change password on first login.
+    const title = "Dealer Account Created";
+    const preview = "Your dealer account has been created. Please sign in with your temporary credentials.";
+
+    return {
+      subject: withPlatformSubject(title),
+      text: [
+        `Hello ${salutation},`,
+        "",
+        "Your dealer account has been created.",
+        "",
+        "Temporary credentials:",
+        `Email: ${email}`,
+        `Password: ${temporaryPassword}`,
+        "",
+        "You must change your password on first login.",
+        "",
+        businessName ? `Business: ${businessName}` : null,
+        accountReference ? `Account Reference: ${accountReference}` : null,
+        `Sign in: ${portalUrl}/dealer/sign-in`,
+        `Support: ${supportEmail}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      html: baseEmailLayout({
+        preview,
+        title,
+        bodyHtml: `
+          <h2 style="margin:0 0 12px;font-size:22px;color:#111827;">${title}</h2>
+          <p style="margin:0 0 14px;">Hello <strong>${salutation}</strong>,</p>
+          <p style="margin:0 0 14px;">Your dealer account has been created.</p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+            style="background:#fefce8;border:1px solid #fde68a;border-radius:6px;margin:0 0 18px;">
+            <tr>
+              <td style="padding:16px 20px;">
+                <p style="margin:0 0 10px;font-weight:bold;font-size:14px;color:#92400e;">Temporary Credentials</p>
+                <p style="margin:0 0 6px;"><strong>Email:</strong> ${email}</p>
+                <p style="margin:0;"><strong>Password:</strong> ${temporaryPassword}</p>
+              </td>
+            </tr>
+          </table>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+            style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin:0 0 18px;">
+            <tr>
+              <td style="padding:12px 20px;">
+                <p style="margin:0;font-size:13px;color:#b91c1c;font-weight:bold;">
+                  &#9888;&nbsp; You must change your password on first login.
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <p style="margin:0 0 14px;">
+            ${businessName ? `<strong>Business:</strong> ${businessName}<br />` : ""}
+            ${accountReference ? `<strong>Account Reference:</strong> ${accountReference}<br />` : ""}
+          </p>
+          <p style="margin:0 0 14px;">
+            Sign in: <a href="${portalUrl}/dealer/sign-in" style="color:#2563eb;">${portalUrl}/dealer/sign-in</a>
+          </p>
+          <p style="margin:0;">
+            Support: <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>
+          </p>
+        `,
+      }),
+    };
+  }
+
+  // ── Standard (non-legacy) dealer account created email ───────────────────
   return {
     subject: withPlatformSubject("Your Dealer Account Is Ready"),
     text: [

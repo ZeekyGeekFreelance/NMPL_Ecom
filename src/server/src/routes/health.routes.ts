@@ -1,92 +1,65 @@
 import { Router } from "express";
-import { connectDB } from "../infra/database/database.config";
-import redisClient from "../infra/cache/redis";
-import logger from "../infra/winston/logger";
+import { pingDB } from "../infra/database/database.config";
+import { pingRedis } from "../infra/cache/redis";
+import { config } from "@/config";
+import { bootState } from "@/bootstrap/state";
 
 const router = Router();
 
-// Basic health check
-router.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || "development",
-    version: process.env.npm_package_version || "1.0.0",
-  });
-});
+const buildHealthPayload = async () => {
+  // Allow up to 10s for DB ping — Neon free tier has cold-start latency.
+  const dbConnected = await Promise.race([
+    pingDB(),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3_000)),
+  ]);
+  const redisConnected = config.redis.enabled ? await pingRedis() : true;
+  const heapUsedMb = Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
+  const memoryHealthy = heapUsedMb <= config.server.memoryUnhealthyThresholdMb;
 
-// Detailed health check with dependencies
-router.get("/health/detailed", async (req, res) => {
-  const health = {
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || "development",
-    version: process.env.npm_package_version || "1.0.0",
-    dependencies: {
-      database: "unknown",
-      redis: "unknown",
+  const healthy =
+    dbConnected &&
+    redisConnected &&
+    bootState.configValidated &&
+    bootState.migrationsApplied &&
+    bootState.serverReady &&
+    memoryHealthy;
+
+  return {
+    healthy,
+    status: healthy ? "healthy" : "unhealthy",
+    environment: config.nodeEnv,
+    checks: {
+      database: dbConnected,
+      redis: redisConnected,
+      config: bootState.configValidated,
+      migration: bootState.migrationsApplied,
+      serverReady: bootState.serverReady,
+      memory: memoryHealthy,
     },
     memory: {
-      used: process.memoryUsage().heapUsed,
-      total: process.memoryUsage().heapTotal,
-      external: process.memoryUsage().external,
+      heapUsedMb,
+      thresholdMb: config.server.memoryUnhealthyThresholdMb,
     },
-    cpu: process.cpuUsage(),
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
   };
+};
 
-  try {
-    // Check database connection
-    await connectDB();
-    health.dependencies.database = "connected";
-  } catch (error) {
-    health.dependencies.database = "disconnected";
-    health.status = "DEGRADED";
-    logger.error("Database health check failed:", error);
-  }
-
-  try {
-    // Check Redis connection
-    await redisClient.ping();
-    health.dependencies.redis = "connected";
-  } catch (error) {
-    health.dependencies.redis = "disconnected";
-    health.status = "DEGRADED";
-    logger.error("Redis health check failed:", error);
-  }
-
-  const statusCode = health.status === "OK" ? 200 : 503;
-  res.status(statusCode).json(health);
+router.get("/health", async (_req, res) => {
+  const payload = await buildHealthPayload();
+  res.status(payload.healthy ? 200 : 503).json(payload);
 });
 
-// Readiness probe for Kubernetes
-router.get("/ready", async (req, res) => {
-  try {
-    // Check if all critical services are ready
-    await connectDB();
-    await redisClient.ping();
-
-    res.status(200).json({
-      status: "ready",
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    logger.error("Readiness check failed:", error);
-    res.status(503).json({
-      status: "not ready",
-      timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
+router.get("/ready", async (_req, res) => {
+  const payload = await buildHealthPayload();
+  res.status(payload.healthy ? 200 : 503).json(payload);
 });
 
-// Liveness probe for Kubernetes
-router.get("/live", (req, res) => {
+router.get("/live", (_req, res) => {
   res.status(200).json({
     status: "alive",
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+    uptimeSeconds: Math.floor(process.uptime()),
   });
 });
 

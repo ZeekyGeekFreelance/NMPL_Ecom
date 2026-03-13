@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { makeAnalyticsController } from "./analytics.factory";
 import protect from "@/shared/middlewares/protect";
+import authorizeRole from "@/shared/middlewares/authorizeRole";
 
 const router = Router();
 const controller = makeAnalyticsController();
+const allowDashboardRoles = authorizeRole("ADMIN", "SUPERADMIN");
 
 /**
  * @swagger
@@ -35,6 +37,7 @@ const controller = makeAnalyticsController();
  *         description: Unauthorized. Token is invalid or missing.
  */
 router.post("/interactions", protect, controller.createInteraction);
+router.post("/interactions/bulk", protect, controller.createBulkInteractions);
 
 /**
  * @swagger
@@ -50,7 +53,7 @@ router.post("/interactions", protect, controller.createInteraction);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/year-range", protect, controller.getYearRange);
+router.get("/year-range", protect, allowDashboardRoles, controller.getYearRange);
 
 /**
  * @swagger
@@ -66,6 +69,6 @@ router.get("/year-range", protect, controller.getYearRange);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.get("/export", protect, controller.exportAnalytics);
+router.get("/export", protect, allowDashboardRoles, controller.exportAnalytics);
 
 export default router;

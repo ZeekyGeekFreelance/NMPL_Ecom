@@ -38,8 +38,6 @@ router.get("/", productController.getAllProducts);
  *       404:
  *         description: Product not found.
  */
-router.get("/:id", productController.getProductById);
-
 /**
  * @swagger
  * /products/slug/{slug}:
@@ -60,6 +58,8 @@ router.get("/:id", productController.getProductById);
  *         description: Product not found.
  */
 router.get("/slug/:slug", productController.getProductBySlug);
+
+router.get("/:id", productController.getProductById);
 
 /**
  * @swagger

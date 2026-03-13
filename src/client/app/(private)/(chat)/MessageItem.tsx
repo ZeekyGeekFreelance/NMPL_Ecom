@@ -13,7 +13,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
   message,
   isCurrentUser,
 }) => {
-  console.log("message => ", message);
   const isImage = message.type === "IMAGE";
   const isAudio = message.type === "VOICE";
 

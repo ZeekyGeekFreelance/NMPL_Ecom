@@ -33,20 +33,38 @@ export const aggregateMonthlyTrends = (
     monthlyData[index + 1] = { revenue: 0, orders: 0, sales: 0, users: 0 };
   });
 
+  const usersByMonth = new Map<number, Set<string>>();
+
   // Aggregate data by month.
   orders.forEach((order) => {
     const month = order.orderDate.getMonth() + 1;
     monthlyData[month].revenue += order.amount;
     monthlyData[month].orders += 1;
+
+    if (order.userId) {
+      if (!usersByMonth.has(month)) {
+        usersByMonth.set(month, new Set<string>());
+      }
+      usersByMonth.get(month)!.add(order.userId);
+    }
   });
+
   orderItems.forEach((item) => {
-    const month = item.createdAt.getMonth() + 1;
+    const monthSource = item.order?.orderDate || item.createdAt;
+    const month = monthSource.getMonth() + 1;
     monthlyData[month].sales += item.quantity;
   });
-  users.forEach((user) => {
-    const month = user.createdAt.getMonth() + 1;
-    monthlyData[month].users += 1;
-  });
+
+  if (usersByMonth.size > 0) {
+    usersByMonth.forEach((userIds, month) => {
+      monthlyData[month].users = userIds.size;
+    });
+  } else {
+    users.forEach((user) => {
+      const month = user.createdAt.getMonth() + 1;
+      monthlyData[month].users += 1;
+    });
+  }
 
   // Map data to arrays for charting.
   return {

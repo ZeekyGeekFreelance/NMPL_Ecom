@@ -1,89 +1,133 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import MainLayout from "@/app/components/templates/MainLayout";
 import {
-  useRequestRegistrationOtpMutation,
+  useApplyDealerAccessMutation,
   useSignupMutation,
 } from "@/app/store/apis/AuthApi";
-import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import PasswordField from "@/app/components/molecules/PasswordField";
+import { useRegistrationOtp } from "../../shared/useRegistrationOtp";
+import {
+  normalizeEmailValue,
+  normalizePhoneDigits,
+  sanitizeLooseTextInput,
+  sanitizeTextInput,
+  validateBusinessName,
+  validateDisplayName,
+  validateEmailValue,
+  validateTenDigitPhone,
+} from "@/app/lib/validators/common";
+import { useAuth } from "@/app/hooks/useAuth";
+import CustomLoader from "@/app/components/feedback/CustomLoader";
 
 interface DealerRegisterForm {
   name: string;
   email: string;
-  password: string;
-  otpCode: string;
-  businessName: string;
   contactPhone: string;
+  password: string;
+  emailOtpCode: string;
+  businessName: string;
 }
 
 const DealerRegister = () => {
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [signup, { isLoading, error }] = useSignupMutation();
-  const [requestRegistrationOtp, { isLoading: isSendingOtp }] =
-    useRequestRegistrationOtpMutation();
+  const [applyDealerAccess, { isLoading: isApplying, error: applyError }] =
+    useApplyDealerAccessMutation();
   const [successMessage, setSuccessMessage] = useState("");
-  const [otpMessage, setOtpMessage] = useState("");
+  const submissionError = isAuthenticated ? applyError : error;
   const apiErrorMessage = getApiErrorMessage(
-    error,
+    submissionError,
     "Failed to submit dealer registration."
   );
+  const {
+    sendOtp,
+    isSendingOtp,
+    cooldownSeconds,
+    feedback: otpFeedback,
+    canSendOtp,
+  } = useRegistrationOtp({
+    purpose: "DEALER_PORTAL",
+    requestDealerAccess: true,
+  });
 
   const {
     control,
+    register,
+    watch,
     getValues,
-    setError,
-    clearErrors,
+    setValue,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<DealerRegisterForm>({
+    mode: "onBlur",
+    reValidateMode: "onChange",
     defaultValues: {
       name: "",
       email: "",
-      password: "",
-      otpCode: "",
-      businessName: "",
       contactPhone: "",
+      password: "",
+      emailOtpCode: "",
+      businessName: "",
     },
   });
 
-  const handleSendOtp = async () => {
-    const email = getValues("email")?.trim();
-    if (!email) {
-      setError("email", { message: "Email is required before requesting OTP." });
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
       return;
     }
 
-    clearErrors("email");
+    setValue("name", user.name || "", { shouldDirty: false });
+    setValue("email", user.email || "", { shouldDirty: false });
+    setValue("contactPhone", normalizePhoneDigits(user.phone || "", 10), {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [isAuthenticated, setValue, user]);
 
-    try {
-      const response = await requestRegistrationOtp({
-        email,
-        purpose: "DEALER_PORTAL",
-        requestDealerAccess: true,
-      }).unwrap();
-
-      setOtpMessage(response.message || "Verification OTP sent to your email.");
-    } catch (otpError) {
-      setOtpMessage(getApiErrorMessage(otpError as any, "Failed to send OTP"));
-    }
+  const handleSendOtp = async () => {
+    await sendOtp(getValues("email"), getValues("contactPhone"));
   };
+
+  const canRequestOtp =
+    canSendOtp &&
+    validateEmailValue(watch("email")) === true &&
+    validateTenDigitPhone(watch("contactPhone")) === true;
 
   const onSubmit = async (formData: DealerRegisterForm) => {
     try {
+      if (isAuthenticated) {
+        const response = await applyDealerAccess({
+          businessName: sanitizeTextInput(formData.businessName),
+          contactPhone: normalizePhoneDigits(
+            formData.contactPhone || user?.phone || "",
+            10
+          ),
+        }).unwrap();
+
+        setSuccessMessage(
+          response.message ||
+            "Dealer request submitted. An admin will review your request."
+        );
+        return;
+      }
+
       await signup({
-        name: formData.name,
-        email: formData.email,
+        name: sanitizeTextInput(formData.name),
+        email: normalizeEmailValue(formData.email),
+        phone: normalizePhoneDigits(formData.contactPhone, 10),
         password: formData.password,
-        otpCode: formData.otpCode,
+        emailOtpCode: formData.emailOtpCode.replace(/\D/g, "").slice(0, 6),
         requestDealerAccess: true,
-        businessName: formData.businessName,
-        contactPhone: formData.contactPhone,
+        businessName: sanitizeTextInput(formData.businessName),
+        contactPhone: normalizePhoneDigits(formData.contactPhone, 10),
       }).unwrap();
 
       setSuccessMessage(
@@ -95,180 +139,223 @@ const DealerRegister = () => {
     }
   };
 
+  if (isAuthLoading) {
+    return <CustomLoader />;
+  }
+
   return (
-    <GuestOnlyGuard>
-      <MainLayout>
-        <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
-          <main className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 sm:p-8">
-            <h2 className="text-2xl sm:text-3xl font-semibold text-gray-800 text-center mb-2">
-              Dealer Registration
-            </h2>
-            <p className="text-sm text-gray-600 text-center mb-6">
-              Submit your business details. Admin approval is required for dealer pricing access.
-            </p>
+    <MainLayout>
+      <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
+        <main className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 sm:p-8">
+          <h2 className="text-2xl sm:text-3xl font-semibold text-gray-800 text-center mb-2">
+            Dealer Registration
+          </h2>
+          <p className="text-sm text-gray-600 text-center mb-6">
+            {isAuthenticated
+              ? "Apply dealer access for your current account. Admin approval is required."
+              : "Submit your business details. Admin approval is required for dealer pricing access."}
+          </p>
 
-            {successMessage && (
-              <div className="bg-green-50 border border-green-300 text-green-700 text-center text-sm p-3 rounded mb-4">
-                {successMessage}
-              </div>
-            )}
+          {isAuthenticated && user ? (
+            <div className="mb-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              Applying as <span className="font-semibold">{user.email}</span>
+            </div>
+          ) : null}
 
-            {error && (
-              <div className="bg-red-50 border border-red-300 text-red-600 text-center text-sm p-3 rounded mb-4">
-                {apiErrorMessage}
-              </div>
-            )}
+          {successMessage && (
+            <div className="bg-green-50 border border-green-300 text-green-700 text-center text-sm p-3 rounded mb-4">
+              {successMessage}
+            </div>
+          )}
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <Input
-                name="name"
-                type="text"
-                placeholder="Contact person name"
-                control={control}
-                validation={{
-                  required: "Name is required",
-                  minLength: {
-                    value: 3,
-                    message: "Name must be at least 3 characters long",
-                  },
-                }}
-                error={errors.name?.message}
-                className="py-2.5 text-sm"
-              />
+          {submissionError && (
+            <div className="bg-red-50 border border-red-300 text-red-600 text-center text-sm p-3 rounded mb-4">
+              {apiErrorMessage}
+            </div>
+          )}
 
-              <Input
-                name="email"
-                type="text"
-                placeholder="Business email"
-                control={control}
-                validation={{
-                  required: "Email is required",
-                  pattern: {
-                    value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                    message: "Enter a valid email",
-                  },
-                }}
-                error={errors.email?.message}
-                className="py-2.5 text-sm"
-              />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {!isAuthenticated ? (
+              <>
+                <Input
+                  name="name"
+                  type="text"
+                  placeholder="Contact person name"
+                  control={control}
+                  validation={{
+                    required: "Name is required",
+                    validate: (value: string) => validateDisplayName(value),
+                  }}
+                  onChange={(event) => {
+                    setValue("name", sanitizeLooseTextInput(event.target.value), {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    });
+                  }}
+                  error={errors.name?.message}
+                  className="py-2.5 text-sm"
+                />
 
-              <Input
-                name="password"
-                type="password"
-                placeholder="Password"
-                control={control}
-                validation={{
-                  required: "Password is required",
-                  minLength: {
-                    value: 8,
-                    message: "Password must be at least 8 characters long",
-                  },
-                  validate: {
-                    hasUppercase: (value) =>
-                      /[A-Z]/.test(value) ||
-                      "Password must contain at least one uppercase letter",
-                    hasLowercase: (value) =>
-                      /[a-z]/.test(value) ||
-                      "Password must contain at least one lowercase letter",
-                    hasNumber: (value) =>
-                      /[0-9]/.test(value) ||
-                      "Password must contain at least one number",
-                    hasSpecialChar: (value) =>
-                      /[!@#$%^&*]/.test(value) ||
-                      "Password must contain at least one special character (!@#$%^&*)",
-                  },
-                }}
-                error={errors.password?.message}
-                className="py-2.5 text-sm"
-              />
+                <Input
+                  name="email"
+                  type="email"
+                  placeholder="Business email"
+                  control={control}
+                  validation={{
+                    required: "Email is required",
+                    validate: (value: string) => validateEmailValue(value),
+                  }}
+                  onChange={(event) => {
+                    setValue("email", normalizeEmailValue(event.target.value), {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    });
+                  }}
+                  error={errors.email?.message}
+                  className="py-2.5 text-sm"
+                />
+              </>
+            ) : null}
 
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  className="text-xs sm:text-sm px-3 py-1.5 rounded-md border border-indigo-300 text-indigo-700 hover:bg-indigo-50 disabled:opacity-60"
-                  disabled={isSendingOtp}
-                >
-                  {isSendingOtp ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Loader2 size={14} className="animate-spin" />
-                      Sending OTP...
-                    </span>
-                  ) : (
-                    "Send Email OTP"
+            <Input
+              name="contactPhone"
+              type="tel"
+              placeholder="Contact phone"
+              control={control}
+              validation={{
+                required: "Contact phone is required",
+                validate: (value: string) => validateTenDigitPhone(value),
+              }}
+              onChange={(event) => {
+                setValue(
+                  "contactPhone",
+                  normalizePhoneDigits(event.target.value, 10),
+                  { shouldValidate: true, shouldDirty: true }
+                );
+              }}
+              error={errors.contactPhone?.message}
+              className="py-2.5 text-sm"
+            />
+
+            <Input
+              name="businessName"
+              type="text"
+              placeholder="Business name"
+              control={control}
+              validation={{
+                required: "Business name is required",
+                validate: (value: string) => validateBusinessName(value),
+              }}
+              onChange={(event) => {
+                setValue("businessName", sanitizeLooseTextInput(event.target.value), {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                });
+              }}
+              error={errors.businessName?.message}
+              className="py-2.5 text-sm"
+            />
+
+            {!isAuthenticated ? (
+              <>
+                <PasswordField register={register} watch={watch} errors={errors} />
+
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Verify email</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Request OTP and enter the 6-digit email code to submit dealer access.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={!canRequestOtp}
+                    className={`btn-base w-full border border-indigo-600 text-indigo-600 hover:bg-indigo-50 ${
+                      !canRequestOtp ? "cursor-not-allowed opacity-70" : ""
+                    }`}
+                  >
+                    {isSendingOtp
+                      ? "Sending OTP..."
+                      : cooldownSeconds > 0
+                      ? `Resend OTP in ${cooldownSeconds}s`
+                      : "Send OTP"}
+                  </button>
+
+                  {otpFeedback && (
+                    <p
+                      className={`text-xs text-center ${
+                        otpFeedback.type === "error" ? "text-red-600" : "text-gray-600"
+                      }`}
+                    >
+                      {otpFeedback.message}
+                    </p>
                   )}
-                </button>
-              </div>
 
-              {otpMessage && (
-                <p className="text-xs sm:text-sm text-gray-600">{otpMessage}</p>
+                  <Input
+                    name="emailOtpCode"
+                    type="text"
+                    placeholder="Email OTP"
+                    control={control}
+                    validation={{
+                      required: "Email OTP is required",
+                      pattern: {
+                        value: /^\d{6}$/,
+                        message: "Email OTP must be a valid 6-digit code",
+                      },
+                    }}
+                    onChange={(event) => {
+                      setValue(
+                        "emailOtpCode",
+                        event.target.value.replace(/\D/g, "").slice(0, 6),
+                        { shouldValidate: true, shouldDirty: true }
+                      );
+                    }}
+                    error={errors.emailOtpCode?.message}
+                    className="py-2.5 text-sm"
+                  />
+                </div>
+              </>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={(isLoading || isApplying) || !isValid}
+              className="btn-primary w-full"
+            >
+              {isLoading || isApplying ? (
+                <Loader2 className="animate-spin mx-auto" size={20} />
+              ) : isAuthenticated ? (
+                "Apply For Dealer Access"
+              ) : (
+                "Submit Dealer Request"
               )}
+            </button>
+          </form>
 
-              <Input
-                name="otpCode"
-                type="text"
-                placeholder="6-digit OTP"
-                control={control}
-                validation={{
-                  required: "OTP is required",
-                  pattern: {
-                    value: /^\d{6}$/,
-                    message: "Enter a valid 6-digit OTP",
-                  },
-                }}
-                error={errors.otpCode?.message}
-                className="py-2.5 text-sm"
-              />
-
-              <Input
-                name="businessName"
-                type="text"
-                placeholder="Business name"
-                control={control}
-                validation={{ required: "Business name is required" }}
-                error={errors.businessName?.message}
-                className="py-2.5 text-sm"
-              />
-
-              <Input
-                name="contactPhone"
-                type="text"
-                placeholder="Contact phone"
-                control={control}
-                validation={{ required: "Contact phone is required" }}
-                error={errors.contactPhone?.message}
-                className="py-2.5 text-sm"
-              />
-
-              <button
-                type="submit"
-                className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
-                  isLoading ? "cursor-not-allowed bg-gray-400" : ""
-                }`}
-              >
-                {isLoading ? (
-                  <Loader2 className="animate-spin mx-auto" size={20} />
-                ) : (
-                  "Submit Dealer Request"
-                )}
-              </button>
-            </form>
-
-            <div className="text-center text-sm text-gray-600 mt-4">
-              Already approved?{" "}
-              <Link href="/dealer/sign-in" className="text-indigo-600 hover:underline">
-                Dealer sign in
-              </Link>
-            </div>
-            <div className="text-center text-sm text-gray-600 mt-2">
-              <Link href="/sign-in" className="text-indigo-600 hover:underline">
-                Back to sign in
-              </Link>
-            </div>
-          </main>
-        </div>
-      </MainLayout>
-    </GuestOnlyGuard>
+          <div className="text-center text-sm text-gray-600 mt-4">
+            Already approved?{" "}
+            <Link
+              href="/dealer/sign-in"
+              className="hover:underline"
+              style={{ color: "var(--color-primary)" }}
+            >
+              Dealer sign in
+            </Link>
+          </div>
+          <div className="text-center text-sm text-gray-600 mt-2">
+            <Link
+              href={isAuthenticated ? "/profile" : "/sign-in"}
+              className="hover:underline"
+              style={{ color: "var(--color-primary)" }}
+            >
+              {isAuthenticated ? "Back to profile" : "Back to sign in"}
+            </Link>
+          </div>
+        </main>
+      </div>
+    </MainLayout>
   );
 };
 

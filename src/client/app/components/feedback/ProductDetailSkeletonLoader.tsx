@@ -38,7 +38,7 @@ const ProductDetailSkeletonLoader: React.FC = () => {
                 <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse"></div>
               </div>
 
-              {/* Rating */}
+              {/* Stock Summary */}
               <div className="flex items-center space-x-2">
                 <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
                 <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
@@ -76,7 +76,7 @@ const ProductDetailSkeletonLoader: React.FC = () => {
         </div>
       </div>
 
-      {/* Product Reviews Skeleton */}
+      {/* Product Additional Section Skeleton */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

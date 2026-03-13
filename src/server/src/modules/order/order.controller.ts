@@ -8,7 +8,9 @@ export class OrderController {
   constructor(private orderService: OrderService) {}
 
   getAllOrders = asyncHandler(async (req: Request, res: Response) => {
-    const orders = await this.orderService.getAllOrders();
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 50;
+    const orders = await this.orderService.getAllOrders({ page, limit });
     sendResponse(res, 200, {
       data: { orders },
       message: "Orders retrieved successfully",
@@ -30,26 +32,84 @@ export class OrderController {
   getOrderDetails = asyncHandler(async (req: Request, res: Response) => {
     const { orderId } = req.params;
     const userId = req.user?.id;
+    const userRole = req.user?.role;
     if (!userId) {
       throw new AppError(400, "User not found");
     }
-    const order = await this.orderService.getOrderDetails(orderId, userId);
+    const order = await this.orderService.getOrderDetails(orderId, userId, userRole);
     sendResponse(res, 200, {
       data: { order },
       message: "Order details retrieved successfully",
     });
   });
 
+  acceptQuotation = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { orderId } = req.params;
+    if (!userId) {
+      throw new AppError(400, "User not found");
+    }
+
+    const paymentSession = await this.orderService.acceptQuotationForOrder(
+      orderId,
+      userId
+    );
+    const message = paymentSession?.isMockPayment
+      ? "Quotation accepted. Mock payment confirmed for testing."
+      : "Quotation accepted. Redirect to payment gateway.";
+
+    sendResponse(res, 200, {
+      data: paymentSession,
+      message,
+    });
+  });
+
+  rejectQuotation = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { orderId } = req.params;
+    if (!userId) {
+      throw new AppError(400, "User not found");
+    }
+
+    const updatedTransaction = await this.orderService.rejectQuotationForOrder(
+      orderId,
+      userId
+    );
+
+    sendResponse(res, 200, {
+      data: { updatedTransaction },
+      message: "Quotation rejected successfully",
+    });
+  });
+
   createOrder = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    const { cartId } = req.body;
+    const { cartId, addressId, deliveryMode, expectedTotal } = req.body || {};
     if (!userId) {
       throw new AppError(400, "User not found");
     }
     if (!cartId) {
       throw new AppError(400, "Cart ID is required");
     }
-    const order = await this.orderService.createOrderFromCart(userId, cartId);
+    if (deliveryMode !== "PICKUP" && deliveryMode !== "DELIVERY") {
+      throw new AppError(400, "Delivery mode must be PICKUP or DELIVERY");
+    }
+    if (deliveryMode === "DELIVERY" && !addressId) {
+      throw new AppError(400, "Address selection is required for delivery");
+    }
+    // expectedTotal is optional: when provided the service validates no price
+    // drift occurred since the checkout summary was shown to the user.
+    const parsedExpectedTotal =
+      expectedTotal !== undefined && expectedTotal !== null
+        ? Number(expectedTotal)
+        : undefined;
+    const order = await this.orderService.createOrderFromCart(
+      userId,
+      cartId,
+      addressId,
+      deliveryMode,
+      Number.isFinite(parsedExpectedTotal) ? parsedExpectedTotal : undefined
+    );
     sendResponse(res, 201, {
       data: { order },
       message: "Order created successfully",

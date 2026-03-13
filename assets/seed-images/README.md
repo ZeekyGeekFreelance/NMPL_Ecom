@@ -1,65 +1,32 @@
-# Seed Images
+# Seed Image Notes
 
-This directory contains images for seeded data in the e-commerce platform.
+This folder is a reference location for optional seed image assets.
 
-## 📁 Directory Structure
+## Current status
 
-```
-assets/seed-images/
-├── users/           # User avatar images
-├── products/        # Product images
-└── categories/      # Category banner images
-```
+- No active image files are required here right now.
+- Current seed scripts do not read images from this directory:
+  - `src/server/seeds/seed.ts`
+  - `src/server/prisma/seed-dev.ts`
+- Those scripts currently create `images: []` for categories and variants.
 
-## 🖼️ Adding Custom Images
+## Where images are currently sourced/generated
 
-### **User Avatars**
+- Hero slider images are static files in:
+  - `src/client/public/images/hero/`
+- Brand and UI logos are static files in:
+  - `src/client/public/images/branding/`
+  - `src/client/app/assets/images/` (brand logos used via imports)
+- Missing product/user visuals are generated at runtime in the client by:
+  - `src/client/app/utils/placeholderImage.ts`
 
-Place user avatar images in the `users/` directory:
+## If you want seed scripts to use local files
 
-- `superadmin.jpg` - Superadmin avatar
-- `admin.jpg` - Admin avatar
-- `user.jpg` - Regular user avatar
+1. Place images in `src/client/public/images/...`
+2. Store their public paths (for example `/images/hero/HeroSlide.png`) in DB seed records
+3. Update seed scripts to write those paths into `images` fields
 
-### **Product Images**
+## Why this folder still exists
 
-Place product images in the `products/` directory:
-
-- `smartphone-1.jpg` - Main product image
-- `smartphone-2.jpg` - Secondary product image
-- `smartphone-3.jpg` - Additional product image
-- `smartphone-4.jpg` - Additional product image
-
-### **Category Images**
-
-Place category banner images in the `categories/` directory:
-
-- `electronics.jpg` - Electronics category banner
-
-## 📋 Image Requirements
-
-- **Format**: JPG/JPEG recommended
-- **User Avatars**: 200x200px (square)
-- **Product Images**: 400x400px (square)
-- **Category Images**: 400x300px (landscape)
-
-## 🔄 Fallback System
-
-If local images don't exist, the seeder will automatically use:
-
-- **User Avatars**: UI Avatars API (generated avatars with initials)
-- **Product Images**: Picsum Photos (random placeholder images)
-- **Category Images**: Picsum Photos (random placeholder images)
-
-## 🚀 Usage
-
-1. Add your custom images to the appropriate directories
-2. Run the seeder: `cd src/server && npm run seed`
-3. The seeder will automatically use your custom images
-
-## 💡 Tips
-
-- Use descriptive filenames that match the seeder expectations
-- Optimize images for web (compress, resize appropriately)
-- Keep file sizes reasonable (< 500KB per image)
-- Use consistent aspect ratios for better UX
+- Keeps a stable location for future seed-image workflows.
+- Avoids breaking docs or tooling that expects `assets/seed-images` to exist.

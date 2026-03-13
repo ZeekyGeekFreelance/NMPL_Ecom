@@ -1,32 +1,28 @@
 import { subDays, subMonths, subYears, startOfYear, endOfYear } from "date-fns";
 import redisClient from "@/infra/cache/redis";
+import { config } from "@/config";
+import { cacheKey } from "@/shared/utils/cacheKey";
 import { ReportsRepository } from "./reports.repository";
 import { AnalyticsRepository } from "../analytics/analytics.repository";
-import { ProductRepository } from "../product/product.repository";
 import {
   DateRangeQuery,
   SalesReport,
   UserRetentionReport,
 } from "./reports.types";
-import { PrismaClient } from "@prisma/client";
+import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
 
 export class ReportsService {
-  private prisma: PrismaClient;
-
   constructor(
     private reportsRepository: ReportsRepository,
-    private analyticsRepository: AnalyticsRepository,
-    private productRepository: ProductRepository
-  ) {
-    this.prisma = new PrismaClient();
-  }
+    private analyticsRepository: AnalyticsRepository
+  ) {}
 
   async generateSalesReport(query: DateRangeQuery): Promise<SalesReport> {
     const { timePeriod, year, startDate, endDate } = query;
-    const cacheKey = `reports:sales:${timePeriod}:${year || "all"}:${
+    const reportCacheKey = cacheKey("reports", "sales", `${timePeriod}:${year || "all"}:${
       startDate?.toISOString() || "none"
-    }:${endDate?.toISOString() || "none"}`;
-    const cachedData = await redisClient.get(cacheKey);
+    }:${endDate?.toISOString() || "none"}`);
+    const cachedData = await redisClient.get(reportCacheKey);
 
     if (cachedData) {
       return JSON.parse(cachedData);
@@ -59,9 +55,7 @@ export class ReportsService {
       [key: string]: { revenue: number; sales: number; name: string };
     } = {};
     for (const item of orderItems) {
-      const product = await this.productRepository.findProductById(
-        item.variantId
-      );
+      const product = item.variant?.product;
       const categoryId = product?.categoryId || "uncategorized";
       const categoryName = product?.category?.name || "Uncategorized";
       if (!categorySales[categoryId]) {
@@ -72,41 +66,44 @@ export class ReportsService {
         };
       }
       categorySales[categoryId].revenue +=
-        item.quantity * ( item.variant.price || 0); 
+        item.quantity * (item.price || item.variant?.price || 0);
       categorySales[categoryId].sales += item.quantity;
     }
-    const byCategory = Object.entries(categorySales).map(
-      ([categoryId, data]) => ({
-        categoryId,
+    const byCategory = Object.values(categorySales)
+      .map((data) => ({
         categoryName: data.name,
         revenue: data.revenue,
         sales: data.sales,
-      })
-    );
+      }))
+      .sort((first, second) => second.revenue - first.revenue);
 
     // Top Products
     const productSales: {
       [key: string]: {
         productId: string;
+        sku: string;
         productName: string;
         quantity: number;
         revenue: number;
       };
     } = {};
     for (const item of orderItems) {
-      const productId = item.variantId;
-      if (!productSales[productId]) {
-        const product = await this.productRepository.findProductById(productId);
-        productSales[productId] = {
+      const sku = item.variant?.sku || "N/A";
+      const productId = item.variant?.productId || item.variantId;
+      const aggregationKey = `${productId}:${sku}`;
+
+      if (!productSales[aggregationKey]) {
+        productSales[aggregationKey] = {
           productId,
-          productName: product?.name || "Unknown",
+          sku,
+          productName: item.variant?.product?.name || "Unknown",
           quantity: 0,
           revenue: 0,
         };
       }
-      productSales[productId].quantity += item.quantity;
-      productSales[productId].revenue +=
-        item.quantity * (item.variant.price || 0);
+      productSales[aggregationKey].quantity += item.quantity;
+      productSales[aggregationKey].revenue +=
+        item.quantity * (item.price || item.variant?.price || 0);
     }
     const topProducts = Object.values(productSales)
       .sort((a, b) => b.revenue - a.revenue)
@@ -121,7 +118,11 @@ export class ReportsService {
       topProducts,
     };
 
-    await redisClient.setex(cacheKey, 300, JSON.stringify(result));
+    await redisClient.setex(
+      reportCacheKey,
+      config.cache.reportsTtlSeconds,
+      JSON.stringify(result)
+    );
     return result;
   }
 
@@ -129,10 +130,14 @@ export class ReportsService {
     query: DateRangeQuery
   ): Promise<UserRetentionReport> {
     const { timePeriod, year, startDate, endDate } = query;
-    const cacheKey = `reports:user_retention:${timePeriod}:${year || "all"}:${
+    const reportCacheKey = cacheKey(
+      "reports",
+      "user_retention",
+      `${timePeriod}:${year || "all"}:${
       startDate?.toISOString() || "none"
-    }:${endDate?.toISOString() || "none"}`;
-    const cachedData = await redisClient.get(cacheKey);
+      }:${endDate?.toISOString() || "none"}`
+    );
+    const cachedData = await redisClient.get(reportCacheKey);
 
     if (cachedData) {
       return JSON.parse(cachedData);
@@ -204,6 +209,7 @@ export class ReportsService {
         userId: user.id,
         name: user.name || "Unknown",
         email: user.email,
+        customerType: resolveCustomerTypeFromUser(user),
         orderCount: user.orders.length,
         totalSpent: user.orders.reduce((sum, order) => sum + order.amount, 0),
       }))
@@ -218,7 +224,11 @@ export class ReportsService {
       topUsers: topCustomers,
     };
 
-    await redisClient.setex(cacheKey, 300, JSON.stringify(result));
+    await redisClient.setex(
+      reportCacheKey,
+      config.cache.reportsTtlSeconds,
+      JSON.stringify(result)
+    );
     return result;
   }
 
@@ -279,6 +289,10 @@ export class ReportsService {
           previousEndDate = subYears(now, 1);
           break;
         case "allTime":
+          if (!query.year && !query.startDate && !query.endDate) {
+            yearStart = startOfYear(now);
+            yearEnd = endOfYear(now);
+          }
           currentStartDate = undefined;
           currentEndDate = undefined;
           break;

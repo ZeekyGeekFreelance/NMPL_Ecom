@@ -1,13 +1,13 @@
 "use client";
-import React, { useEffect } from "react";
+import React from "react";
 import { Eye } from "lucide-react";
 import { Product } from "@/app/types/productTypes";
 import Image from "next/image";
 import Link from "next/link";
-import Rating from "@/app/components/feedback/Rating";
 import useTrackInteraction from "@/app/hooks/miscellaneous/useTrackInteraction";
 import { useRouter } from "next/navigation";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
+import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 
 interface ProductCardProps {
   product: Product;
@@ -16,24 +16,32 @@ interface ProductCardProps {
 const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { trackInteraction } = useTrackInteraction();
   const router = useRouter();
-
-  useEffect(() => {
-    trackInteraction(product.id, "view");
-  }, [product.id, trackInteraction]);
+  const formatPrice = useFormatPrice();
 
   const handleClick = () => {
     trackInteraction(product.id, "click");
     router.push(`/product/${product.slug}`);
   };
 
-  // Compute lowest price among in-stock variants
-  const inStockVariants = product.variants.filter(
-    (variant) => variant.stock > 0
-  );
-  const lowestPrice =
-    inStockVariants.length > 0
-      ? Math.min(...inStockVariants.map((variant) => variant.price))
-      : 0;
+  const displayImage =
+    product.thumbnail ||
+    generateProductPlaceholder(product.name);
+  const retailPrice = Number(product.minPrice ?? product.price ?? 0);
+  const maxPriceRaw = Number(product.maxPrice);
+  const dealerPriceRaw = Number(product.dealerMinPrice);
+  const hasDealerPrice =
+    Number.isFinite(dealerPriceRaw) &&
+    dealerPriceRaw > 0 &&
+    dealerPriceRaw !== retailPrice;
+  const dealerPrice = hasDealerPrice ? dealerPriceRaw : null;
+  const effectivePrice = dealerPrice ?? retailPrice;
+  const hasPriceRange =
+    Number.isFinite(maxPriceRaw) &&
+    maxPriceRaw > 0 &&
+    maxPriceRaw > effectivePrice;
+  const mobileBasePrice = dealerPrice !== null ? retailPrice : hasPriceRange ? maxPriceRaw : null;
+  const showMobileStrikePrice =
+    mobileBasePrice !== null && mobileBasePrice > effectivePrice;
 
   return (
     <div
@@ -46,8 +54,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <Link href={`/product/${product.slug}`} className="block w-full h-full">
           <Image
             src={
-              product.variants[0]?.images[0] ||
-              generateProductPlaceholder(product.name)
+              displayImage
             }
             alt={product.name}
             width={240}
@@ -63,12 +70,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         {/* Product Flags */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           {product.isNew && (
-            <span className="bg-green-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+            <span className="text-white text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-success)' }}>
               NEW
             </span>
           )}
           {product.isFeatured && (
-            <span className="bg-purple-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+            <span className="text-white text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'var(--color-secondary)' }}>
               FEATURED
             </span>
           )}
@@ -86,57 +93,59 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </Link>
         </div>
 
-        {/* Stock Status */}
-        {inStockVariants.length === 0 && (
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-            <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-medium">
-              Out of Stock
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="p-3 sm:p-4 lg:p-5 flex flex-col flex-grow">
         <Link href={`/product/${product.slug}`} className="block flex-grow">
-          <h3 className="font-semibold text-gray-900 text-xs sm:text-sm lg:text-base mb-2 line-clamp-2 leading-tight">
+          <h3 className="font-semibold text-gray-900 text-sm sm:text-sm lg:text-base mb-2 line-clamp-2 leading-snug">
             {product.name}
           </h3>
 
           <div className="flex items-center justify-between mb-2 sm:mb-3">
             <div className="flex items-center space-x-2">
-              {inStockVariants.length > 0 ? (
-                <span className="text-indigo-700 font-bold text-sm sm:text-lg lg:text-xl">
-                  ${lowestPrice.toFixed(2)}
-                </span>
-              ) : (
-                <span className="text-gray-500 font-medium text-sm sm:text-lg lg:text-xl">
-                  Out of stock
-                </span>
-              )}
-            </div>
-            <div className="flex items-center">
-              <Rating rating={product.averageRating} />
-              {product.reviewCount > 0 && (
-                <span className="text-gray-500 text-xs lg:text-sm ml-1">
-                  ({product.reviewCount})
-                </span>
-              )}
+              <div className="flex flex-col gap-0.5">
+                <div className="sm:hidden">
+                  {showMobileStrikePrice ? (
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-500 line-through">
+                        {formatPrice(mobileBasePrice)}
+                      </span>
+                      <span className="text-sm text-gray-700">
+                        {formatPrice(effectivePrice)}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-700">
+                      {formatPrice(effectivePrice)}
+                    </span>
+                  )}
+                </div>
+                <div className="hidden sm:flex sm:flex-col sm:gap-0.5">
+                  {dealerPrice !== null ? (
+                    <>
+                      <span className="text-xs sm:text-sm text-gray-500 line-through">
+                        Retail: {formatPrice(retailPrice)}
+                      </span>
+                      <span className="text-base sm:text-lg text-gray-700 font-semibold">
+                        Dealer: {formatPrice(dealerPrice)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-sm sm:text-base text-gray-700 font-medium">
+                      {formatPrice(effectivePrice)}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Category */}
-          {product.category && (
-            <div className="text-xs lg:text-sm text-gray-500 mb-2">
-              {product.category.name}
-            </div>
-          )}
         </Link>
 
         {/* Quick Actions */}
         <div className="mt-auto pt-2 sm:pt-3 border-t border-gray-100">
           <button
-            className="w-full bg-indigo-600 text-white py-2 sm:py-2.5 lg:py-3 rounded-sm
-              font-medium text-xs sm:text-sm"
+            className="w-full text-white py-2 sm:py-2.5 lg:py-3 rounded-sm font-medium text-xs sm:text-sm"
+            style={{ backgroundColor: 'var(--color-primary)' }}
             onClick={(e) => {
               e.stopPropagation();
               handleClick();

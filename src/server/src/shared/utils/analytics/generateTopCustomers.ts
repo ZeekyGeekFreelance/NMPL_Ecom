@@ -1,3 +1,5 @@
+import { resolveCustomerTypeFromUser } from "@/shared/utils/userRole";
+
 export const generateTopCustomers = (
   users: any[],
   engagementScores: { [userId: string]: number }
@@ -7,6 +9,7 @@ export const generateTopCustomers = (
       id: user.id,
       name: user.name || "Unknown",
       email: user.email,
+      customerType: resolveCustomerTypeFromUser(user),
       orderCount: user.orders.length,
       totalSpent: user.orders.reduce(
         (sum: number, order: any) => sum + order.amount,

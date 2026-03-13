@@ -1,11 +1,277 @@
-import { AllAnalytics } from "@/modules/analytics/analytics.types";
-import { AllReports } from "@/modules/reports/reports.types";
 import PDFDocument from "pdfkit";
+import formatAnalyticsData, { ExportSection } from "./formatAnalyticsData";
+import { configurePdfFonts } from "@/shared/utils/pdfFonts";
 
-export default function generatePDF(data: any): Promise<Buffer> {
+const PAGE_MARGIN = 44;
+const TITLE_FONT_SIZE = 18;
+const META_FONT_SIZE = 10;
+const HEADING_FONT_SIZE = 13;
+const BODY_FONT_SIZE = 9;
+const TABLE_HEADER_HEIGHT = 22;
+const CELL_PADDING_X = 4;
+const CELL_PADDING_Y = 4;
+const SECTION_SPACING = 14;
+const MIN_COLUMN_WIDTH = 48;
+
+type ColumnLayout = {
+  key: string;
+  x: number;
+  width: number;
+};
+
+const formatCell = (value: unknown): string => {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => formatCell(item)).join(" | ");
+  }
+
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, nestedValue]) => `${key}: ${formatCell(nestedValue)}`)
+      .filter((entry) => !entry.endsWith(": "))
+      .join("; ");
+  }
+
+  return String(value).replace(/\s+/g, " ").trim();
+};
+
+const ensureVerticalSpace = (doc: PDFKit.PDFDocument, requiredHeight = 28) => {
+  const bottomLimit = doc.page.height - PAGE_MARGIN;
+  if (doc.y + requiredHeight > bottomLimit) {
+    doc.addPage();
+  }
+};
+
+const estimateColumnWeight = (
+  section: ExportSection,
+  column: string
+): number => {
+  const headerWeight = Math.min(column.length, 32);
+  const contentWeight = section.rows.reduce((maxWeight, row) => {
+    const content = formatCell(row[column]);
+    if (!content) {
+      return maxWeight;
+    }
+
+    // Keep width estimate bounded so one long field does not break the table.
+    const boundedLength = Math.min(content.length, 42);
+    return Math.max(maxWeight, boundedLength);
+  }, 0);
+
+  return Math.max(headerWeight, contentWeight, 8);
+};
+
+const buildColumnLayout = (
+  doc: PDFKit.PDFDocument,
+  section: ExportSection
+): ColumnLayout[] => {
+  const tableWidth = doc.page.width - PAGE_MARGIN * 2;
+  const columnCount = Math.max(section.columns.length, 1);
+  const equalWidth = tableWidth / columnCount;
+  const weights = section.columns.map((column) =>
+    estimateColumnWeight(section, column)
+  );
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || columnCount;
+
+  let rawWidths = weights.map((weight) =>
+    Math.max(MIN_COLUMN_WIDTH, (weight / totalWeight) * tableWidth)
+  );
+
+  const totalRawWidth = rawWidths.reduce((sum, width) => sum + width, 0);
+  if (totalRawWidth > tableWidth) {
+    const scale = tableWidth / totalRawWidth;
+    rawWidths = rawWidths.map((width) => Math.max(equalWidth * 0.55, width * scale));
+  }
+
+  const normalizedTotal = rawWidths.reduce((sum, width) => sum + width, 0);
+  if (normalizedTotal < tableWidth) {
+    const remaining = tableWidth - normalizedTotal;
+    const increment = remaining / rawWidths.length;
+    rawWidths = rawWidths.map((width) => width + increment);
+  }
+
+  let currentX = PAGE_MARGIN;
+  return section.columns.map((column, index) => {
+    const width =
+      index === section.columns.length - 1
+        ? tableWidth - (currentX - PAGE_MARGIN)
+        : rawWidths[index];
+    const layout: ColumnLayout = {
+      key: column,
+      x: currentX,
+      width,
+    };
+    currentX += width;
+    return layout;
+  });
+};
+
+const isNumericLikeColumn = (columnName: string): boolean => {
+  const normalized = columnName.replace(/\s+/g, "").toLowerCase();
+  return (
+    normalized.includes("snno") ||
+    normalized.includes("rank") ||
+    normalized.includes("qty") ||
+    normalized.includes("quantity") ||
+    normalized.includes("count") ||
+    normalized.includes("price") ||
+    normalized.includes("revenue") ||
+    normalized.includes("amount") ||
+    normalized.includes("total") ||
+    normalized.includes("spent") ||
+    normalized.includes("value")
+  );
+};
+
+const isNumericLikeValue = (value: string): boolean => {
+  const normalized = value.replace(/[\u20B9,\s]/g, "");
+  return /^-?\d+(\.\d+)?$/.test(normalized);
+};
+
+const normalizeForFont = (value: string, supportsUnicode: boolean): string =>
+  supportsUnicode ? value : value.replace(/\u20B9/g, "INR ");
+
+const drawTableHeader = (
+  doc: PDFKit.PDFDocument,
+  layout: ColumnLayout[],
+  fonts: { regular: string; bold: string }
+) => {
+  const startY = doc.y;
+
+  layout.forEach((column) => {
+    doc
+      .rect(column.x, startY, column.width, TABLE_HEADER_HEIGHT)
+      .fillAndStroke("#E5E7EB", "#D1D5DB");
+    doc
+      .fillColor("#111827")
+      .font(fonts.bold)
+      .fontSize(BODY_FONT_SIZE)
+      .text(column.key, column.x + CELL_PADDING_X, startY + 6, {
+        width: column.width - CELL_PADDING_X * 2,
+        align: isNumericLikeColumn(column.key) ? "right" : "left",
+      });
+  });
+
+  doc.y = startY + TABLE_HEADER_HEIGHT;
+};
+
+const drawTableRows = (
+  doc: PDFKit.PDFDocument,
+  section: ExportSection,
+  layout: ColumnLayout[],
+  fonts: { regular: string; bold: string; supportsUnicode: boolean }
+) => {
+  const bottomLimit = doc.page.height - PAGE_MARGIN;
+
+  if (!section.rows.length) {
+    ensureVerticalSpace(doc, 26);
+    doc
+      .font(fonts.regular)
+      .fontSize(BODY_FONT_SIZE)
+      .fillColor("#6B7280")
+      .text("No data available", PAGE_MARGIN, doc.y + 8, {
+        width: doc.page.width - PAGE_MARGIN * 2,
+      });
+    doc.y += 22;
+    return;
+  }
+
+  section.rows.forEach((row) => {
+    const rowValues = layout.map((column) =>
+      normalizeForFont(formatCell(row[column.key]), fonts.supportsUnicode)
+    );
+    const cellHeights = rowValues.map((value, index) =>
+      doc.heightOfString(value || "", {
+        width: layout[index].width - CELL_PADDING_X * 2,
+        align:
+          isNumericLikeColumn(layout[index].key) || isNumericLikeValue(value)
+            ? "right"
+            : "left",
+      })
+    );
+
+    const rowHeight =
+      Math.max(...cellHeights, doc.currentLineHeight()) + CELL_PADDING_Y * 2;
+
+    if (doc.y + rowHeight > bottomLimit) {
+      doc.addPage();
+      drawTableHeader(doc, layout, fonts);
+    }
+
+    const rowY = doc.y;
+
+    layout.forEach((column, index) => {
+      const value = rowValues[index];
+      const align =
+        isNumericLikeColumn(column.key) || isNumericLikeValue(value)
+          ? "right"
+          : "left";
+
+      doc
+        .rect(column.x, rowY, column.width, rowHeight)
+        .strokeColor("#E5E7EB")
+        .stroke();
+
+      doc
+        .font(fonts.regular)
+        .fontSize(BODY_FONT_SIZE)
+        .fillColor("#111827")
+        .text(value, column.x + CELL_PADDING_X, rowY + CELL_PADDING_Y, {
+          width: column.width - CELL_PADDING_X * 2,
+          align,
+        });
+    });
+
+    doc.y = rowY + rowHeight;
+  });
+};
+
+const renderSectionTable = (
+  doc: PDFKit.PDFDocument,
+  section: ExportSection,
+  fonts: { regular: string; bold: string; supportsUnicode: boolean }
+) => {
+  ensureVerticalSpace(doc, 74);
+
+  doc
+    .font(fonts.bold)
+    .fontSize(HEADING_FONT_SIZE)
+    .fillColor("#111827")
+    .text(section.title, { underline: true })
+    .moveDown(0.5);
+
+  if (!section.columns.length) {
+    doc
+      .font(fonts.regular)
+      .fontSize(BODY_FONT_SIZE)
+      .fillColor("#6B7280")
+      .text("No columns available")
+      .moveDown(1);
+    return;
+  }
+
+  const layout = buildColumnLayout(doc, section);
+  drawTableHeader(doc, layout, fonts);
+  drawTableRows(doc, section, layout, fonts);
+  doc.moveDown(SECTION_SPACING / 12);
+};
+
+export default function generatePDF(data: unknown): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({ margin: PAGE_MARGIN });
     const buffers: Buffer[] = [];
+    const fonts = configurePdfFonts(doc);
 
     doc.on("data", (chunk: Buffer) => buffers.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
@@ -14,292 +280,29 @@ export default function generatePDF(data: any): Promise<Buffer> {
     );
 
     try {
+      const document = formatAnalyticsData(data);
+
       doc
-        .fontSize(16)
-        .font("Helvetica-Bold")
-        .text("Report", { align: "center" })
-        .moveDown(1);
-
-      if ("sales" in data && "userRetention" in data) {
-        // AllReports
-        const { sales, userRetention } = data as AllReports;
-
-        // Sales Section
-        doc
-          .fontSize(12)
-          .font("Helvetica")
-          .text("Sales Report", { underline: true })
-          .moveDown(0.5);
-        doc
-          .fontSize(10)
-          .text(`Total Revenue: $${sales.totalRevenue.toFixed(2)}`)
-          .text(`Total Orders: ${sales.totalOrders}`)
-          .text(`Total Sales: ${sales.totalSales}`)
-          .text(`Average Order Value: $${sales.averageOrderValue.toFixed(2)}`)
-          .moveDown(0.5);
-        doc.fontSize(12).text("By Category", { underline: true }).moveDown(0.5);
-        sales.byCategory.forEach((cat: any, index: number) => {
-          doc
-            .fontSize(10)
-            .text(`Category ${index + 1}: ${cat.categoryName}`)
-            .text(`Category ID: ${cat.categoryId}`)
-            .text(`Revenue: $${cat.revenue.toFixed(2)}`)
-            .text(`Sales: ${cat.sales}`)
-            .moveDown(0.5);
-        });
-        doc
-          .fontSize(12)
-          .text("Top Products", { underline: true })
-          .moveDown(0.5);
-        sales.topProducts.forEach((prod: any, index: number) => {
-          doc
-            .fontSize(10)
-            .text(`Product ${index + 1}: ${prod.productName}`)
-            .text(`Product ID: ${prod.productId}`)
-            .text(`Quantity: ${prod.quantity}`)
-            .text(`Revenue: $${prod.revenue.toFixed(2)}`)
-            .moveDown(0.5);
+        .font(fonts.bold)
+        .fontSize(TITLE_FONT_SIZE)
+        .fillColor("#111827")
+        .text(document.title, {
+          align: "center",
         });
 
-        // User Retention Section
-        doc
-          .fontSize(12)
-          .text("User Retention Report", { underline: true })
-          .moveDown(0.5);
-        doc
-          .fontSize(10)
-          .text(`Total Users: ${userRetention.totalUsers}`)
-          .text(`Retention Rate: ${userRetention.retentionRate.toFixed(2)}%`)
-          .text(
-            `Repeat Purchase Rate: ${userRetention.repeatPurchaseRate.toFixed(
-              2
-            )}%`
-          )
-          .text(`Lifetime Value: $${userRetention.lifetimeValue.toFixed(2)}`)
-          .moveDown(0.5);
-        doc.fontSize(12).text("Top Users", { underline: true }).moveDown(0.5);
-        userRetention.topUsers.forEach((user: any, index: number) => {
-          doc
-            .fontSize(10)
-            .text(`User ${index + 1}: ${user.name}`)
-            .text(`User ID: ${user.userId}`)
-            .text(`Email: ${user.email}`)
-            .text(`Order Count: ${user.orderCount}`)
-            .text(`Total Spent: $${user.totalSpent.toFixed(2)}`)
-            .moveDown(0.5);
-        });
-      } else if ("totalUsers" in data && "topUsers" in data) {
-        // UserRetentionReport
-        const {
-          totalUsers,
-          retentionRate,
-          repeatPurchaseRate,
-          lifetimeValue,
-          topUsers,
-        } = data as any;
-        doc
-          .fontSize(12)
-          .font("Helvetica")
-          .text("User Retention Report", { underline: true })
-          .moveDown(0.5);
-        doc
-          .fontSize(10)
-          .text(`Total Users: ${totalUsers}`)
-          .text(`Retention Rate: ${retentionRate.toFixed(2)}%`)
-          .text(`Repeat Purchase Rate: ${repeatPurchaseRate.toFixed(2)}%`)
-          .text(`Lifetime Value: $${lifetimeValue.toFixed(2)}`)
-          .moveDown(0.5);
-        doc.fontSize(12).text("Top Users", { underline: true }).moveDown(0.5);
-        topUsers.forEach((user: any, index: number) => {
-          doc
-            .fontSize(10)
-            .text(`User ${index + 1}: ${user.name}`)
-            .text(`User ID: ${user.userId}`)
-            .text(`Email: ${user.email}`)
-            .text(`Order Count: ${user.orderCount}`)
-            .text(`Total Spent: $${user.totalSpent.toFixed(2)}`)
-            .moveDown(0.5);
-        });
-      } else if ("totalRevenue" in data && "byCategory" in data) {
-        // SalesReport
-        const {
-          totalRevenue,
-          totalOrders,
-          totalSales,
-          averageOrderValue,
-          byCategory,
-          topProducts,
-        } = data as any;
-        doc
-          .fontSize(12)
-          .font("Helvetica")
-          .text("Sales Report", { underline: true })
-          .moveDown(0.5);
-        doc
-          .fontSize(10)
-          .text(`Total Revenue: $${totalRevenue.toFixed(2)}`)
-          .text(`Total Orders: ${totalOrders}`)
-          .text(`Total Sales: ${totalSales}`)
-          .text(`Average Order Value: $${averageOrderValue.toFixed(2)}`)
-          .moveDown(0.5);
-        doc.fontSize(12).text("By Category", { underline: true }).moveDown(0.5);
-        byCategory.forEach((cat: any, index: number) => {
-          doc
-            .fontSize(10)
-            .text(`Category ${index + 1}: ${cat.categoryName}`)
-            .text(`Category ID: ${cat.categoryId}`)
-            .text(`Revenue: $${cat.revenue.toFixed(2)}`)
-            .text(`Sales: ${cat.sales}`)
-            .moveDown(0.5);
-        });
-        doc
-          .fontSize(12)
-          .text("Top Products", { underline: true })
-          .moveDown(0.5);
-        topProducts.forEach((prod: any, index: number) => {
-          doc
-            .fontSize(10)
-            .text(`Product ${index + 1}: ${prod.productName}`)
-            .text(`Product ID: ${prod.productId}`)
-            .text(`Quantity: ${prod.quantity}`)
-            .text(`Revenue: $${prod.revenue.toFixed(2)}`)
-            .moveDown(0.5);
-        });
-      } else if ("overview" in data && "products" in data && "users" in data) {
-        // AllAnalytics
-        const { overview, products, users } = data as AllAnalytics;
-        doc
-          .fontSize(12)
-          .font("Helvetica")
-          .text("Analytics Overview", { underline: true })
-          .moveDown(0.5);
-        doc
-          .fontSize(10)
-          .text(`Total Revenue: $${overview.totalRevenue.toFixed(2)}`)
-          .text(`Total Orders: ${overview.totalOrders}`)
-          .text(`Total Sales: ${overview.totalSales}`)
-          .text(`Total Users: ${overview.totalUsers}`)
-          .text(
-            `Average Order Value: $${overview.averageOrderValue.toFixed(2)}`
-          )
-          .moveDown(0.5);
-        doc.fontSize(12).text("Changes", { underline: true }).moveDown(0.5);
-        doc
-          .fontSize(10)
-          .text(
-            `Revenue Change: ${
-              overview.changes.revenue
-                ? overview.changes.revenue.toFixed(2) + "%"
-                : "N/A"
-            }`
-          )
-          .text(
-            `Orders Change: ${
-              overview.changes.orders
-                ? overview.changes.orders.toFixed(2) + "%"
-                : "N/A"
-            }`
-          )
-          .text(
-            `Sales Change: ${
-              overview.changes.sales
-                ? overview.changes.sales.toFixed(2) + "%"
-                : "N/A"
-            }`
-          )
-          .text(
-            `Users Change: ${
-              overview.changes.users
-                ? overview.changes.users.toFixed(2) + "%"
-                : "N/A"
-            }`
-          )
-          .text(
-            `AOV Change: ${
-              overview.changes.averageOrderValue
-                ? overview.changes.averageOrderValue.toFixed(2) + "%"
-                : "N/A"
-            }`
-          )
-          .moveDown(0.5);
-        doc
-          .fontSize(12)
-          .text("Monthly Trends", { underline: true })
-          .moveDown(0.5);
-        overview.monthlyTrends.labels.forEach((label, index) => {
-          doc
-            .fontSize(10)
-            .text(`${label}:`)
-            .text(
-              `  Revenue: $${overview.monthlyTrends.revenue[index].toFixed(2)}`
-            )
-            .text(`  Orders: ${overview.monthlyTrends.orders[index]}`)
-            .text(`  Sales: ${overview.monthlyTrends.sales[index]}`)
-            .text(`  Users: ${overview.monthlyTrends.users[index]}`)
-            .moveDown(0.5);
-        });
+      doc
+        .moveDown(0.4)
+        .font(fonts.regular)
+        .fontSize(META_FONT_SIZE)
+        .fillColor("#4B5563")
+        .text(`Generated: ${document.generatedAt}`, { align: "center" });
 
-        doc
-          .fontSize(12)
-          .text("Product Performance", { underline: true })
-          .moveDown(0.5);
-        products.forEach((item, index) => {
-          doc
-            .fontSize(10)
-            .text(`Product ${index + 1}: ${item.name}`)
-            .text(`ID: ${item.id}`)
-            .text(`Quantity Sold: ${item.quantity}`)
-            .text(`Revenue: $${item.revenue.toFixed(2)}`)
-            .moveDown(0.5);
-        });
+      doc.moveDown(1);
+      doc.fillColor("#111827");
 
-        doc
-          .fontSize(12)
-          .text("User Analytics", { underline: true })
-          .moveDown(0.5);
-        doc
-          .fontSize(10)
-          .text(`Total Users: ${users.totalUsers}`)
-          .text(`Total Revenue: $${users.totalRevenue.toFixed(2)}`)
-          .text(`Retention Rate: ${users.retentionRate.toFixed(2)}%`)
-          .text(`Average Lifetime Value: $${users.lifetimeValue.toFixed(2)}`)
-          .text(`Repeat Purchase Rate: ${users.repeatPurchaseRate.toFixed(2)}%`)
-          .text(`Average Engagement Score: ${users.engagementScore.toFixed(2)}`)
-          .text(
-            `Users Change: ${
-              users.changes?.users
-                ? users.changes.users.toFixed(2) + "%"
-                : "N/A"
-            }`
-          )
-          .moveDown(1);
-        doc.fontSize(12).text("Top Users", { underline: true }).moveDown(0.5);
-        users.topUsers.forEach((user: any, index: number) => {
-          doc
-            .fontSize(10)
-            .text(`User ${index + 1}: ${user.name}`)
-            .text(`Email: ${user.email}`)
-            .text(`Orders: ${user.orderCount}`)
-            .text(`Total Spent: $${user.totalSpent.toFixed(2)}`)
-            .text(`Engagement Score: ${user.engagementScore.toFixed(2)}`)
-            .moveDown(0.5);
-        });
-        doc
-          .fontSize(12)
-          .text("Interaction Trends", { underline: true })
-          .moveDown(0.5);
-        users.interactionTrends.labels.forEach((label, index) => {
-          doc
-            .fontSize(10)
-            .text(`${label}:`)
-            .text(`  Views: ${users.interactionTrends.views[index]}`)
-            .text(`  Clicks: ${users.interactionTrends.clicks[index]}`)
-            .text(`  Others: ${users.interactionTrends.others[index]}`)
-            .moveDown(0.5);
-        });
-      } else {
-        throw new Error("Unsupported data format for PDF export");
-      }
+      document.sections.forEach((section) => {
+        renderSectionTable(doc, section, fonts);
+      });
 
       doc.end();
     } catch (err: any) {

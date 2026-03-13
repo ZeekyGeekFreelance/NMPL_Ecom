@@ -1,18 +1,13 @@
 import { ChatRepository } from "./chat.repository";
 import { Chat, ChatMessage } from "@prisma/client";
-import { Server as SocketIOServer } from "socket.io";
 import { v2 as cloudinary } from "cloudinary";
 import { Readable } from "stream";
 
 export class ChatService {
-  constructor(
-    private chatRepository: ChatRepository,
-    private io: SocketIOServer
-  ) {}
+  constructor(private chatRepository: ChatRepository) {}
 
   async createChat(userId: string): Promise<Chat> {
     const chat = await this.chatRepository.createChat(userId);
-    this.io.to("admin").emit("chatCreated", chat);
     return chat;
   }
 
@@ -43,12 +38,6 @@ export class ChatService {
     let url: string | undefined;
 
     if (file) {
-      console.log("File received:", {
-        mimetype: file.mimetype,
-        size: file.size,
-        originalname: file.originalname,
-      });
-
       try {
         const uploadResult = await new Promise<any>((resolve, reject) => {
           const stream = cloudinary.uploader.upload_stream(
@@ -69,7 +58,6 @@ export class ChatService {
           bufferStream.pipe(stream);
         });
 
-        console.log("Cloudinary upload result:", uploadResult);
         type = file.mimetype.startsWith("image/") ? "IMAGE" : "VOICE";
         url = uploadResult.secure_url;
       } catch (error) {
@@ -85,7 +73,6 @@ export class ChatService {
       type,
       url
     );
-    this.io.to(`chat:${chatId}`).emit("newMessage", message);
     return message;
   }
 
@@ -94,7 +81,6 @@ export class ChatService {
     status: "OPEN" | "RESOLVED"
   ): Promise<Chat> {
     const chat = await this.chatRepository.updateChatStatus(chatId, status);
-    this.io.to("admin").emit("chatStatusUpdated", chat);
     return chat;
   }
 }

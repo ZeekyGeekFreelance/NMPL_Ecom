@@ -5,6 +5,17 @@ assets/screenshots/
 .husky/
 .idea/
 .vscode/
+.env
+.env.*
+!.env.example
+src/.env
+src/.env.*
+src/client/.env
+src/client/.env.*
+!src/client/.env.example
+src/server/.env
+src/server/.env.*
+!src/server/.env.example
 src/client/.next/
 src/client/node_modules/
 src/server/node_modules/

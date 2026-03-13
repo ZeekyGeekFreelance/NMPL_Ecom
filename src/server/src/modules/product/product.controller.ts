@@ -6,6 +6,9 @@ import slugify from "@/shared/utils/slugify";
 import { makeLogsService } from "../logs/logs.factory";
 import { uploadToCloudinary } from "@/shared/utils/uploadToCloudinary";
 import AppError from "@/shared/errors/AppError";
+import logger from "@/infra/winston/logger";
+
+const UPLOADED_IMAGE_TOKEN_PREFIX = "__UPLOADED_FILE_INDEX__";
 
 export class ProductController {
   private logsService = makeLogsService();
@@ -68,14 +71,6 @@ export class ProductController {
         variants: rawVariants,
       } = req.body;
 
-      // Log for debugging
-      console.log(
-        "req.body:",
-        JSON.stringify(req.body, null, 2),
-        "req.files:",
-        req.files
-      );
-
       // Validate variants
       const variants = rawVariants || [];
       if (!Array.isArray(variants) || variants.length === 0) {
@@ -92,7 +87,9 @@ export class ProductController {
             throw new AppError(400, "Failed to upload images to Cloudinary");
           }
         } catch (error) {
-          console.error("Cloudinary upload error:", error);
+          const uploadMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`[product.controller] createProduct Cloudinary upload failed: ${uploadMessage}`);
+          if (error instanceof AppError) throw error;
           throw new AppError(400, "Failed to upload images to Cloudinary");
         }
       }
@@ -107,7 +104,36 @@ export class ProductController {
           imageIndexes = JSON.parse(variant.imageIndexes || "[]");
         } catch (error) {
           console.error(`Error parsing JSON for variant ${index}:`, error);
-          throw new AppError(400, `Invalid JSON format in variant ${index}`);
+          throw new AppError(400, `Invalid JSON format in Variant #${index + 1}.`);
+        }
+
+        const parsedPrice = parseFloat(variant.price);
+        const parsedDefaultDealerPrice =
+          variant.defaultDealerPrice === undefined ||
+          variant.defaultDealerPrice === null ||
+          variant.defaultDealerPrice === ""
+            ? null
+            : Number(variant.defaultDealerPrice);
+
+        if (
+          parsedDefaultDealerPrice !== null &&
+          (Number.isNaN(parsedDefaultDealerPrice) || parsedDefaultDealerPrice < 0)
+        ) {
+          throw new AppError(
+            400,
+            `Variant #${index + 1} dealer base price must be numeric and >= 0.`
+          );
+        }
+
+        if (
+          parsedDefaultDealerPrice !== null &&
+          !Number.isNaN(parsedPrice) &&
+          parsedDefaultDealerPrice > parsedPrice
+        ) {
+          throw new AppError(
+            400,
+            `Variant #${index + 1} dealer base price cannot exceed retail price.`
+          );
         }
 
         // Map image URLs based on imageIndexes
@@ -116,14 +142,14 @@ export class ProductController {
             if (idx >= 0 && idx < imageResults.length) {
               return imageResults[idx].url;
             }
-            console.warn(`Invalid image index ${idx} for variant ${index}`);
             return null;
           })
           .filter((url: string | null) => url !== null);
 
         return {
           ...variant,
-          price: parseFloat(variant.price),
+          price: parsedPrice,
+          defaultDealerPrice: parsedDefaultDealerPrice,
           stock: parseInt(variant.stock, 10),
           lowStockThreshold: parseInt(variant.lowStockThreshold || "10", 10),
           attributes,
@@ -165,8 +191,6 @@ export class ProductController {
         isBestSeller,
       } = req.body;
 
-      console.log("req.body:", req.body, "req.files:", req.files);
-
       // Parse variants from req.body
       let parsedVariants: any[] = [];
       for (const key in req.body) {
@@ -204,6 +228,7 @@ export class ProductController {
       const processedVariants = parsedVariants.length
         ? await Promise.all(
             parsedVariants.map(async (variant: any, index: number) => {
+              const variantLabel = `Variant #${index + 1}`;
               const parsedPrice = Number(variant.price);
               const parsedStock = Number.parseInt(String(variant.stock), 10);
               const parsedLowStockThreshold =
@@ -212,18 +237,29 @@ export class ProductController {
                 variant.lowStockThreshold === ""
                   ? 10
                   : Number.parseInt(String(variant.lowStockThreshold), 10);
+              const hasDefaultDealerPriceField = Object.prototype.hasOwnProperty.call(
+                variant,
+                "defaultDealerPrice"
+              );
+              const parsedDefaultDealerPrice = hasDefaultDealerPriceField
+                ? variant.defaultDealerPrice === undefined ||
+                  variant.defaultDealerPrice === null ||
+                  variant.defaultDealerPrice === ""
+                  ? null
+                  : Number(variant.defaultDealerPrice)
+                : undefined;
 
               if (Number.isNaN(parsedPrice) || parsedPrice <= 0) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have a valid positive price`
+                  `${variantLabel} must have a valid positive price.`
                 );
               }
 
               if (Number.isNaN(parsedStock) || parsedStock < 0) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have a valid non-negative stock number`
+                  `${variantLabel} must have a valid non-negative stock number.`
                 );
               }
 
@@ -233,36 +269,31 @@ export class ProductController {
               ) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have a valid non-negative low stock threshold`
+                  `${variantLabel} must have a valid non-negative low stock threshold.`
                 );
               }
 
-              // Try to get files from imageIndexes or variants[${index}][images][${fileIndex}]
-              let variantFiles: Express.Multer.File[] = [];
-              let imageIndexes: number[] = [];
-              try {
-                imageIndexes = variant.imageIndexes
-                  ? JSON.parse(variant.imageIndexes)
-                  : [];
-                if (Array.isArray(imageIndexes)) {
-                  variantFiles = imageIndexes
-                    .map((idx) => files[idx])
-                    .filter(Boolean) as Express.Multer.File[];
-                }
-              } catch {
-                // Fallback to old format
-                variantFiles = files.filter((f) =>
-                  f.fieldname.startsWith(`variants[${index}][images][`)
+              if (
+                parsedDefaultDealerPrice !== undefined &&
+                parsedDefaultDealerPrice !== null &&
+                (Number.isNaN(parsedDefaultDealerPrice) ||
+                  parsedDefaultDealerPrice < 0)
+              ) {
+                throw new AppError(
+                  400,
+                  `${variantLabel} dealer base price must be numeric and >= 0.`
                 );
               }
 
-              // Upload files to Cloudinary
-              let imageUrls: string[] = [];
-              if (variantFiles.length > 0) {
-                const uploadedImages = await uploadToCloudinary(variantFiles);
-                imageUrls = uploadedImages
-                  .map((img) => img.url)
-                  .filter(Boolean);
+              if (
+                parsedDefaultDealerPrice !== undefined &&
+                parsedDefaultDealerPrice !== null &&
+                parsedDefaultDealerPrice > parsedPrice
+              ) {
+                throw new AppError(
+                  400,
+                  `${variantLabel} dealer base price cannot exceed retail price.`
+                );
               }
 
               // Validate images from req.body
@@ -273,7 +304,7 @@ export class ProductController {
                 } catch {
                   throw new AppError(
                     400,
-                    `Invalid images format at variant index ${index}`
+                    `Invalid images format for ${variantLabel}.`
                   );
                 }
               }
@@ -283,15 +314,166 @@ export class ProductController {
               ) {
                 throw new AppError(
                   400,
-                  `Images at variant index ${index} must be an array of strings or empty`
+                  `Images for ${variantLabel} must be an array of strings or empty.`
                 );
               }
 
-              // Combine uploaded images with body images
-              imageUrls = [
-                ...imageUrls,
-                ...bodyImages.filter((img: string) => img),
-              ];
+              const orderedImageEntries = (bodyImages as string[]).filter(
+                (img: string) => Boolean(img)
+              );
+              const hasInlineFileTokens = orderedImageEntries.some((entry) =>
+                entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX)
+              );
+
+              let imageIndexes: number[] = [];
+              try {
+                const parsedImageIndexes = variant.imageIndexes
+                  ? JSON.parse(variant.imageIndexes)
+                  : [];
+                imageIndexes = Array.isArray(parsedImageIndexes)
+                  ? parsedImageIndexes
+                  : [];
+              } catch {
+                imageIndexes = [];
+              }
+
+              const inlineFileIndexes = hasInlineFileTokens
+                ? orderedImageEntries
+                    .filter((entry) =>
+                      entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX)
+                    )
+                    .map((entry) =>
+                      Number.parseInt(
+                        entry.slice(UPLOADED_IMAGE_TOKEN_PREFIX.length),
+                        10
+                      )
+                    )
+                    .filter(
+                      (idx) =>
+                        Number.isInteger(idx) && idx >= 0 && idx < files.length
+                    )
+                : [];
+
+              const requestedFileIndexes =
+                inlineFileIndexes.length > 0
+                  ? inlineFileIndexes
+                  : imageIndexes.filter(
+                      (idx) =>
+                        Number.isInteger(idx) && idx >= 0 && idx < files.length
+                    );
+              const uniqueFileIndexes = [...new Set(requestedFileIndexes)];
+
+              let uploadedImageUrlsByIndex = new Map<number, string>();
+              let uploadedImageUrls: string[] = [];
+
+              if (uniqueFileIndexes.length > 0) {
+                const variantFiles = uniqueFileIndexes
+                  .map((idx) => files[idx])
+                  .filter(Boolean) as Express.Multer.File[];
+
+                if (variantFiles.length > 0) {
+                  let uploadedImages: { url: string; public_id: string }[] = [];
+                  try {
+                    uploadedImages = await uploadToCloudinary(variantFiles);
+                  } catch (error) {
+                    const uploadMessage = error instanceof Error ? error.message : String(error);
+                    logger.error(`[product.controller] updateProduct Cloudinary upload failed (${variantLabel}): ${uploadMessage}`);
+                    throw new AppError(
+                      400,
+                      `Failed to upload images to Cloudinary for ${variantLabel}.`
+                    );
+                  }
+
+                  if (uploadedImages.length !== variantFiles.length) {
+                    throw new AppError(
+                      400,
+                      `Only ${uploadedImages.length} of ${variantFiles.length} images uploaded for ${variantLabel}.`
+                    );
+                  }
+
+                  uploadedImageUrls = uploadedImages
+                    .map((img) => img.url)
+                    .filter(Boolean);
+
+                  uniqueFileIndexes.forEach((fileIndex, fileOrder) => {
+                    const imageUrl = uploadedImageUrls[fileOrder];
+                    if (imageUrl) {
+                      uploadedImageUrlsByIndex.set(fileIndex, imageUrl);
+                    }
+                  });
+                }
+              } else {
+                // Backward compatibility for legacy multipart field names.
+                const legacyVariantFiles = files.filter((f) =>
+                  f.fieldname.startsWith(`variants[${index}][images][`)
+                );
+
+                if (legacyVariantFiles.length > 0) {
+                  let uploadedImages: { url: string; public_id: string }[] = [];
+                  try {
+                    uploadedImages = await uploadToCloudinary(legacyVariantFiles);
+                  } catch (error) {
+                    const legacyUploadMsg = error instanceof Error ? error.message : String(error);
+                    logger.error(`[product.controller] updateProduct legacy Cloudinary upload failed (${variantLabel}): ${legacyUploadMsg}`);
+                    throw new AppError(
+                      400,
+                      `Failed to upload images to Cloudinary for ${variantLabel}.`
+                    );
+                  }
+
+                  if (uploadedImages.length !== legacyVariantFiles.length) {
+                    throw new AppError(
+                      400,
+                      `Only ${uploadedImages.length} of ${legacyVariantFiles.length} images uploaded for ${variantLabel}.`
+                    );
+                  }
+
+                  uploadedImageUrls = uploadedImages
+                    .map((img) => img.url)
+                    .filter(Boolean);
+                }
+              }
+
+              const orderedUploadedUrls = hasInlineFileTokens
+                ? inlineFileIndexes
+                    .map((fileIndex) => uploadedImageUrlsByIndex.get(fileIndex))
+                    .filter(
+                      (imageUrl): imageUrl is string =>
+                        typeof imageUrl === "string" && imageUrl.length > 0
+                    )
+                : requestedFileIndexes
+                    .map((fileIndex) => uploadedImageUrlsByIndex.get(fileIndex))
+                    .filter(
+                      (imageUrl): imageUrl is string =>
+                        typeof imageUrl === "string" && imageUrl.length > 0
+                    );
+
+              const imageUrls: string[] = hasInlineFileTokens
+                ? orderedImageEntries
+                    .map((entry) => {
+                      if (entry.startsWith(UPLOADED_IMAGE_TOKEN_PREFIX)) {
+                        const fileIndex = Number.parseInt(
+                          entry.slice(UPLOADED_IMAGE_TOKEN_PREFIX.length),
+                          10
+                        );
+                        return uploadedImageUrlsByIndex.get(fileIndex) || "";
+                      }
+
+                      return entry;
+                    })
+                    .filter(
+                      (imageUrl): imageUrl is string =>
+                        typeof imageUrl === "string" && imageUrl.length > 0
+                    )
+                : [
+                    ...(orderedUploadedUrls.length > 0
+                      ? orderedUploadedUrls
+                      : uploadedImageUrls),
+                    ...orderedImageEntries,
+                  ].filter(
+                    (imageUrl): imageUrl is string =>
+                      typeof imageUrl === "string" && imageUrl.length > 0
+                  );
 
               // Validate other fields
               if (
@@ -301,7 +483,7 @@ export class ProductController {
               ) {
                 throw new AppError(
                   400,
-                  `Variant at index ${index} must have sku, price, and stock`
+                  `${variantLabel} must have SKU, price, and stock.`
                 );
               }
 
@@ -315,21 +497,23 @@ export class ProductController {
                 if (!Array.isArray(parsedAttributes)) {
                   throw new AppError(
                     400,
-                    `Variant at index ${index} must have an attributes array`
+                    `${variantLabel} must have an attributes array.`
                   );
                 }
                 parsedAttributes.forEach((attr: any, attrIndex: number) => {
                   if (!attr.attributeId || !attr.valueId) {
                     throw new AppError(
                       400,
-                      `Invalid attribute structure in variant at index ${index}, attribute index ${attrIndex}`
+                      `${variantLabel} has an invalid attribute structure at attribute #${
+                        attrIndex + 1
+                      }.`
                     );
                   }
                 });
               } catch (error) {
                 throw new AppError(
                   400,
-                  `Invalid attributes format at index ${index}`
+                  `Invalid attributes format for ${variantLabel}.`
                 );
               }
 
@@ -340,13 +524,16 @@ export class ProductController {
               if (new Set(attributeIds).size !== attributeIds.length) {
                 throw new AppError(
                   400,
-                  `Duplicate attributes in variant at index ${index}`
+                  `${variantLabel} has duplicate attributes.`
                 );
               }
 
               return {
                 ...variant,
                 price: parsedPrice,
+                ...(parsedDefaultDealerPrice !== undefined && {
+                  defaultDealerPrice: parsedDefaultDealerPrice,
+                }),
                 stock: parsedStock,
                 lowStockThreshold: parsedLowStockThreshold,
                 images: imageUrls,
@@ -355,25 +542,6 @@ export class ProductController {
             })
           )
         : undefined;
-
-      if (processedVariants) {
-        // Check for duplicate SKUs
-        const skuKeys = processedVariants.map((variant: any) => variant.sku);
-        if (new Set(skuKeys).size !== skuKeys.length) {
-          throw new AppError(400, "Duplicate SKUs detected");
-        }
-
-        // Check for duplicate attribute combinations
-        const comboKeys = processedVariants.map((variant: any) =>
-          variant.attributes
-            .map((attr: any) => `${attr.attributeId}:${attr.valueId}`)
-            .sort()
-            .join("|")
-        );
-        if (new Set(comboKeys).size !== comboKeys.length) {
-          throw new AppError(400, "Duplicate attribute combinations detected");
-        }
-      }
 
       const updatedData: any = {
         ...(name && { name, slug: slugify(name) }),
@@ -388,53 +556,53 @@ export class ProductController {
         ...(processedVariants && { variants: processedVariants }),
       };
 
-      const product = await this.productService.updateProduct(
+      const { product, didChange } = await this.productService.updateProduct(
         productId,
         updatedData
       );
 
       sendResponse(res, 200, {
-        data: { product },
-        message: "Product updated successfully",
+        data: { product, didChange },
+        message: didChange ? "Product updated successfully" : "No changes detected.",
       });
-      this.logsService.info("Product updated", {
+      this.logsService.info(didChange ? "Product updated" : "Product update skipped (no changes)", {
         userId: req.user?.id,
         sessionId: req.session.id,
+        didChange,
       });
     }
   );
 
   bulkCreateProducts = asyncHandler(async (req: Request, res: Response) => {
     const file = req.file;
-    const result = await this.productService.bulkCreateProducts(file!);
-
-    sendResponse(res, 201, {
-      data: { count: result.count },
-      message: `${result.count} products created successfully`,
-    });
     const start = Date.now();
-    const end = Date.now();
+    const result = await this.productService.bulkCreateProducts(file!);
 
     this.logsService.info("Bulk Products created", {
       userId: req.user?.id,
       sessionId: req.session.id,
-      timePeriod: end - start,
+      timePeriod: Date.now() - start,
+    });
+
+    sendResponse(res, 201, {
+      data: { count: result.count },
+      message: `${result.count} products created successfully`,
     });
   });
 
   deleteProduct = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { id: productId } = req.params;
-      await this.productService.deleteProduct(productId);
-      sendResponse(res, 200, { message: "Product deleted successfully" });
       const start = Date.now();
-      const end = Date.now();
+      await this.productService.deleteProduct(productId);
 
       this.logsService.info("Product deleted", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
+        timePeriod: Date.now() - start,
       });
+
+      sendResponse(res, 200, { message: "Product deleted successfully" });
     }
   );
 }

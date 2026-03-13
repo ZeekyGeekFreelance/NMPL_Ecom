@@ -1,18 +1,23 @@
 "use client";
 
 import Dropdown from "@/app/components/molecules/Dropdown";
-import { ArrowLeft, Download } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Download, ExternalLink } from "lucide-react";
 
 const PageHeader = ({
-  transaction,
   onBack,
   onUpdateStatus,
+  onOpenQuotationEditor,
   onDownloadInvoice,
   isDownloadingInvoice,
   isUpdating,
+  isIssuingQuotation,
+  canUpdateStatus,
+  canEditQuotation,
   newStatus,
   setNewStatus,
   statusOptions,
+  paymentManagementHref,
 }) => {
   return (
     <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center">
@@ -24,12 +29,21 @@ const PageHeader = ({
           <ArrowLeft size={16} className="mr-1" />
           <span className="text-sm">Back to transactions</span>
         </button>
-        <h1 className="text-2xl font-bold">Transaction Details</h1>
+        <h1 className="type-h3 text-gray-900">Transaction Details</h1>
         <p className="text-sm text-gray-500">
           View detailed information about this transaction
         </p>
       </div>
       <div className="flex items-center space-x-3 mt-4 md:mt-0">
+        {paymentManagementHref ? (
+          <Link
+            href={paymentManagementHref}
+            className="px-4 py-2 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 transition duration-200 inline-flex items-center gap-2"
+          >
+            <ExternalLink size={16} />
+            Payment Management
+          </Link>
+        ) : null}
         <button
           type="button"
           onClick={onDownloadInvoice}
@@ -39,17 +53,27 @@ const PageHeader = ({
           <Download size={16} />
           {isDownloadingInvoice ? "Downloading..." : "Invoice PDF"}
         </button>
+        <button
+          type="button"
+          onClick={onOpenQuotationEditor}
+          disabled={!canEditQuotation || isIssuingQuotation}
+          className="px-4 py-2 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 transition duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isIssuingQuotation ? "Sending..." : "Edit Quotation"}
+        </button>
         {!isUpdating ? (
           <>
             <Dropdown
-              value={newStatus || transaction.status}
+              value={newStatus || null}
               onChange={(value) => setNewStatus(value || "")}
               options={statusOptions}
               className="w-40"
+              disabled={!canUpdateStatus}
             />
             <button
               onClick={onUpdateStatus}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200"
+              disabled={!canUpdateStatus}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
               Update Status
             </button>
@@ -66,4 +90,3 @@ const PageHeader = ({
 };
 
 export default PageHeader;
-

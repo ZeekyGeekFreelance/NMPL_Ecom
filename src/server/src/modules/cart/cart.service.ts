@@ -1,9 +1,11 @@
 import AppError from "@/shared/errors/AppError";
 import { CartRepository } from "./cart.repository";
 import prisma from "@/infra/database/database.config";
-import { CART_EVENT, Prisma } from "@prisma/client";
+import { CART_EVENT } from "@prisma/client";
+import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
+import { config } from "@/config";
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = config.isDevelopment;
 const debugLog = (...args: unknown[]) => {
   if (isDevelopment) {
     console.log(...args);
@@ -13,68 +15,13 @@ const debugLog = (...args: unknown[]) => {
 export class CartService {
   constructor(private cartRepository: CartRepository) {}
 
-  private isDealerTableMissing(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    return (
-      error.message.includes('relation "DealerProfile" does not exist') ||
-      error.message.includes('relation "DealerPriceMapping" does not exist')
-    );
-  }
-
-  private async getDealerPriceMap(
-    userId: string | undefined,
-    variantIds: string[]
-  ): Promise<Map<string, number>> {
-    if (!userId || !variantIds.length) {
-      return new Map();
-    }
-
-    try {
-      const dealerProfileRows = await prisma.$queryRaw<
-        Array<{ status: string }>
-      >(
-        Prisma.sql`
-          SELECT "status"
-          FROM "DealerProfile"
-          WHERE "userId" = ${userId}
-          LIMIT 1
-        `
-      );
-
-      if (!dealerProfileRows.length || dealerProfileRows[0].status !== "APPROVED") {
-        return new Map();
-      }
-
-      const priceRows = await prisma.$queryRaw<
-        Array<{ variantId: string; customPrice: number }>
-      >(
-        Prisma.sql`
-          SELECT "variantId", "customPrice"
-          FROM "DealerPriceMapping"
-          WHERE "dealerId" = ${userId}
-            AND "variantId" IN (${Prisma.join(variantIds)})
-        `
-      );
-
-      return new Map(priceRows.map((row) => [row.variantId, row.customPrice]));
-    } catch (error) {
-      if (this.isDealerTableMissing(error)) {
-        return new Map();
-      }
-      throw error;
-    }
-  }
-
   private async applyDealerPricingToCart(cart: any, userId?: string) {
     if (!userId || !cart?.cartItems?.length) {
       return cart;
     }
 
     const variantIds = cart.cartItems.map((item: any) => item.variantId);
-    const dealerPriceMap = await this.getDealerPriceMap(userId, variantIds);
+    const dealerPriceMap = await getDealerPriceMap(prisma, userId, variantIds);
 
     if (!dealerPriceMap.size) {
       return cart;
@@ -91,39 +38,16 @@ export class CartService {
     return cart;
   }
 
-  async getOrCreateCart(userId?: string, sessionId?: string) {
-    debugLog("[CART SERVICE] getOrCreateCart called", { userId, sessionId });
+  async getOrCreateCart(userId?: string) {
+    debugLog("[CART SERVICE] getOrCreateCart called", { userId });
 
-    let cart;
+    if (!userId) {
+      throw new AppError(401, "Authentication required for cart access");
+    }
 
-    if (userId) {
-      cart = await this.cartRepository.getCartByUserId(userId);
-
-      if (!cart) {
-        cart = await this.cartRepository.createCart({ userId });
-      }
-
-      if (sessionId) {
-        const sessionCart = await this.cartRepository.getCartBySessionId(
-          sessionId
-        );
-
-        if (sessionCart && sessionCart.id !== cart.id) {
-          await this.cartRepository.mergeCarts(sessionCart.id, cart.id);
-          cart = await this.cartRepository.getCartByUserId(userId);
-          if (!cart) {
-            throw new AppError(500, "Failed to load merged cart");
-          }
-        }
-      }
-    } else if (sessionId) {
-      cart = await this.cartRepository.getCartBySessionId(sessionId);
-
-      if (!cart) {
-        cart = await this.cartRepository.createCart({ sessionId });
-      }
-    } else {
-      throw new AppError(400, "User ID or Session ID is required");
+    let cart = await this.cartRepository.getCartByUserId(userId);
+    if (!cart) {
+      cart = await this.cartRepository.createCart({ userId });
     }
 
     return this.applyDealerPricingToCart(cart, userId);
@@ -151,63 +75,51 @@ export class CartService {
     abandonmentRate: number;
     potentialRevenueLost: number;
   }> {
-    const cartEvents = await prisma.cartEvent.findMany({
-      where: {
-        timestamp: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      include: {
-        cart: {
-          include: { cartItems: { include: { variant: true } } },
-        },
-        user: true,
-      },
+    // Step 1: distinct cart IDs that had an ADD event in the window (lightweight).
+    const cartsWithAdd = await prisma.cartEvent.findMany({
+      where: { eventType: "ADD", timestamp: { gte: startDate, lte: endDate } },
+      select: { cartId: true },
+      distinct: ["cartId"],
     });
 
-    const cartEventsByCartId = cartEvents.reduce((acc: any, event) => {
-      if (!acc[event.cartId]) acc[event.cartId] = [];
-      acc[event.cartId].push(event);
-      return acc;
-    }, {});
-
-    let totalCarts = 0;
-    let totalAbandonedCarts = 0;
-    let potentialRevenueLost = 0;
-
-    for (const cartId in cartEventsByCartId) {
-      const events = cartEventsByCartId[cartId];
-      const hasAddToCart = events.some((e: any) => e.eventType === "ADD");
-      const hasCheckoutCompleted = events.some(
-        (e: any) => e.eventType === "CHECKOUT_COMPLETED"
-      );
-
-      const cart = events[0].cart;
-      if (!cart || !cart.cartItems || cart.cartItems.length === 0) continue;
-
-      totalCarts++;
-
-      if (hasAddToCart && !hasCheckoutCompleted) {
-        const addToCartEvent = events.find((e: any) => e.eventType === "ADD");
-        const oneHourLater = new Date(
-          addToCartEvent.timestamp.getTime() + 60 * 60 * 1000
-        );
-        const now = new Date();
-
-        if (now > oneHourLater) {
-          totalAbandonedCarts++;
-          potentialRevenueLost += cart.cartItems.reduce(
-            (sum: number, item: any) =>
-              sum + item.quantity * item.variant.price,
-            0
-          );
-        }
-      }
+    const totalCarts = cartsWithAdd.length;
+    if (totalCarts === 0) {
+      return { totalAbandonedCarts: 0, abandonmentRate: 0, potentialRevenueLost: 0 };
     }
 
-    const abandonmentRate =
-      totalCarts > 0 ? (totalAbandonedCarts / totalCarts) * 100 : 0;
+    const addedCartIds = cartsWithAdd.map((e) => e.cartId);
+
+    // Step 2: which of those also completed checkout? (no includes needed)
+    const cartsWithCheckout = await prisma.cartEvent.findMany({
+      where: {
+        cartId: { in: addedCartIds },
+        eventType: "CHECKOUT_COMPLETED",
+      },
+      select: { cartId: true },
+      distinct: ["cartId"],
+    });
+    const checkoutSet = new Set(cartsWithCheckout.map((e) => e.cartId));
+
+    // Carts that added items but never checked out — abandoned.
+    const abandonedCartIds = addedCartIds.filter((id) => !checkoutSet.has(id));
+    const totalAbandonedCarts = abandonedCartIds.length;
+
+    // Step 3: estimate revenue lost using a targeted aggregation on abandoned carts only.
+    // Prisma can't SUM(quantity * price) natively, so we use a raw aggregate:
+    // sum each item's (quantity × variant.price) across all abandoned cart items.
+    let potentialRevenueLost = 0;
+    if (abandonedCartIds.length > 0) {
+      const items = await prisma.cartItem.findMany({
+        where: { cartId: { in: abandonedCartIds } },
+        select: { quantity: true, variant: { select: { price: true } } },
+      });
+      potentialRevenueLost = items.reduce(
+        (sum, item) => sum + item.quantity * Number(item.variant.price),
+        0
+      );
+    }
+
+    const abandonmentRate = (totalAbandonedCarts / totalCarts) * 100;
 
     return {
       totalAbandonedCarts,
@@ -216,22 +128,21 @@ export class CartService {
     };
   }
 
-  async getCartCount(userId?: string, sessionId?: string) {
-    const cart = await this.getOrCreateCart(userId, sessionId);
+  async getCartCount(userId?: string) {
+    const cart = await this.getOrCreateCart(userId);
     return cart.cartItems.length;
   }
 
   async addToCart(
     variantId: string,
     quantity: number,
-    userId?: string,
-    sessionId?: string
+    userId?: string
   ) {
     if (quantity <= 0) {
       throw new AppError(400, "Quantity must be greater than 0");
     }
 
-    const cart = await this.getOrCreateCart(userId, sessionId);
+    const cart = await this.getOrCreateCart(userId);
 
     const existingItem = await this.cartRepository.findCartItem(
       cart.id,
@@ -261,18 +172,18 @@ export class CartService {
 
   private async assertCartItemOwnership(
     itemId: string,
-    userId?: string,
-    sessionId?: string
+    userId?: string
   ) {
+    if (!userId) {
+      throw new AppError(401, "Authentication required for cart access");
+    }
+
     const cartItem = await this.cartRepository.findCartItemById(itemId);
     if (!cartItem) {
       throw new AppError(404, "Cart item not found");
     }
 
-    const isUserCart = !!userId && cartItem.cart.userId === userId;
-    const isSessionCart = !!sessionId && cartItem.cart.sessionId === sessionId;
-
-    if (!isUserCart && !isSessionCart) {
+    if (cartItem.cart.userId !== userId) {
       throw new AppError(403, "You are not authorized to access this cart");
     }
   }
@@ -280,37 +191,50 @@ export class CartService {
   async updateCartItemQuantity(
     itemId: string,
     quantity: number,
-    userId?: string,
-    sessionId?: string
+    userId?: string
   ) {
     if (quantity <= 0) {
       throw new AppError(400, "Quantity must be greater than 0");
     }
 
-    await this.assertCartItemOwnership(itemId, userId, sessionId);
+    await this.assertCartItemOwnership(itemId, userId);
     return this.cartRepository.updateCartItemQuantity(itemId, quantity);
   }
 
-  async removeFromCart(itemId: string, userId?: string, sessionId?: string) {
-    await this.assertCartItemOwnership(itemId, userId, sessionId);
+  async removeFromCart(itemId: string, userId?: string) {
+    await this.assertCartItemOwnership(itemId, userId);
     return this.cartRepository.removeCartItem(itemId);
   }
 
   async mergeCartsOnLogin(sessionId: string, userId: string | undefined) {
-    if (!userId) {
+    if (!userId || !sessionId) {
       return;
     }
 
+    // #12: Look up the guest session cart. Nothing to merge if it doesn't exist or is empty.
     const sessionCart = await this.cartRepository.getCartBySessionId(sessionId);
-    if (!sessionCart) {
+    if (!sessionCart || !sessionCart.cartItems.length) {
       return;
     }
 
+    // Ensure the user has an active cart to merge into.
     const userCart = await this.getOrCreateCart(userId);
+
+    // Guard against merging a cart into itself (shouldn't happen, but be safe).
     if (sessionCart.id === userCart.id) {
       return;
     }
 
+    // Merge session cart items into the user cart, then delete the session cart.
+    // mergeCarts handles quantity accumulation per item.
     await this.cartRepository.mergeCarts(sessionCart.id, userCart.id);
+  }
+
+  async clearCartOnSignOut(userId?: string) {
+    if (!userId) {
+      return;
+    }
+
+    await this.cartRepository.clearCart(userId);
   }
 }

@@ -4,6 +4,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { AlertCircle, RefreshCw, Home } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 interface ErrorDisplayProps {
   error: any;
@@ -77,7 +78,7 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error }) => {
         </div>
 
         {/* Error Details (for debugging) */}
-        {process.env.NODE_ENV === 'development' && (
+        {runtimeEnv.isDevelopment && (
           <details className="mt-6 text-left">
             <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
               Error Details

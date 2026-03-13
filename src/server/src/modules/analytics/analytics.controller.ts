@@ -14,6 +14,33 @@ export class AnalyticsController {
 
   constructor(private analyticsService: AnalyticsService) {}
 
+  private resolveFileExtension(extension: unknown): string {
+    if (typeof extension === "string" && extension.trim()) {
+      return extension.trim();
+    }
+
+    if (Array.isArray(extension)) {
+      const match = extension.find(
+        (item) => typeof item === "string" && item.trim()
+      ) as string | undefined;
+
+      if (match) {
+        return match.trim();
+      }
+    }
+
+    return "csv";
+  }
+
+  private buildExportFilename(
+    prefix: string,
+    extension: unknown
+  ): string {
+    const normalizedExtension = this.resolveFileExtension(extension);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    return `${prefix}-${timestamp}.${normalizedExtension}`;
+  }
+
   createInteraction = asyncHandler(async (req: Request, res: Response) => {
     const { productId, type } = req.body;
     const user = req.user;
@@ -48,6 +75,58 @@ export class AnalyticsController {
     });
   });
 
+  createBulkInteractions = asyncHandler(async (req: Request, res: Response) => {
+    const user = req.user;
+    const sessionId = req.session.id;
+    const rawEvents = Array.isArray(req.body?.events) ? req.body.events : [];
+
+    if (!rawEvents.length) {
+      throw new AppError(400, "At least one interaction event is required.");
+    }
+
+    if (rawEvents.length > 100) {
+      throw new AppError(400, "Interaction batch size cannot exceed 100 events.");
+    }
+
+    const validTypes = new Set(["view", "click", "other"]);
+    const normalizedRows = rawEvents.map((event: any, index: number) => {
+      const type = String(event?.type || "").trim().toLowerCase();
+      const productIdValue =
+        typeof event?.productId === "string" && event.productId.trim().length > 0
+          ? event.productId.trim()
+          : undefined;
+
+      if (!validTypes.has(type)) {
+        throw new AppError(
+          400,
+          `Invalid interaction type at event #${index + 1}. Use: view, click, or other.`
+        );
+      }
+
+      return {
+        userId: user?.id,
+        sessionId,
+        productId: productIdValue,
+        type,
+      };
+    });
+
+    const result = await this.analyticsService.createInteractionsBulk(
+      normalizedRows
+    );
+
+    this.logsService.info("Interaction batch recorded", {
+      userId: user?.id,
+      sessionId,
+      count: result.count,
+    });
+
+    sendResponse(res, 200, {
+      data: { count: result.count },
+      message: "Interaction batch recorded successfully",
+    });
+  });
+
   getYearRange = asyncHandler(async (req: Request, res: Response) => {
     const yearRange = await this.analyticsService.getYearRange();
     sendResponse(res, 200, {
@@ -58,6 +137,8 @@ export class AnalyticsController {
 
   exportAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const { type, format, timePeriod, year, startDate, endDate } = req.query;
+    const now = new Date();
+    const currentYear = now.getFullYear();
 
     const validFormats = ["csv", "pdf", "xlsx"];
     if (!format || !validFormats.includes(format as string)) {
@@ -89,13 +170,26 @@ export class AnalyticsController {
     let selectedYear: number | undefined;
     if (year) {
       selectedYear = parseInt(year as string, 10);
-      if (isNaN(selectedYear)) {
+      if (
+        isNaN(selectedYear) ||
+        selectedYear < 1900 ||
+        selectedYear > currentYear
+      ) {
         throw new AppError(400, "Invalid year format.");
       }
+    } else if (timePeriod === "allTime" && !startDate && !endDate) {
+      selectedYear = currentYear;
     }
 
     let customStartDate: Date | undefined;
     let customEndDate: Date | undefined;
+    if (timePeriod === "custom" && (!startDate || !endDate)) {
+      throw new AppError(
+        400,
+        "Both startDate and endDate must be provided for a custom range."
+      );
+    }
+
     if (startDate && endDate) {
       customStartDate = new Date(startDate as string);
       customEndDate = new Date(endDate as string);
@@ -109,6 +203,10 @@ export class AnalyticsController {
 
       if (customStartDate > customEndDate) {
         throw new AppError(400, "startDate must be before endDate.");
+      }
+
+      if (customStartDate > now || customEndDate > now) {
+        throw new AppError(400, "Future dates are not allowed.");
       }
     } else if (startDate || endDate) {
       throw new AppError(
@@ -130,15 +228,15 @@ export class AnalyticsController {
     switch (type) {
       case "overview":
         data = await this.analyticsService.getAnalyticsOverview(query);
-        filename = `analytics-overview-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("analytics-overview", format);
         break;
       case "products":
         data = await this.analyticsService.getProductPerformance(query);
-        filename = `product-performance-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("product-performance", format);
         break;
       case "users":
         data = await this.analyticsService.getUserAnalytics(query);
-        filename = `user-analytics-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("user-analytics", format);
         break;
       case "all":
         data = {
@@ -146,7 +244,7 @@ export class AnalyticsController {
           products: await this.analyticsService.getProductPerformance(query),
           users: await this.analyticsService.getUserAnalytics(query),
         };
-        filename = `all-analytics-${new Date().toISOString()}.${format}`;
+        filename = this.buildExportFilename("all-analytics", format);
         break;
       default:
         throw new AppError(400, "Invalid analytics type");
@@ -158,7 +256,7 @@ export class AnalyticsController {
     switch (format) {
       case "csv":
         result = generateCSV(data);
-        contentType = "text/csv";
+        contentType = "text/csv; charset=utf-8";
         break;
       case "pdf":
         result = await generatePDF(data);
@@ -175,7 +273,6 @@ export class AnalyticsController {
 
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    console.log("result => ", result);
     res.send(result);
 
     await this.logsService.info("Exported analytics", {

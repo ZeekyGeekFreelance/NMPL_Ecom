@@ -1,24 +1,103 @@
-import { useRouter } from "next/navigation";
+"use client";
+
+import { useRouter, usePathname } from "next/navigation";
 import CustomLoader from "../feedback/CustomLoader";
 import { useAuth } from "@/app/hooks/useAuth";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { resolveDisplayRole } from "@/app/lib/userRole";
 
-export function withAuth<P extends Record<string, unknown>>(
-  Component: React.ComponentType<P>
+type AppRole = "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
+
+type WithAuthOptions = {
+  allowedRoles?: AppRole[];
+  redirectTo?: string;
+  unauthorizedRedirectTo?: string;
+};
+
+const getDefaultAllowedRoles = (
+  pathname?: string | null
+): AppRole[] | undefined => {
+  if (typeof pathname !== "string") {
+    return undefined;
+  }
+
+  if (pathname.startsWith("/dashboard")) {
+    return ["ADMIN", "SUPERADMIN"];
+  }
+
+  return undefined;
+};
+
+export function withAuth<P extends object>(
+  Component: React.ComponentType<P>,
+  options?: WithAuthOptions
 ) {
   return function AuthWrapper(props: P) {
-    const { isAuthenticated, isLoading } = useAuth();
-    console.log("isAuthenticated: ", isAuthenticated);
-    console.log("isLoading: ", isLoading);
+    const { isAuthenticated, isLoading, user } = useAuth();
     const router = useRouter();
+    const pathname = usePathname();
+    const [isRedirecting, setIsRedirecting] = useState(false);
+
+    const allowedRoles = useMemo(
+      () => options?.allowedRoles || getDefaultAllowedRoles(pathname),
+      [options?.allowedRoles, pathname]
+    );
+    const resolvedRole = resolveDisplayRole(user);
 
     useEffect(() => {
-      if (!isLoading && !isAuthenticated) {
-        router.push("/sign-in");
+      if (isLoading) {
+        return;
       }
-    }, [isLoading, isAuthenticated]);
 
-    if (isLoading) return <CustomLoader />;
+      if (!isAuthenticated) {
+        setIsRedirecting(true);
+        const configuredRedirect = options?.redirectTo || "/sign-in";
+        if (configuredRedirect === "/sign-in" && typeof window !== "undefined") {
+          const nextPath = `${window.location.pathname}${window.location.search}`;
+          router.replace(`/sign-in?next=${encodeURIComponent(nextPath)}`);
+        } else {
+          router.replace(configuredRedirect);
+        }
+        return;
+      }
+
+      if (allowedRoles?.length && !allowedRoles.includes(resolvedRole as AppRole)) {
+        setIsRedirecting(true);
+        const fallbackPath = options?.unauthorizedRedirectTo || (() => {
+          if (resolvedRole === "ADMIN" || resolvedRole === "SUPERADMIN") {
+            return "/dashboard";
+          }
+          if (resolvedRole === "DEALER") {
+            return "/orders";
+          }
+          return "/";
+        })();
+        router.replace(fallbackPath);
+        return;
+      }
+
+      setIsRedirecting(false);
+    }, [
+      allowedRoles,
+      isAuthenticated,
+      isLoading,
+      options?.redirectTo,
+      options?.unauthorizedRedirectTo,
+      router,
+      resolvedRole,
+    ]);
+
+    if (isLoading || isRedirecting) {
+      return <CustomLoader />;
+    }
+
+    if (!isAuthenticated) {
+      return null;
+    }
+
+    if (allowedRoles?.length && !allowedRoles.includes(resolvedRole as AppRole)) {
+      return null;
+    }
 
     return <Component {...props} />;
   };

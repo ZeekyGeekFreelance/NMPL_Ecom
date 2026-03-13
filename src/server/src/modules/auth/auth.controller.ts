@@ -8,6 +8,7 @@ import { tokenUtils } from "@/shared/utils/authUtils";
 import AppError from "@/shared/errors/AppError";
 import { CartService } from "../cart/cart.service";
 import { makeLogsService } from "../logs/logs.factory";
+import { config } from "@/config";
 
 const { ...clearCookieOptions } = cookieOptions;
 
@@ -20,15 +21,19 @@ export class AuthController {
 
   requestRegistrationOtp = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, purpose, requestDealerAccess } = req.body;
+      const { email, phone, purpose, requestDealerAccess } = req.body;
       const response = await this.authService.requestRegistrationOtp({
         email,
+        phone,
         purpose,
         requestDealerAccess,
       });
 
       sendResponse(res, 200, {
         message: response.message,
+        data: {
+          resendAvailableInSeconds: response.resendAvailableInSeconds,
+        },
       });
     }
   );
@@ -38,9 +43,10 @@ export class AuthController {
     const {
       name,
       email,
+      phone,
       password,
-      role,
-      otpCode,
+      emailOtpCode,
+      phoneOtpCode,
       requestDealerAccess,
       businessName,
       contactPhone,
@@ -49,9 +55,10 @@ export class AuthController {
       await this.authService.registerUser({
         name,
         email,
+        phone,
         password,
-        role,
-        otpCode,
+        emailOtpCode,
+        phoneOtpCode,
         requestDealerAccess,
         businessName,
         contactPhone,
@@ -60,10 +67,6 @@ export class AuthController {
     if (accessToken && refreshToken) {
       res.cookie("refreshToken", refreshToken, cookieOptions);
       res.cookie("accessToken", accessToken, cookieOptions);
-
-      if (user.role === "USER") {
-        await this.cartService?.mergeCartsOnLogin(req.session.id, user.id);
-      }
     }
 
     sendResponse(res, 201, {
@@ -76,7 +79,9 @@ export class AuthController {
           accountReference: user.accountReference,
           name: user.name,
           email: user.email,
+          phone: user.phone || null,
           role: user.role,
+          effectiveRole: user.effectiveRole || user.role,
           avatar: user.avatar || null,
           isDealer: user.isDealer || false,
           dealerStatus: user.dealerStatus || null,
@@ -96,30 +101,61 @@ export class AuthController {
     });
   });
 
-  signin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { email, password } = req.body;
-    const { user, accessToken, refreshToken } = await this.authService.signin({
-      email,
-      password,
-    });
+  applyDealerAccess = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AppError(401, "User not authenticated");
+      }
 
-    res.cookie("refreshToken", refreshToken, cookieOptions);
-    res.cookie("accessToken", accessToken, cookieOptions);
+      const { businessName, contactPhone } = req.body as {
+        businessName?: string;
+        contactPhone?: string;
+      };
+
+      const { user, wasResubmission } =
+        await this.authService.applyDealerAccessForCurrentUser({
+          userId: currentUserId,
+          businessName,
+          contactPhone,
+        });
+
+      sendResponse(res, 200, {
+        message: wasResubmission
+          ? "Dealer access request re-submitted. Await admin approval."
+          : "Dealer access request submitted. Await admin approval.",
+        data: { user, requiresApproval: true },
+      });
+    }
+  );
+
+  signin = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { email, password, portal } = req.body;
+    const result = await this.authService.signin({ email, password, portal });
+    const { user } = result;
+    // requiresPasswordChange is only set for legacy dealer first-login.
+    // When it's true, no tokens are issued — the client must redirect to /change-password.
+    const requiresPasswordChange = !!(result as any).requiresPasswordChange;
+
+    if (!requiresPasswordChange) {
+      // Only set cookies when tokens are actually issued.
+      res.cookie("refreshToken", result.refreshToken!, cookieOptions);
+      res.cookie("accessToken", result.accessToken!, cookieOptions);
+    }
 
     const userId = user.id;
-    const sessionId = req.session.id;
-    if (user.role === "USER") {
-      await this.cartService?.mergeCartsOnLogin(sessionId, userId);
-    }
 
     sendResponse(res, 200, {
       data: {
+        ...(requiresPasswordChange ? { requiresPasswordChange: true } : {}),
         user: {
           id: user.id,
           accountReference: user.accountReference,
           name: user.name,
           email: user.email,
+          phone: user.phone || null,
           role: user.role,
+          effectiveRole: user.effectiveRole || user.role,
           avatar: user.avatar,
           isDealer: user.isDealer || false,
           dealerStatus: user.dealerStatus || null,
@@ -127,23 +163,38 @@ export class AuthController {
           dealerContactPhone: user.dealerContactPhone || null,
         },
       },
-      message: "User logged in successfully",
+      message: requiresPasswordChange
+        ? "Password change required before accessing your account."
+        : "User logged in successfully",
     });
-
-    const start = Date.now();
-    const end = Date.now();
 
     this.logsService.info("Sign in", {
       userId,
       sessionId: req.session.id,
-      timePeriod: end - start,
     });
   });
 
   signout = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const start = Date.now();
     const refreshToken = req?.cookies?.refreshToken;
-    const userId = req.user?.id;
+    let userId = req.user?.id;
+
+    if (!userId && refreshToken) {
+      try {
+        const decoded = jwt.verify(
+          refreshToken,
+          config.auth.refreshTokenSecret
+        ) as { id?: string };
+        if (typeof decoded.id === "string") {
+          userId = decoded.id;
+        }
+      } catch {
+        // Ignore invalid refresh token and continue clearing cookies.
+      }
+    }
+
+    // Preserve cart on sign-out for all external accounts (customer + dealer)
+    // to ensure parity and continuity across sessions.
 
     if (refreshToken) {
       const decoded: any = jwt.decode(refreshToken);
@@ -164,30 +215,91 @@ export class AuthController {
       ...clearCookieOptions,
     });
 
+    const signoutDuration = Date.now() - start;
     sendResponse(res, 200, { message: "Logged out successfully" });
-    const end = Date.now();
 
     this.logsService.info("Sign out", {
       userId,
       sessionId: req.session.id,
-      timePeriod: end - start,
+      timePeriod: signoutDuration,
     });
   });
 
-  forgotPassword = asyncHandler(
+  /**
+   * Handles the forced first-login password change for legacy dealer accounts.
+   * The client posts the original temporary password + the new password.
+   * On success, full session tokens are issued so the dealer lands in the portal.
+   */
+  changePasswordOnFirstLogin = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email } = req.body;
-      const response = await this.authService.forgotPassword(email);
+      const { email, currentPassword, newPassword } = req.body as {
+        email: string;
+        currentPassword: string;
+        newPassword: string;
+      };
+
+      const { user, accessToken, refreshToken } =
+        await this.authService.changePasswordOnFirstLogin({
+          email,
+          currentPassword,
+          newPassword,
+        });
+
+      res.cookie("refreshToken", refreshToken, cookieOptions);
+      res.cookie("accessToken", accessToken, cookieOptions);
+
+      sendResponse(res, 200, {
+        message: "Password changed successfully. You are now signed in.",
+        data: {
+          user: {
+            id: user.id,
+            accountReference: user.accountReference,
+            name: user.name,
+            email: user.email,
+            phone: user.phone || null,
+            role: user.role,
+            effectiveRole: user.effectiveRole || user.role,
+            avatar: user.avatar || null,
+            isDealer: user.isDealer || false,
+            dealerStatus: user.dealerStatus || null,
+          },
+        },
+      });
+
+      this.logsService.info("First-login password change", {
+        userId: user.id,
+        sessionId: req.session.id,
+      });
+    }
+  );
+
+  requestOwnPasswordResetLink = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError(401, "User not authenticated");
+      }
+
+      const response = await this.authService.requestOwnPasswordResetLink(userId);
 
       sendResponse(res, 200, { message: response.message });
-      const start = Date.now();
-      const end = Date.now();
 
-      this.logsService.info("Forgot Password", {
+      this.logsService.info("Self Password Reset Link Requested", {
         userId,
         sessionId: req.session.id,
-        timePeriod: end - start,
+      });
+    }
+  );
+
+  forgotPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { email } = req.body as { email: string };
+      const response = await this.authService.forgotPassword(email);
+
+      sendResponse(res, 200, { message: response.message });
+
+      this.logsService.info("Forgot Password Link Requested", {
+        sessionId: req.session.id,
       });
     }
   );
@@ -199,13 +311,10 @@ export class AuthController {
       const userId = req.user?.id;
 
       sendResponse(res, 200, { message: response.message });
-      const start = Date.now();
-      const end = Date.now();
 
       this.logsService.info("Reset Password", {
         userId,
         sessionId: req.session.id,
-        timePeriod: end - start,
       });
     }
   );
@@ -222,6 +331,21 @@ export class AuthController {
       const { newAccessToken, newRefreshToken, user } =
         await this.authService.refreshToken(oldRefreshToken);
 
+      // Clear old cookies first
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: config.isProduction,
+        sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
+        path: "/",
+      });
+      res.clearCookie("accessToken", {
+        httpOnly: true,
+        secure: config.isProduction,
+        sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
+        path: "/",
+      });
+
+      // Set new cookies
       res.cookie("refreshToken", newRefreshToken, cookieOptions);
       res.cookie("accessToken", newAccessToken, cookieOptions);
 

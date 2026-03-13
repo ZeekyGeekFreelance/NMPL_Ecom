@@ -15,15 +15,22 @@ export const logRequest = async (
     const duration = Date.now() - start;
     const status = res.statusCode;
     const userId = req.user?.id || "anonymous";
+    const traceId = req.traceId || "unknown";
 
-    await logsService.info(`API Request`, {
-      method,
-      url,
-      status,
-      timePeriod: duration,
-      ip,
-      userId,
-    });
+    try {
+      await logsService.info(`API Request`, {
+        method,
+        url,
+        status,
+        timePeriod: duration,
+        ip,
+        userId,
+        traceId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[logRequest] Failed to persist request log: ${message}`);
+    }
   });
 
   next();

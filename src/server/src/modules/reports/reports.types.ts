@@ -11,13 +11,13 @@ export interface SalesReport {
   totalSales: number;
   averageOrderValue: number;
   byCategory: {
-    categoryId: string;
     categoryName: string;
     revenue: number;
     sales: number;
   }[];
   topProducts: {
     productId: string;
+    sku: string;
     productName: string;
     quantity: number;
     revenue: number;
@@ -33,6 +33,7 @@ export interface UserRetentionReport {
     userId: string;
     name: string;
     email: string;
+    customerType?: "USER" | "DEALER";
     orderCount: number;
     totalSpent: number;
   }[];

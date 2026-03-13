@@ -1,5 +1,8 @@
 import PDFDocument from "pdfkit";
 import { getPlatformName } from "../branding";
+import { formatDateTimeInIST } from "../dateTime";
+import { configurePdfFonts } from "../pdfFonts";
+import { formatINRCurrency } from "../currency";
 
 interface InvoicePdfItem {
   productName: string;
@@ -9,11 +12,37 @@ interface InvoicePdfItem {
   subtotal: number;
 }
 
+interface InvoicePaymentTransaction {
+  id: string;
+  amount: number;
+  paymentMethod: string;
+  paymentSource?: string | null;
+  paymentReceivedAt: Date;
+  utrNumber?: string | null;
+  bankName?: string | null;
+  transferDate?: Date | null;
+  chequeNumber?: string | null;
+  chequeDate?: Date | null;
+  chequeClearingDate?: Date | null;
+  gatewayPaymentId?: string | null;
+  gatewayName?: string | null;
+  notes?: string | null;
+  recordedBy?: {
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+}
+
 interface InvoiceAddress {
-  street: string;
+  fullName?: string;
+  phoneNumber?: string;
+  line1: string;
+  line2?: string | null;
+  landmark?: string | null;
   city: string;
   state: string;
-  zip: string;
+  pincode: string;
   country: string;
 }
 
@@ -22,59 +51,177 @@ interface InvoicePdfInput {
   orderId: string;
   orderDate: Date;
   customerName: string;
+  customerPhone?: string | null;
   accountReference?: string;
   customerEmail: string;
-  customerType: "DEALER" | "CLIENT";
+  customerType: "DEALER" | "USER";
   items: InvoicePdfItem[];
+  subtotalAmount: number;
+  deliveryCharge: number;
+  deliveryMode: string;
   totalAmount: number;
-  billingAddress?: InvoiceAddress | null;
+  paymentStatus?: string | null;
+  paymentTerms?: string | null;
+  paymentDueDate?: Date | null;
+  paymentTransactions?: InvoicePaymentTransaction[];
+  locationLabel: string;
+  locationAddress?: InvoiceAddress | null;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-
-const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(date);
-
-const drawSectionTitle = (doc: PDFKit.PDFDocument, label: string) => {
+const drawSectionTitle = (
+  doc: PDFKit.PDFDocument,
+  label: string,
+  fonts: { bold: string }
+) => {
   doc.moveDown(0.5);
-  doc.font("Helvetica-Bold").fontSize(11).text(label);
+  doc.font(fonts.bold).fontSize(11).text(label);
   doc.moveDown(0.2);
 };
 
-const drawItemsTable = (doc: PDFKit.PDFDocument, items: InvoicePdfItem[]) => {
-  doc.font("Helvetica-Bold").fontSize(10);
-  doc.text("Item", 50, doc.y, { width: 200 });
-  doc.text("Qty", 260, doc.y, { width: 40, align: "right" });
-  doc.text("Unit Price", 310, doc.y, { width: 90, align: "right" });
-  doc.text("Subtotal", 410, doc.y, { width: 130, align: "right" });
-  doc.moveDown(0.4);
-  doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#d1d5db").stroke();
-  doc.moveDown(0.4);
+const toSafeText = (value: unknown, fallback = "N/A"): string => {
+  const normalized = String(value ?? "").trim();
+  return normalized || fallback;
+};
 
-  doc.font("Helvetica").fontSize(10);
+const drawAddressBlock = (
+  doc: PDFKit.PDFDocument,
+  address: InvoiceAddress | null | undefined,
+  fallbackName: string,
+  fallbackPhone: string,
+  contactLabel = "Receiver"
+) => {
+  if (!address) {
+    doc.fontSize(10).text("Address details are unavailable.");
+    return;
+  }
+
+  doc
+    .fontSize(10)
+    .text(`${contactLabel}: ${toSafeText(address.fullName, fallbackName)}`);
+  doc.fontSize(10).text(`Phone: ${toSafeText(address.phoneNumber, fallbackPhone)}`);
+  doc.fontSize(10).text(toSafeText(address.line1, "Address line not available"));
+
+  if (address.line2) {
+    doc.fontSize(10).text(address.line2);
+  }
+  if (address.landmark) {
+    doc.fontSize(10).text(`Landmark: ${address.landmark}`);
+  }
+
+  doc
+    .fontSize(10)
+    .text(
+      `${toSafeText(address.city)}, ${toSafeText(address.state)} ${toSafeText(
+        address.pincode
+      )}`
+    );
+  doc.fontSize(10).text(toSafeText(address.country));
+};
+
+const drawItemsTable = (
+  doc: PDFKit.PDFDocument,
+  items: InvoicePdfItem[],
+  fonts: { regular: string; bold: string },
+  formatCurrency: (value: number) => string
+) => {
+  const left = 50;
+  const right = 545;
+  const pageBottom = () => doc.page.height - doc.page.margins.bottom;
+  const columns = [
+    { key: "product", label: "Product", x: 50, width: 205, align: "left" },
+    { key: "sku", label: "SKU", x: 260, width: 95, align: "left" },
+    { key: "qty", label: "Qty", x: 360, width: 50, align: "right" },
+    { key: "unit", label: "Unit Price", x: 415, width: 60, align: "right" },
+    { key: "line", label: "Line Total", x: 480, width: 65, align: "right" },
+  ] as const;
+
+  const drawTableHeader = () => {
+    doc.font(fonts.bold).fontSize(9.5);
+    columns.forEach((column) => {
+      doc.text(column.label, column.x, doc.y, {
+        width: column.width,
+        align: column.align,
+      });
+    });
+    doc.moveDown(0.35);
+    doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#d1d5db").stroke();
+    doc.moveDown(0.35);
+  };
+
+  drawTableHeader();
+
+  if (!items.length) {
+    doc
+      .font(fonts.regular)
+      .fontSize(10)
+      .text("No items available.", left, doc.y, { width: right - left });
+    return;
+  }
+
+  doc.font(fonts.regular).fontSize(9.5);
   items.forEach((item) => {
+    const productName = toSafeText(item.productName, "Product");
+    const sku = toSafeText(item.sku, "-");
+    const quantity = String(Number(item.quantity) || 0);
+    const unitPrice = formatCurrency(Number(item.unitPrice) || 0);
+    const lineTotal = formatCurrency(Number(item.subtotal) || 0);
+
+    const productHeight = doc.heightOfString(productName, {
+      width: columns[0].width,
+      align: "left",
+    });
+    const skuHeight = doc.heightOfString(sku, {
+      width: columns[1].width,
+      align: "left",
+    });
+    const rowHeight = Math.max(productHeight, skuHeight, doc.currentLineHeight()) + 6;
+
+    if (doc.y + rowHeight > pageBottom() - 70) {
+      doc.addPage();
+      drawTableHeader();
+      doc.font(fonts.regular).fontSize(9.5);
+    }
+
     const rowY = doc.y;
-    const itemTitle = `${item.productName} (${item.sku})`;
-    doc.text(itemTitle, 50, rowY, { width: 200 });
-    doc.text(String(item.quantity), 260, rowY, { width: 40, align: "right" });
-    doc.text(formatCurrency(item.unitPrice), 310, rowY, {
-      width: 90,
+    doc.text(productName, columns[0].x, rowY, {
+      width: columns[0].width,
+      align: "left",
+    });
+    doc.text(sku, columns[1].x, rowY, {
+      width: columns[1].width,
+      align: "left",
+    });
+    doc.text(quantity, columns[2].x, rowY, {
+      width: columns[2].width,
       align: "right",
     });
-    doc.text(formatCurrency(item.subtotal), 410, rowY, {
-      width: 130,
+    doc.text(unitPrice, columns[3].x, rowY, {
+      width: columns[3].width,
       align: "right",
     });
-    doc.moveDown(0.8);
+    doc.text(lineTotal, columns[4].x, rowY, {
+      width: columns[4].width,
+      align: "right",
+    });
+
+    doc.y = rowY + rowHeight;
+    doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#eef2f7").stroke();
+    doc.moveDown(0.2);
   });
+};
+
+const buildPaymentReference = (txn: InvoicePaymentTransaction): string | null => {
+  if (txn.utrNumber) {
+    return `UTR: ${txn.utrNumber}`;
+  }
+  if (txn.chequeNumber) {
+    return `Cheque: ${txn.chequeNumber}`;
+  }
+  if (txn.gatewayPaymentId) {
+    const gateway = txn.gatewayName ? `${txn.gatewayName} ` : "";
+    return `${gateway}ID: ${txn.gatewayPaymentId}`;
+  }
+  return null;
 };
 
 export default function generateInvoicePdf(
@@ -84,6 +231,11 @@ export default function generateInvoicePdf(
     const platformName = getPlatformName();
     const doc = new PDFDocument({ margin: 50 });
     const chunks: Buffer[] = [];
+    const fonts = configurePdfFonts(doc);
+    const formatCurrency = (value: number): string =>
+      fonts.supportsUnicode
+        ? formatINRCurrency(value)
+        : `INR ${Number(value || 0).toFixed(2)}`;
 
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -92,61 +244,169 @@ export default function generateInvoicePdf(
     );
 
     try {
-      doc.font("Helvetica-Bold").fontSize(11).text(platformName.toUpperCase(), {
+      const normalizedDeliveryMode = String(invoice.deliveryMode || "DELIVERY")
+        .trim()
+        .toUpperCase();
+      const deliveryLabel =
+        normalizedDeliveryMode === "PICKUP" ? "In-Store Pickup" : "Delivery";
+
+      doc.font(fonts.bold).fontSize(11).text(platformName.toUpperCase(), {
         align: "left",
       });
       doc.moveDown(0.3);
-      doc.font("Helvetica-Bold").fontSize(22).text("INVOICE", {
+      doc.font(fonts.bold).fontSize(22).text("INVOICE", {
         align: "left",
       });
       doc.moveDown(0.4);
-      doc.font("Helvetica").fontSize(10);
+      doc.font(fonts.regular).fontSize(10);
       doc.text(`Invoice #: ${invoice.invoiceNumber}`);
       doc.text(`Order ID: ${invoice.orderId}`);
-      doc.text(`Date: ${formatDate(invoice.orderDate)}`);
-      doc.text(`Customer Type: ${invoice.customerType}`);
+      doc.text(`Order Date (IST): ${formatDateTimeInIST(invoice.orderDate)}`);
+      doc.text(`Generated At (IST): ${formatDateTimeInIST(new Date())}`);
 
-      drawSectionTitle(doc, "Bill To");
-      doc.font("Helvetica").fontSize(10);
-      doc.text(invoice.customerName);
+      drawSectionTitle(doc, "Billing Identity", fonts);
+      doc.font(fonts.regular).fontSize(10);
+      doc.text(`Customer Name: ${toSafeText(invoice.customerName, "Customer")}`);
+      doc.text(`Phone: ${toSafeText(invoice.customerPhone, "Not provided")}`);
+      doc.text(`Email: ${toSafeText(invoice.customerEmail)}`);
+      doc.text(`Customer Type: ${toSafeText(invoice.customerType)}`);
       if (invoice.accountReference) {
         doc.text(`Account Ref: ${invoice.accountReference}`);
       }
-      doc.text(invoice.customerEmail);
-      if (invoice.billingAddress) {
-        doc.text(invoice.billingAddress.street);
-        doc.text(
-          `${invoice.billingAddress.city}, ${invoice.billingAddress.state} ${invoice.billingAddress.zip}`
-        );
-        doc.text(invoice.billingAddress.country);
-      }
 
-      drawSectionTitle(doc, "Items");
-      if (!invoice.items.length) {
-        doc.font("Helvetica").fontSize(10).text("No items available.");
-      } else {
-        drawItemsTable(doc, invoice.items);
-      }
+      drawSectionTitle(doc, "Fulfillment", fonts);
+      doc
+        .font(fonts.regular)
+        .fontSize(10)
+        .text(`Fulfillment Mode: ${deliveryLabel}`);
+
+      drawSectionTitle(
+        doc,
+        toSafeText(
+          invoice.locationLabel,
+          normalizedDeliveryMode === "PICKUP" ? "Pickup Location" : "Delivery To"
+        ),
+        fonts
+      );
+      drawAddressBlock(
+        doc,
+        invoice.locationAddress,
+        invoice.customerName,
+        toSafeText(invoice.customerPhone, "Not provided"),
+        normalizedDeliveryMode === "PICKUP" ? "Store" : "Receiver"
+      );
+
+      drawSectionTitle(doc, "Items :", fonts);
+      drawItemsTable(doc, invoice.items, fonts, formatCurrency);
 
       doc.moveDown(0.8);
       doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#d1d5db").stroke();
       doc.moveDown(0.8);
-      doc.font("Helvetica-Bold").fontSize(12);
+      doc.font(fonts.regular).fontSize(10);
+      doc.text(`Subtotal: ${formatCurrency(invoice.subtotalAmount)}`, 50, doc.y, {
+        align: "right",
+      });
+      doc.moveDown(0.3);
+      doc.text(
+        `${deliveryLabel}: ${formatCurrency(invoice.deliveryCharge)}`,
+        50,
+        doc.y,
+        {
+          align: "right",
+        }
+      );
+      doc.moveDown(0.3);
+      doc.font(fonts.bold).fontSize(12);
       doc.text(`Total: ${formatCurrency(invoice.totalAmount)}`, 50, doc.y, {
         align: "right",
       });
 
+      const normalizedPaymentStatus = String(invoice.paymentStatus || "PAID")
+        .trim()
+        .toUpperCase();
+      const isPaymentDue =
+        normalizedPaymentStatus === "PAYMENT_DUE" ||
+        normalizedPaymentStatus === "OVERDUE";
+      const isOverdue = normalizedPaymentStatus === "OVERDUE";
+      const paymentTransactions = Array.isArray(invoice.paymentTransactions)
+        ? invoice.paymentTransactions
+        : [];
+      const totalPaid = paymentTransactions.reduce(
+        (sum, txn) => sum + Number(txn.amount || 0),
+        0
+      );
+      const amountDue = Math.max(0, Number(invoice.totalAmount) - totalPaid);
+
+      doc.moveDown(1);
+      drawSectionTitle(doc, "Payment Summary", fonts);
+      doc.font(fonts.regular).fontSize(10);
+      doc.text(
+        `Payment Status: ${
+          isPaymentDue
+            ? isOverdue
+              ? "OVERDUE"
+              : "PAYMENT DUE"
+            : "PAID"
+        }`
+      );
+      if (invoice.paymentTerms) {
+        doc.text(`Payment Terms: ${toSafeText(invoice.paymentTerms)}`);
+      }
+      if (invoice.paymentDueDate) {
+        doc.text(
+          `Payment Due Date (IST): ${formatDateTimeInIST(invoice.paymentDueDate)}`
+        );
+      }
+      if (totalPaid > 0) {
+        doc.text(`Amount Paid: ${formatCurrency(totalPaid)}`);
+      }
+      if (amountDue > 0) {
+        doc.text(`Amount Due: ${formatCurrency(amountDue)}`);
+      }
+
+      if (paymentTransactions.length > 0) {
+        drawSectionTitle(doc, "Payment Records", fonts);
+        doc.font(fonts.regular).fontSize(9.5);
+        paymentTransactions.forEach((txn, index) => {
+          const reference = buildPaymentReference(txn);
+          const receivedAt = txn.paymentReceivedAt
+            ? formatDateTimeInIST(txn.paymentReceivedAt)
+            : "N/A";
+          const method = toSafeText(txn.paymentMethod, "PAYMENT");
+          const source = txn.paymentSource
+            ? ` (${txn.paymentSource})`
+            : "";
+          const line = `${index + 1}. ${method}${source} | ${formatCurrency(
+            Number(txn.amount || 0)
+          )} | ${receivedAt}${reference ? ` | ${reference}` : ""}`;
+          doc.text(line);
+          if (txn.bankName) {
+            doc.text(`   Bank: ${txn.bankName}`);
+          }
+          if (txn.transferDate) {
+            doc.text(
+              `   Transfer Date: ${formatDateTimeInIST(txn.transferDate)}`
+            );
+          }
+          if (txn.chequeDate) {
+            doc.text(`   Cheque Date: ${formatDateTimeInIST(txn.chequeDate)}`);
+          }
+          if (txn.chequeClearingDate) {
+            doc.text(
+              `   Cheque Clearing: ${formatDateTimeInIST(txn.chequeClearingDate)}`
+            );
+          }
+        });
+      }
+
       doc.moveDown(1);
       doc
-        .font("Helvetica")
+        .font(fonts.regular)
         .fontSize(9)
         .fillColor("#6b7280")
-        .text(
-          `${platformName} system generated invoice. No signature required.`,
-          {
-            align: "left",
-          }
-        );
+        .text(`${platformName} system generated invoice. No signature required.`, {
+          align: "left",
+        });
 
       doc.end();
     } catch (error: unknown) {

@@ -8,205 +8,239 @@ import {
   generateAccessToken,
   generateRefreshToken,
 } from "@/shared/utils/auth/tokenUtils";
+import { config } from "@/config";
+
+const isConfigured = (...values: Array<string | undefined>): boolean =>
+  values.every((value) => typeof value === "string" && value.trim().length > 0);
 
 export default function configurePassport() {
-  // Google Strategy (unchanged)
-  passport.use(
-    new GoogleStrategy(
-      {
-        clientID: process.env.GOOGLE_CLIENT_ID!,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        callbackURL:
-          process.env.NODE_ENV === "production"
-            ? process.env.GOOGLE_CALLBACK_URL_PROD!
-            : process.env.GOOGLE_CALLBACK_URL_DEV!,
-      },
-      async (
-        accessToken: string,
-        refreshToken: string,
-        profile: Profile,
-        done: any
-      ) => {
-        try {
-          let user = await prisma.user.findUnique({
-            where: { email: profile.emails![0].value },
-          });
+  // Serialize user ID into session
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
 
-          if (user) {
-            if (!user.googleId) {
-              user = await prisma.user.update({
-                where: { email: profile.emails![0].value },
+  // Deserialize user from session
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          avatar: true,
+          phone: true,
+          tokenVersion: true,
+        },
+      });
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+
+  const googleClientId = config.raw.GOOGLE_CLIENT_ID;
+  const googleClientSecret = config.raw.GOOGLE_CLIENT_SECRET;
+  const googleCallback = config.isProduction
+    ? config.raw.GOOGLE_CALLBACK_URL_PROD
+    : config.raw.GOOGLE_CALLBACK_URL_DEV;
+
+  if (isConfigured(googleClientId, googleClientSecret, googleCallback)) {
+    passport.use(
+      new GoogleStrategy(
+        {
+          clientID: googleClientId as string,
+          clientSecret: googleClientSecret as string,
+          callbackURL: googleCallback as string,
+        },
+        async (
+          _accessToken: string,
+          _refreshToken: string,
+          profile: Profile,
+          done: any
+        ) => {
+          try {
+            let user = await prisma.user.findUnique({
+              where: { email: profile.emails![0].value },
+            });
+
+            if (user) {
+              if (!user.googleId) {
+                user = await prisma.user.update({
+                  where: { email: profile.emails![0].value },
+                  data: {
+                    googleId: profile.id,
+                    avatar: profile.photos![0]?.value || "",
+                  },
+                });
+              }
+            } else {
+              user = await prisma.user.create({
                 data: {
+                  email: profile.emails![0].value,
+                  name: profile.displayName,
                   googleId: profile.id,
                   avatar: profile.photos![0]?.value || "",
                 },
               });
             }
-          } else {
-            user = await prisma.user.create({
-              data: {
-                email: profile.emails![0].value,
-                name: profile.displayName,
-                googleId: profile.id,
-                avatar: profile.photos![0]?.value || "",
-              },
+
+            const id = user.id;
+            return done(null, {
+              ...user,
+              accessToken: generateAccessToken(id, user.tokenVersion ?? 0),
+              refreshToken: generateRefreshToken(
+                id,
+                undefined,
+                user.tokenVersion ?? 0
+              ),
             });
+          } catch (error) {
+            return done(error);
           }
-
-          const id = user.id;
-          const newAccessToken = generateAccessToken(id);
-          const newRefreshToken = generateRefreshToken(id);
-
-          return done(null, {
-            ...user,
-            accessToken: newAccessToken,
-            refreshToken: newRefreshToken,
-          });
-        } catch (error) {
-          console.error("Google Strategy error:", error);
-          return done(error);
         }
-      }
-    )
-  );
+      )
+    );
+  }
 
-  // Facebook Strategy (unchanged, assuming it works)
-  passport.use(
-    new FacebookStrategy(
-      {
-        clientID: process.env.FACEBOOK_APP_ID!,
-        clientSecret: process.env.FACEBOOK_APP_SECRET!,
-        callbackURL:
-          process.env.NODE_ENV === "production"
-            ? process.env.FACEBOOK_CALLBACK_URL_PROD!
-            : process.env.FACEBOOK_CALLBACK_URL_DEV!,
-        profileFields: ["id", "emails", "name"],
-      },
-      async (
-        accessToken: string,
-        refreshToken: string,
-        profile: any,
-        done: any
-      ) => {
-        console.log("facebook profile: ", profile);
-        try {
-          let user = await prisma.user.findUnique({
-            where: { email: profile.emails?.[0]?.value || "" },
-          });
+  const facebookAppId = config.raw.FACEBOOK_APP_ID;
+  const facebookAppSecret = config.raw.FACEBOOK_APP_SECRET;
+  const facebookCallback = config.isProduction
+    ? config.raw.FACEBOOK_CALLBACK_URL_PROD
+    : config.raw.FACEBOOK_CALLBACK_URL_DEV;
 
-          if (user) {
-            if (!user.facebookId) {
-              user = await prisma.user.update({
-                where: { email: profile.emails?.[0]?.value || "" },
+  if (isConfigured(facebookAppId, facebookAppSecret, facebookCallback)) {
+    passport.use(
+      new FacebookStrategy(
+        {
+          clientID: facebookAppId as string,
+          clientSecret: facebookAppSecret as string,
+          callbackURL: facebookCallback as string,
+          profileFields: ["id", "emails", "name"],
+        },
+        async (
+          _accessToken: string,
+          _refreshToken: string,
+          profile: any,
+          done: any
+        ) => {
+          try {
+            let user = await prisma.user.findUnique({
+              where: { email: profile.emails?.[0]?.value || "" },
+            });
+
+            if (user) {
+              if (!user.facebookId) {
+                user = await prisma.user.update({
+                  where: { email: profile.emails?.[0]?.value || "" },
+                  data: {
+                    facebookId: profile.id,
+                    avatar: profile.photos?.[0]?.value || "",
+                  },
+                });
+              }
+            } else {
+              user = await prisma.user.create({
                 data: {
+                  email: profile.emails?.[0]?.value || "",
+                  name: `${profile.name?.givenName} ${profile.name?.familyName}`,
                   facebookId: profile.id,
                   avatar: profile.photos?.[0]?.value || "",
                 },
               });
             }
-          } else {
-            user = await prisma.user.create({
-              data: {
-                email: profile.emails?.[0]?.value || "",
-                name: `${profile.name?.givenName} ${profile.name?.familyName}`,
-                facebookId: profile.id,
-                avatar: profile.photos?.[0]?.value || "",
-              },
+
+            const id = user.id;
+            return done(null, {
+              ...user,
+              accessToken: generateAccessToken(id, user.tokenVersion ?? 0),
+              refreshToken: generateRefreshToken(
+                id,
+                undefined,
+                user.tokenVersion ?? 0
+              ),
             });
+          } catch (error) {
+            return done(error);
           }
-
-          const id = user.id;
-          const newAccessToken = generateAccessToken(id);
-          const newRefreshToken = generateRefreshToken(id);
-
-          return done(null, {
-            ...user,
-            accessToken: newAccessToken,
-            refreshToken: newRefreshToken,
-          });
-        } catch (error) {
-          console.error("Facebook Strategy error:", error);
-          return done(error);
         }
-      }
-    )
-  );
+      )
+    );
+  }
 
-  // Twitter Strategy (standalone, without oauthUtils)
-  passport.use(
-    new TwitterStrategy(
-      {
-        consumerKey: process.env.TWITTER_CONSUMER_KEY!,
-        consumerSecret: process.env.TWITTER_CONSUMER_SECRET!,
-        callbackURL:
-          process.env.NODE_ENV === "production"
-            ? process.env.TWITTER_CALLBACK_URL_PROD!
-            : process.env.TWITTER_CALLBACK_URL_DEV!,
-        includeEmail: true,
-      },
-      async (
-        accessToken: string,
-        refreshToken: string,
-        profile: Profile,
-        done: any
-      ) => {
-        console.log("Twitter accessToken:", accessToken);
-        console.log("Twitter refreshToken:", refreshToken);
-        console.log("Twitter profile:", JSON.stringify(profile, null, 2));
-        try {
-          if (!profile || !profile.id) {
-            console.error("Twitter profile is missing or invalid:", profile);
-            return done(new Error("Failed to fetch valid Twitter profile"));
-          }
+  const twitterConsumerKey = config.raw.TWITTER_CONSUMER_KEY;
+  const twitterConsumerSecret = config.raw.TWITTER_CONSUMER_SECRET;
+  const twitterCallback = config.isProduction
+    ? config.raw.TWITTER_CALLBACK_URL_PROD
+    : config.raw.TWITTER_CALLBACK_URL_DEV;
 
-          const email =
-            profile.emails?.[0]?.value ||
-            `twitter-${profile.id}@placeholder.com`;
-          const name =
-            profile.displayName ||
-            profile.username ||
-            `Twitter User ${profile.id}`;
-          const avatar = profile.photos?.[0]?.value || "";
+  if (isConfigured(twitterConsumerKey, twitterConsumerSecret, twitterCallback)) {
+    passport.use(
+      new TwitterStrategy(
+        {
+          consumerKey: twitterConsumerKey as string,
+          consumerSecret: twitterConsumerSecret as string,
+          callbackURL: twitterCallback as string,
+          includeEmail: true,
+        },
+        async (
+          _accessToken: string,
+          _refreshToken: string,
+          profile: Profile,
+          done: any
+        ) => {
+          try {
+            if (!profile || !profile.id) {
+              return done(new Error("Failed to fetch valid Twitter profile"));
+            }
 
-          let user = await prisma.user.findUnique({
-            where: { email },
-          });
+            const email =
+              profile.emails?.[0]?.value || `twitter-${profile.id}@placeholder.com`;
+            const name =
+              profile.displayName || profile.username || `Twitter User ${profile.id}`;
+            const avatar = profile.photos?.[0]?.value || "";
 
-          if (user) {
-            if (!user.twitterId) {
-              user = await prisma.user.update({
-                where: { email },
+            let user = await prisma.user.findUnique({
+              where: { email },
+            });
+
+            if (user) {
+              if (!user.twitterId) {
+                user = await prisma.user.update({
+                  where: { email },
+                  data: {
+                    twitterId: profile.id,
+                    avatar,
+                  },
+                });
+              }
+            } else {
+              user = await prisma.user.create({
                 data: {
+                  email,
+                  name,
                   twitterId: profile.id,
                   avatar,
                 },
               });
             }
-          } else {
-            user = await prisma.user.create({
-              data: {
-                email,
-                name,
-                twitterId: profile.id,
-                avatar,
-              },
+
+            const id = user.id;
+            return done(null, {
+              ...user,
+              accessToken: generateAccessToken(id, user.tokenVersion ?? 0),
+              refreshToken: generateRefreshToken(
+                id,
+                undefined,
+                user.tokenVersion ?? 0
+              ),
             });
+          } catch (error) {
+            return done(error);
           }
-
-          const id = user.id;
-          const newAccessToken = generateAccessToken(id);
-          const newRefreshToken = generateRefreshToken(id);
-
-          return done(null, {
-            ...user,
-            accessToken: newAccessToken,
-            refreshToken: newRefreshToken,
-          });
-        } catch (error) {
-          console.error("Twitter Strategy error:", error);
-          return done(error);
         }
-      }
-    )
-  );
+      )
+    );
+  }
 }

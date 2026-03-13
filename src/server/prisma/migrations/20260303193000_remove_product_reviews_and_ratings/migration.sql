@@ -1,0 +1,5 @@
+ALTER TABLE "Product"
+DROP COLUMN IF EXISTS "averageRating",
+DROP COLUMN IF EXISTS "reviewCount";
+
+DROP TABLE IF EXISTS "Review" CASCADE;

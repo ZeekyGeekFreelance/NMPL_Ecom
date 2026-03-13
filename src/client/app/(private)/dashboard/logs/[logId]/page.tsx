@@ -1,9 +1,17 @@
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useGetLogByIdQuery } from "@/app/store/apis/LogsApi";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import {
+  toAccountReference,
+  toOrderReference,
+  toPaymentReference,
+  toPrefixedReference,
+  toProductReference,
+  toTransactionReference,
+} from "@/app/lib/utils/accountReference";
 
 const formatTimestamp = (timestamp: string): string => {
   try {
@@ -17,17 +25,51 @@ const formatTimestamp = (timestamp: string): string => {
   }
 };
 
-const shortenId = (id: string): string =>
-  id ? `${id.substring(0, 8)}...` : "";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-interface LogDetailsProps {
-  params: { logId: string };
-}
+const formatContextValue = (key: string, value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "N/A";
+  }
 
-const LogDetails: React.FC<LogDetailsProps> = ({ params }) => {
-  const { logId } = React.use(params);
+  if (typeof value !== "string") {
+    return String(value);
+  }
+
+  const raw = value.trim();
+  if (!UUID_PATTERN.test(raw)) {
+    return raw;
+  }
+
+  const normalizedKey = key.replace(/\s+/g, "").toLowerCase();
+
+  if (normalizedKey.includes("userid") || normalizedKey.includes("accountid")) {
+    return toAccountReference(raw);
+  }
+  if (normalizedKey.includes("orderid")) {
+    return toOrderReference(raw);
+  }
+  if (normalizedKey.includes("paymentid")) {
+    return toPaymentReference(raw);
+  }
+  if (normalizedKey.includes("transactionid")) {
+    return toTransactionReference(raw);
+  }
+  if (normalizedKey.includes("productid")) {
+    return toProductReference(raw);
+  }
+
+  return toPrefixedReference("REF", raw);
+};
+
+const LogDetails: React.FC = () => {
+  const params = useParams<{ logId: string }>();
+  const logId = params?.logId || "";
   const router = useRouter();
-  const { data, isLoading, error } = useGetLogByIdQuery(logId);
+  const { data, isLoading, error } = useGetLogByIdQuery(logId, {
+    skip: !logId,
+  });
 
   if (isLoading) {
     return (
@@ -53,7 +95,7 @@ const LogDetails: React.FC<LogDetailsProps> = ({ params }) => {
     <div className="p-4 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Log Details</h1>
+        <h1 className="type-h3 text-gray-900">Log Details</h1>
         <button
           onClick={() => router.push("/dashboard/logs")}
           className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors"
@@ -91,26 +133,23 @@ const LogDetails: React.FC<LogDetailsProps> = ({ params }) => {
           </div>
           <div>
             <div className="text-sm text-gray-500">Log ID</div>
-            <div className="text-gray-800 font-mono text-sm">{id}</div>
+            <div className="text-gray-800 font-mono text-sm">
+              {toPrefixedReference("LOG", id)}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Context Details */}
       <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold mb-4">Context</h2>
+        <h2 className="text-base font-semibold mb-4">Context</h2>
         {context && Object.keys(context).length > 0 ? (
           <div className="grid grid-cols-1 gap-4">
             {Object.entries(context).map(([key, value]) => (
               <div key={key} className="flex flex-col">
                 <div className="text-sm text-gray-500 capitalize">{key}</div>
                 <div className="text-gray-800 break-all">
-                  {typeof value === "string" &&
-                  value.match(
-                    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-                  )
-                    ? shortenId(value)
-                    : value?.toString() || "N/A"}
+                  {formatContextValue(key, value)}
                 </div>
               </div>
             ))}

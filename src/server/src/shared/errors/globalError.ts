@@ -2,13 +2,15 @@ import { Request, Response, NextFunction } from "express";
 import AppError from "./AppError";
 import logger from "@/infra/winston/logger";
 import { makeLogsService } from "@/modules/logs/logs.factory";
+import { config } from "@/config";
+import multer from "multer";
 
 interface CustomError extends Error {
   name: string;
   code?: number | string;
   errors?: Record<string, { message: string }>;
   path?: string;
-  value?: any;
+  value?: unknown;
   details?: { message: string }[];
   stack?: string;
 }
@@ -61,11 +63,25 @@ const globalError = async (
   res: Response,
   _next: NextFunction
 ): Promise<void> => {
+  // Handle Multer file upload errors before general processing.
+  if (err instanceof multer.MulterError) {
+    const multerMessages: Record<string, string> = {
+      LIMIT_FILE_SIZE: "File too large. Maximum allowed size is 10 MB.",
+      LIMIT_FILE_COUNT: "Too many files. Maximum 5 files allowed per upload.",
+      LIMIT_UNEXPECTED_FILE: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.",
+      LIMIT_FIELD_VALUE: "Field value too large.",
+    };
+    const message = multerMessages[err.code] || `Upload error: ${err.message}`;
+    res.status(400).json({ status: "fail", message, traceId: req.traceId || "unknown" });
+    return;
+  }
+
   let error: AppError =
     err instanceof AppError ? err : new AppError(500, err.message);
 
-  const isDev = process.env.NODE_ENV === "development";
-  const isProd = process.env.NODE_ENV === "production";
+  const isDev = config.isDevelopment;
+  const isProd = config.isProduction;
+  const traceId = req.traceId || "unknown";
 
   const handler =
     errorHandlers[err.name] ||
@@ -76,53 +92,53 @@ const globalError = async (
     error = handler(err as CustomError);
   }
 
-  // DEV logging
   if (isDev) {
-    console.error("🔴 Error Name:", err.name);
-    console.error(
-      "🔴 Stack Trace:",
-      err.stack?.split("\n").slice(0, 5).join("\n")
-    );
+    console.error("Error Name:", err.name);
+    console.error("Stack Trace:", err.stack?.split("\n").slice(0, 5).join("\n"));
 
     logger.error({
       message: error.message,
       statusCode: error.statusCode,
       method: req.method,
       path: req.originalUrl,
+      traceId,
       stack: error.stack,
       ...(error.details && { details: error.details }),
     });
   }
 
-  // PROD logging
   if (isProd && error.isOperational) {
     logger.error(
-      `[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message}`
+      `[${req.method}] ${req.originalUrl} - ${error.statusCode} - ${error.message} - traceId=${traceId}`
     );
   }
 
   const start = Date.now();
-  const end = Date.now();
+  try {
+    await logsService.error(`Error: ${error.message}`, {
+      statusCode: error.statusCode,
+      stack: isDev ? err.stack : undefined,
+      method: req.method,
+      url: req.originalUrl,
+      traceId,
+      userId: (req as { user?: { id?: string } }).user?.id || null,
+      timePeriod: Date.now() - start,
+    });
+  } catch (loggingError) {
+    const logErrorMessage =
+      loggingError instanceof Error ? loggingError.message : String(loggingError);
+    logger.error(`[globalError] Failed to persist error log: ${logErrorMessage}`);
+  }
 
-  // 🛠️ Logs Service Integration
-  await logsService.error(`Error: ${error.message}`, {
-    statusCode: error.statusCode,
-    stack: err.stack,
-    method: req.method,
-    url: req.originalUrl,
-    userId: (req as any)?.user?.id || null,
-    timePeriod: end - start,
-  });
-
-  // 📤 Error Response
   res.status(error.statusCode || 500).json({
     status:
       error.statusCode >= 400 && error.statusCode < 500 ? "fail" : "error",
+    traceId,
     message: error.message,
     ...(error.details && { errors: error.details }),
     ...(isDev && {
       stack: error.stack,
-      error: error,
+      error,
     }),
   });
 };

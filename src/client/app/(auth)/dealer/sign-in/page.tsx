@@ -3,11 +3,16 @@
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { Loader2 } from "lucide-react";
 import { useSignInMutation } from "@/app/store/apis/AuthApi";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
+import { resolveDisplayRole } from "@/app/lib/userRole";
+import {
+  normalizeEmailValue,
+  validateEmailValue,
+} from "@/app/lib/validators/common";
 
 interface InputForm {
   email: string;
@@ -17,14 +22,18 @@ interface InputForm {
 const DealerSignIn = () => {
   const [signIn, { error, isLoading }] = useSignInMutation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const apiErrorMessage =
     (error as any)?.data?.message || "Unable to sign in with dealer credentials.";
 
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    setValue,
+    formState: { errors, isValid },
   } = useForm<InputForm>({
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       email: "",
       password: "",
@@ -33,11 +42,33 @@ const DealerSignIn = () => {
 
   const onSubmit = async (formData: InputForm) => {
     try {
-      const response = await signIn(formData).unwrap();
+      const response = await signIn({
+        ...formData,
+        email: normalizeEmailValue(formData.email),
+        portal: "DEALER_PORTAL",
+      }).unwrap();
+      
+      // Check if legacy dealer needs to change password
+      if ((response as any).requiresPasswordChange) {
+        // Store email and password temporarily for password change
+        sessionStorage.setItem('dealer_temp_email', formData.email);
+        sessionStorage.setItem('dealer_temp_password', formData.password);
+        router.push('/dealer/change-password');
+        return;
+      }
+      
+      const requestedNextPath = searchParams.get("next");
+      const nextPath =
+        requestedNextPath && requestedNextPath.startsWith("/")
+          ? requestedNextPath
+          : null;
+      const role = resolveDisplayRole(response.user);
       const destination =
-        response.user?.role === "ADMIN" || response.user?.role === "SUPERADMIN"
+        role === "ADMIN" || role === "SUPERADMIN"
           ? "/dashboard"
-          : "/";
+          : role === "DEALER"
+            ? nextPath || "/"
+            : nextPath || "/";
       router.push(destination);
     } catch {
       // Error handled from mutation state.
@@ -65,10 +96,19 @@ const DealerSignIn = () => {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <Input
                 name="email"
-                type="text"
+                type="email"
                 placeholder="Dealer email"
                 control={control}
-                validation={{ required: "Email is required" }}
+                validation={{
+                  required: "Email is required",
+                  validate: (value: string) => validateEmailValue(value),
+                }}
+                onChange={(event) => {
+                  setValue("email", normalizeEmailValue(event.target.value), {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                }}
                 error={errors.email?.message}
                 className="py-2.5 text-sm"
               />
@@ -89,18 +129,20 @@ const DealerSignIn = () => {
                 className="py-2.5 text-sm"
               />
 
-              <Link
-                href="/password-reset"
-                className="block text-sm text-indigo-600 hover:underline mb-4"
-              >
-                Forgot password?
-              </Link>
+              <div className="-mt-1 text-left">
+                <Link
+                  href="/password-reset"
+                  className="text-xs hover:underline"
+                  style={{ color: "var(--color-primary)" }}
+                >
+                  Forgot Password?
+                </Link>
+              </div>
 
               <button
                 type="submit"
-                className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
-                  isLoading ? "cursor-not-allowed bg-gray-400" : ""
-                }`}
+                disabled={isLoading || !isValid}
+                className="btn-primary w-full"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin mx-auto" size={20} />
@@ -112,12 +154,20 @@ const DealerSignIn = () => {
 
             <div className="text-center text-sm text-gray-600 mt-4">
               Not approved yet?{" "}
-              <Link href="/dealer/register" className="text-indigo-600 hover:underline">
+              <Link
+                href="/dealer/register"
+                className="hover:underline"
+                style={{ color: "var(--color-primary)" }}
+              >
                 Request dealer access
               </Link>
             </div>
             <div className="text-center text-sm text-gray-600 mt-2">
-              <Link href="/sign-in" className="text-indigo-600 hover:underline">
+              <Link
+                href="/sign-in"
+                className="hover:underline"
+                style={{ color: "var(--color-primary)" }}
+              >
                 Back to customer/admin sign in
               </Link>
             </div>

@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { Loader2 } from "lucide-react";
 import { useSignInMutation } from "@/app/store/apis/AuthApi";
@@ -14,6 +14,12 @@ import Image from "next/image";
 import { AUTH_API_BASE_URL } from "@/app/lib/constants/config";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
+import { resolveDisplayRole } from "@/app/lib/userRole";
+import {
+  normalizeEmailValue,
+  validateEmailValue,
+} from "@/app/lib/validators/common";
 
 interface InputForm {
   email: string;
@@ -23,14 +29,18 @@ interface InputForm {
 const SignIn = () => {
   const [signIn, { error, isLoading }] = useSignInMutation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const apiErrorMessage = getApiErrorMessage(error);
-  const showDevCredentials = process.env.NODE_ENV !== "production";
+  const showDevCredentials = !runtimeEnv.isProduction;
 
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    setValue,
+    formState: { errors, isValid },
   } = useForm<InputForm>({
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       email: "",
       password: "",
@@ -39,11 +49,23 @@ const SignIn = () => {
 
   const onSubmit = async (formData: InputForm) => {
     try {
-      const response = await signIn(formData).unwrap();
+      const response = await signIn({
+        ...formData,
+        email: normalizeEmailValue(formData.email),
+        portal: "USER_PORTAL",
+      }).unwrap();
+      const requestedNextPath = searchParams.get("next");
+      const nextPath =
+        requestedNextPath && requestedNextPath.startsWith("/")
+          ? requestedNextPath
+          : null;
+      const role = resolveDisplayRole(response.user);
       const destination =
-        response.user?.role === "ADMIN" || response.user?.role === "SUPERADMIN"
+        role === "ADMIN" || role === "SUPERADMIN"
           ? "/dashboard"
-          : "/";
+          : role === "DEALER"
+            ? nextPath || "/"
+            : nextPath || "/";
       router.push(destination);
     } catch {
       // Mutation error state is already handled by RTK Query.
@@ -59,26 +81,26 @@ const SignIn = () => {
       <MainLayout>
         <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
           <main className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 sm:p-8">
-            <h2 className="text-2xl sm:text-3xl font-semibold text-gray-800 text-center mb-6">
+            <h2 className="type-h2 text-gray-800 text-center mb-6">
               Sign In
             </h2>
             <div className="text-center text-sm mb-4 space-y-1">
               <div className="text-gray-600">
                 Dealer account?
-                <Link href="/dealer/sign-in" className="ml-1 text-indigo-600 hover:underline">
+                <Link href="/dealer/sign-in" className="ml-1 font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>
                   Sign in as Dealer
                 </Link>
               </div>
               <div className="text-gray-600">
                 New dealer request?
-                <Link href="/dealer/register" className="ml-1 text-indigo-600 hover:underline">
+                <Link href="/dealer/register" className="ml-1 font-medium hover:underline" style={{ color: 'var(--color-secondary)' }}>
                   Register as Dealer
                 </Link>
               </div>
             </div>
 
             {showDevCredentials && (
-              <div className="mb-4 rounded-md border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900">
+              <div className="mb-4 rounded-md p-3 text-xs" style={{ border: '1px solid var(--color-primary-muted)', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
                 <p className="font-semibold">Test login hints</p>
                 <p>Super Admin: superadmin@example.com / password123</p>
                 <p>Admin: admin@example.com / password123</p>
@@ -95,10 +117,19 @@ const SignIn = () => {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <Input
                 name="email"
-                type="text"
+                type="email"
                 placeholder="Email"
                 control={control}
-                validation={{ required: "Email is required" }}
+                validation={{
+                  required: "Email is required",
+                  validate: (value: string) => validateEmailValue(value),
+                }}
+                onChange={(event) => {
+                  setValue("email", normalizeEmailValue(event.target.value), {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  });
+                }}
                 error={errors.email?.message}
                 className="py-2.5 text-sm"
               />
@@ -119,18 +150,16 @@ const SignIn = () => {
                 className="py-2.5 text-sm"
               />
 
-              <Link
-                href="/password-reset"
-                className="block text-sm text-indigo-600 hover:underline mb-4"
-              >
-                Forgot password?
-              </Link>
+              <div className="-mt-1 text-left">
+                <Link href="/password-reset" className="text-xs hover:underline" style={{ color: 'var(--color-primary)' }}>
+                  Forgot Password?
+                </Link>
+              </div>
 
               <button
                 type="submit"
-                className={`w-full py-2.5 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition-colors ${
-                  isLoading ? "cursor-not-allowed bg-gray-400" : ""
-                }`}
+                disabled={isLoading || !isValid}
+                className="btn-primary w-full"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin mx-auto" size={20} />
@@ -142,7 +171,7 @@ const SignIn = () => {
 
             <div className="text-center text-sm text-gray-600 mt-4">
               Don&apos;t have an account?{" "}
-              <Link href="/sign-up" className="text-indigo-600 hover:underline">
+              <Link href="/sign-up" className="font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>
                 Sign up
               </Link>
             </div>
@@ -193,4 +222,3 @@ const SignIn = () => {
 };
 
 export default SignIn;
-

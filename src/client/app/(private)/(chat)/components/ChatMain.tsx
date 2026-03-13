@@ -10,7 +10,6 @@ interface ChatMainProps {
   onMenuClick: () => void;
   isMobile: boolean;
   sidebarOpen: boolean;
-  chat?: any;
   onResolve?: () => void;
   canResolve?: boolean;
 }
@@ -20,7 +19,6 @@ const ChatMain: React.FC<ChatMainProps> = ({
   onMenuClick,
   isMobile,
   sidebarOpen,
-  chat,
   onResolve,
   canResolve = false,
 }) => {
@@ -75,7 +73,6 @@ const ChatMain: React.FC<ChatMainProps> = ({
       <ChatTabs
         isOpen={tabsOpen}
         onClose={() => setTabsOpen(false)}
-        chat={chat}
         onResolve={onResolve}
         canResolve={canResolve}
       />

@@ -15,14 +15,19 @@ import {
 import { useSignOutMutation } from "@/app/store/apis/AuthApi";
 import useClickOutside from "@/app/hooks/dom/useClickOutside";
 import useEventListener from "@/app/hooks/dom/useEventListener";
-import { useAppDispatch } from "@/app/store/hooks";
-import { logout } from "@/app/store/slices/AuthSlice";
+import {
+  isAdminDisplayRole,
+  isCustomerDisplayRole,
+  resolveDisplayRole,
+} from "@/app/lib/userRole";
 
 const UserMenu = ({ menuOpen, closeMenu, user }) => {
   const [signout] = useSignOutMutation();
-  const dispatch = useAppDispatch();
   const router = useRouter();
   const menuRef = useRef(null);
+  const displayRole = resolveDisplayRole(user);
+  const canUseCustomerRoutes = isCustomerDisplayRole(displayRole);
+  const canUseAdminRoutes = isAdminDisplayRole(displayRole);
 
   useClickOutside(menuRef, () => closeMenu());
 
@@ -34,8 +39,7 @@ const UserMenu = ({ menuOpen, closeMenu, user }) => {
 
   const handleSignOut = async () => {
     try {
-      await signout();
-      dispatch(logout());
+      await signout().unwrap();
       router.push("/sign-in");
     } catch (error) {
       console.error("Error signing out:", error);
@@ -55,7 +59,7 @@ const UserMenu = ({ menuOpen, closeMenu, user }) => {
           href: "/orders",
           label: "My Orders",
           icon: <ShoppingCart size={18} className="text-emerald-500" />,
-          show: true,
+          show: canUseCustomerRoutes,
         },
         {
           href: "/profile",
@@ -67,7 +71,7 @@ const UserMenu = ({ menuOpen, closeMenu, user }) => {
           href: "/support",
           label: "Contact Support",
           icon: <Group size={18} className="text-blue-500" />,
-          show: true,
+          show: canUseCustomerRoutes,
         },
       ],
     },
@@ -77,7 +81,7 @@ const UserMenu = ({ menuOpen, closeMenu, user }) => {
           href: "/dashboard",
           label: "Dashboard",
           icon: <LayoutDashboard size={18} className="text-purple-500" />,
-          show: user?.role === "ADMIN" || user?.role === "SUPERADMIN",
+          show: canUseAdminRoutes,
         },
       ],
     },
