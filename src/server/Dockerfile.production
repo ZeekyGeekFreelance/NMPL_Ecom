@@ -12,6 +12,9 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
+# Default runtime environment (overridden by env_file/runtime vars).
+ENV NODE_ENV=production
+
 # Copy package files and install ALL dependencies first (including dev for build)
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -25,8 +28,12 @@ COPY src ./src/
 COPY scripts ./scripts/
 COPY tsconfig.json ./
 
-# Build the application
-RUN npm run build
+# Build the application with minimal dev defaults to satisfy env:check
+RUN NODE_ENV=development \
+    PORT=5000 \
+    CLIENT_URL_DEV=http://localhost:3000 \
+    DATABASE_URL=postgresql://user:pass@localhost:5432/app?sslmode=disable \
+    npm run build
 
 # Remove dev dependencies and source files after build
 RUN rm -rf src/ tsconfig.json && \
