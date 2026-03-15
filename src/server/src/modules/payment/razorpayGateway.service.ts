@@ -35,17 +35,21 @@ export class RazorpayGatewayService {
   private isMockMode: boolean;
 
   constructor() {
-    // Load Razorpay credentials from environment variables
-    // In production, RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set
+    // Load Razorpay credentials from config (env is parsed centrally)
+    // In production, RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET should be set
     // In development/testing, use RAZORPAY_MOCK_KEY_ID and RAZORPAY_MOCK_KEY_SECRET
-    this.razorpayKeyId = process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_MOCK_KEY_ID || "";
-    this.razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_MOCK_KEY_SECRET || "";
-    
+    const liveKeyId = config.payment.razorpayKeyId?.trim() || "";
+    const liveKeySecret = config.payment.razorpayKeySecret?.trim() || "";
+    const mockKeyId = config.payment.razorpayMockKeyId?.trim() || "";
+    const mockKeySecret = config.payment.razorpayMockKeySecret?.trim() || "";
+
     // Enable mock mode if credentials are not configured or explicitly set
-    this.isMockMode = 
-      process.env.RAZORPAY_MOCK_MODE === "true" ||
-      !process.env.RAZORPAY_KEY_ID ||
-      !process.env.RAZORPAY_KEY_SECRET;
+    this.isMockMode =
+      config.payment.razorpayMockMode || !liveKeyId || !liveKeySecret;
+    this.razorpayKeyId = this.isMockMode ? (mockKeyId || liveKeyId) : liveKeyId;
+    this.razorpayKeySecret = this.isMockMode
+      ? (mockKeySecret || liveKeySecret)
+      : liveKeySecret;
 
     if (this.isMockMode) {
       this.logsService.info("Razorpay running in MOCK mode - no real payments will be processed");
@@ -229,7 +233,7 @@ export class RazorpayGatewayService {
   } {
     // nosemgrep: hardcoded-credential
     // This returns environment-loaded credentials and configuration, not hardcoded values
-    // keyId is loaded from process.env in constructor, availableMethods are payment options
+    // keyId is loaded from config in constructor; availableMethods are payment options
     return {
       keyId: this.razorpayKeyId,
       isMockMode: this.isMockMode,

@@ -20,7 +20,6 @@ import ProductFilters, {
 } from "./ProductFilters";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 import { useMediaQuery } from "@/app/hooks/useMediaQuery";
-import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 
 const DEFAULT_SORT: SortByOption = "RELEVANCE";
 const BASE_PAGE_SIZE = 12;
@@ -112,9 +111,6 @@ const ShopPage: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
-  // Gate the first product fetch until the backend /health reports ready.
-  // This prevents the "Failed to fetch products" flash on cold container start.
-  const backendReady = useBackendReady();
 
   const initialFilters = useMemo<FilterValues>(
     () => ({
@@ -190,38 +186,15 @@ const ShopPage: React.FC = () => {
     nextFetchPolicy: "cache-first",
     pollInterval: dealerCatalogPollInterval,
     notifyOnNetworkStatusChange: false,
-    // Do not fire until backend has confirmed healthy to avoid cold-start errors.
-    skip: !backendReady,
   });
 
-  // Only surface the error banner when:
-  //   1. The query has truly FAILED (NetworkStatus.error === 8). A poll or
-  //      refetch in-progress is NOT an error — don't show a banner mid-retry.
-  //   2. We genuinely have nothing to show. If displayedProducts already has
-  //      data (from cache or a previous fetch), keep showing it silently while
-  //      the background retry resolves — the banner would be misleading.
   const isRealNetworkError = networkStatus === NetworkStatus.error;
-  // Show errors more aggressively to debug
-  const displayError = error && backendReady ? error : undefined;
+  const displayError = error && isRealNetworkError && displayedProducts.length === 0 ? error : undefined;
 
   // Sync query results into display state.  Using a useEffect instead of
   // onCompleted avoids stale-closure issues when filters change rapidly and
   // ensures we never regress to an empty list while a background refetch is
   // in-flight (the previous data stays visible until new data arrives).
-  // DEBUG: Log shop page state
-  useEffect(() => {
-    console.log('[SHOP DEBUG]', {
-      backendReady,
-      loading,
-      error: error?.message || null,
-      networkStatus,
-      displayedProducts: displayedProducts.length,
-      queryData: queryData?.products?.products?.length || 0,
-      isRealNetworkError,
-      displayError: !!displayError
-    });
-  }, [backendReady, loading, error, networkStatus, displayedProducts, queryData, isRealNetworkError, displayError]);
-
   useEffect(() => {
     const fresh = queryData?.products;
     if (!fresh) return;
@@ -399,7 +372,6 @@ const ShopPage: React.FC = () => {
   }, [currentSortBy, displayedProducts, filters.search]);
 
   const noProductsFound =
-    backendReady &&
     rankedAndSortedProducts.length === 0 &&
     !loading &&
     !displayError;
@@ -467,24 +439,7 @@ const ShopPage: React.FC = () => {
                 </div>
               </div>
 
-              {!backendReady && (
-                <div className="rounded-2xl border border-yellow-200 bg-yellow-50 py-16 text-center shadow-sm mb-6">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100">
-                    <Loader2 size={32} className="text-yellow-600 animate-spin" />
-                  </div>
-                  <h3 className="mb-2 type-h4 text-gray-900">
-                    Connecting to server...
-                  </h3>
-                  <p className="text-gray-600">
-                    Waiting for backend to be ready. This may take a moment.
-                  </p>
-                  <p className="text-sm text-gray-500 mt-2">
-                    Check browser console (F12) for details.
-                  </p>
-                </div>
-              )}
-
-              {(!backendReady || (loading && !displayedProducts.length)) && (
+              {(loading && !displayedProducts.length) && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 lg:gap-8">
                   {[...Array(8)].map((_, index) => (
                     <div
@@ -566,7 +521,7 @@ const ShopPage: React.FC = () => {
                 </div>
               )}
 
-              {!noProductsFound && !loading && (
+              {!noProductsFound && (loading ? displayedProducts.length > 0 : true) && (
                 <>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 lg:gap-8">
                     {rankedAndSortedProducts.map(

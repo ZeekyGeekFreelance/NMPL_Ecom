@@ -5,10 +5,14 @@ const { loadEnvConfig } = require("@next/env");
 const NODE_ENV_OPTIONS = ["development", "test", "production"];
 const LOCAL_HOST_PATTERN = /(localhost|127\.0\.0\.1)/i;
 
-loadEnvConfig(process.cwd());
-
 const args = new Set(process.argv.slice(2));
 const forceProduction = args.has("--production");
+
+if (forceProduction && process.env.NODE_ENV !== "production") {
+  process.env.NODE_ENV = "production";
+}
+
+loadEnvConfig(process.cwd());
 
 const normalizeApiBaseUrl = (value) => {
   const trimmed = String(value || "").trim().replace(/\/+$/, "");

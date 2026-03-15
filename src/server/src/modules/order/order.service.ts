@@ -107,8 +107,10 @@ export class OrderService {
     return this.orderRepository.findAllOrders({ skip, take: limit });
   }
 
-  async getUserOrders(userId: string) {
-    return this.orderRepository.findOrdersByUserId(userId);
+  async getUserOrders(userId: string, options?: { page?: number; limit?: number }) {
+    const limit = Math.min(options?.limit ?? 20, 100);
+    const skip = ((options?.page ?? 1) - 1) * limit;
+    return this.orderRepository.findOrdersByUserId(userId, { skip, take: limit });
   }
 
   private async resolveOrderIdForUser(

@@ -12,13 +12,13 @@ ALTER TABLE "public"."Product" ADD COLUMN     "deletedAt" TIMESTAMP(3),
 ADD COLUMN     "isDeleted" BOOLEAN NOT NULL DEFAULT false;
 
 -- CreateIndex
-CREATE INDEX "DealerCreditLedger_orderId_idx" ON "public"."DealerCreditLedger"("orderId");
+CREATE INDEX IF NOT EXISTS "DealerCreditLedger_orderId_idx" ON "public"."DealerCreditLedger"("orderId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PaymentTransaction_gatewayPaymentId_key" ON "public"."PaymentTransaction"("gatewayPaymentId");
+CREATE UNIQUE INDEX IF NOT EXISTS "PaymentTransaction_gatewayPaymentId_key" ON "public"."PaymentTransaction"("gatewayPaymentId");
 
 -- CreateIndex
-CREATE INDEX "PaymentTransaction_gatewayPaymentId_idx" ON "public"."PaymentTransaction"("gatewayPaymentId");
+CREATE INDEX IF NOT EXISTS "PaymentTransaction_gatewayPaymentId_idx" ON "public"."PaymentTransaction"("gatewayPaymentId");
 
 -- CreateIndex
-CREATE INDEX "Product_isDeleted_idx" ON "public"."Product"("isDeleted");
+CREATE INDEX IF NOT EXISTS "Product_isDeleted_idx" ON "public"."Product"("isDeleted");

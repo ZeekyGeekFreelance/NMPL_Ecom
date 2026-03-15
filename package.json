@@ -12,6 +12,8 @@
   },
   "scripts": {
     "prepare": "husky",
-    "repo:sanity": "node ./scripts/repo-sanity.js"
+    "repo:sanity": "node ./scripts/repo-sanity.js",
+    "deploy": "node ./scripts/deploy.js",
+    "setup:prod": "node ./scripts/setup-production-env.js"
   }
 }

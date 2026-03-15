@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { createHash, randomBytes } from "crypto";
 import AppError from "@/shared/errors/AppError";
+import { config } from "@/config";
 
 /**
  * CSRF Protection Middleware using Double-Submit Cookie Pattern
@@ -70,7 +71,7 @@ const getCsrfTokenFromHeader = (req: Request): string | null => {
 const setCsrfTokenCookie = (res: Response, token: string): void => {
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: false, // Must be readable by JavaScript to include in headers
-    secure: process.env.NODE_ENV === "production",
+    secure: config.isProduction,
     sameSite: "strict",
     maxAge: 1000 * 60 * 60 * 24, // 24 hours
     path: "/",

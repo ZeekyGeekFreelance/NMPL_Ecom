@@ -485,6 +485,23 @@ const appConfig = {
     enableMockPayment: parseBoolean("ENABLE_MOCK_PAYMENT", {
       devDefault: true,
     }) as boolean,
+    razorpayKeyId: parseString("RAZORPAY_KEY_ID", {
+      optional: true,
+      productionRequired: false,
+    }),
+    razorpayKeySecret: parseString("RAZORPAY_KEY_SECRET", {
+      optional: true,
+      productionRequired: false,
+    }),
+    razorpayMockMode: parseBoolean("RAZORPAY_MOCK_MODE", {
+      devDefault: true,
+    }) as boolean,
+    razorpayMockKeyId: parseString("RAZORPAY_MOCK_KEY_ID", {
+      devDefault: "rzp_test_mock_key",
+    }) as string,
+    razorpayMockKeySecret: parseString("RAZORPAY_MOCK_KEY_SECRET", {
+      devDefault: "mock_secret_for_testing",
+    }) as string,
   },
   sms: {
     provider: parseEnv(

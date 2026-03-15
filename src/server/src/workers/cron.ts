@@ -14,20 +14,20 @@ import { DataCleanupWorker } from "./dataCleanup.worker";
  */
 const cleanupWorker = new DataCleanupWorker();
 
-// January 1st at 03:00 AM every year
-cron.schedule("0 3 1 1 *", async () => {
-  console.log("[CRON] Starting annual data lifecycle job...");
+// 1st of every month at 03:00 AM
+cron.schedule("0 3 1 * *", async () => {
+  console.log("[CRON] Starting monthly data lifecycle job...");
 
   try {
     const results = await cleanupWorker.runFullCleanup();
-    console.log("[CRON] Annual cleanup completed:", results);
+    console.log("[CRON] Monthly cleanup completed:", results);
   } catch (error) {
-    console.error("[CRON] Annual cleanup failed:", error);
+    console.error("[CRON] Monthly cleanup failed:", error);
   }
 });
 
 console.log(
-  "[CRON] Annual data lifecycle job scheduled: January 1st at 03:00 AM. " +
+  "[CRON] Monthly data lifecycle job scheduled: 1st of every month at 03:00 AM. " +
   "Financial records (invoices, payments, audit logs) are never deleted."
 );
 

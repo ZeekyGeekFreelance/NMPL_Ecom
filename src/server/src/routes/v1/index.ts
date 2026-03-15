@@ -20,6 +20,7 @@ import invoiceRoutes from "@/modules/invoice/invoice.routes";
 import deliveryRateRoutes from "@/modules/deliveryRate/deliveryRate.routes";
 import idempotencyGuard from "@/shared/middlewares/idempotencyGuard";
 import mutationAuditLogger from "@/shared/middlewares/mutationAuditLogger";
+import { productsRateLimiter } from "@/shared/middlewares/rateLimiter";
 
 export const configureV1Routes = () => {
   const router = Router();
@@ -33,7 +34,7 @@ export const configureV1Routes = () => {
 
   router.use("/users", usersRoutes);
   router.use("/auth", authRoutes);
-  router.use("/products", productRoutes);
+  router.use("/products", productsRateLimiter, productRoutes);
   router.use("/transactions", transactionRoutes);
   router.use("/categories", categoryRoutes);
   router.use("/cart", cartRoutes);

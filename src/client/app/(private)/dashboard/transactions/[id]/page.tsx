@@ -463,12 +463,11 @@ const TransactionDetailsPage = () => {
         canUpdateStatus={canUpdateStatus}
         canEditQuotation={canEditQuotation}
         newStatus={selectedStatus}
-        setNewStatus={setNewStatus}
+        setNewStatus={(value) => setNewStatus(value as OrderLifecycleStatus | "")}
         statusOptions={statusOptions}
         paymentContextHref={paymentContextHref}
         isPayLater={isPayLater}
         isSettled={isSettled}
-        dealerId={dealerId}
       />
 
       <TransactionOverview transaction={transaction} />

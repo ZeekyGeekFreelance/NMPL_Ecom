@@ -9,20 +9,24 @@ import protect from "@/shared/middlewares/protect";
 import csrfProtection from "@/shared/middlewares/csrfProtection";
 import {
   authRateLimiter,
+  changePasswordLimiter,
   otpRateLimiter,
   passwordResetLimiter,
   refreshTokenLimiter,
   registrationLimiter,
+  superAdminResetLimiter,
 } from "@/shared/middlewares/rateLimiter";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
   ApplyDealerAccessDto,
   ChangePasswordOnFirstLoginDto,
+  ChangeOwnPasswordDto,
   RegisterDto,
   RequestRegistrationOtpDto,
   ForgotPasswordDto,
   ResetPasswordDto,
   SigninDto,
+  SuperAdminResetPasswordDto,
 } from "./auth.dto";
 import { config } from "@/config";
 
@@ -38,12 +42,11 @@ if (!clientRedirectUrl) {
 
 const isConfigured = (...values: Array<string | undefined>) =>
   values.every(
-    (value) => value && value.trim() !== "" && value.trim().toLowerCase() !== "dummy"
+    (v) => v && v.trim() !== "" && v.trim().toLowerCase() !== "dummy"
   );
 
 const isProviderConfigured = (provider: "google" | "facebook" | "twitter") => {
   const isProd = env === "production";
-
   if (provider === "google") {
     return isConfigured(
       config.raw.GOOGLE_CLIENT_ID,
@@ -51,17 +54,13 @@ const isProviderConfigured = (provider: "google" | "facebook" | "twitter") => {
       isProd ? config.raw.GOOGLE_CALLBACK_URL_PROD : config.raw.GOOGLE_CALLBACK_URL_DEV
     );
   }
-
   if (provider === "facebook") {
     return isConfigured(
       config.raw.FACEBOOK_APP_ID,
       config.raw.FACEBOOK_APP_SECRET,
-      isProd
-        ? config.raw.FACEBOOK_CALLBACK_URL_PROD
-        : config.raw.FACEBOOK_CALLBACK_URL_DEV
+      isProd ? config.raw.FACEBOOK_CALLBACK_URL_PROD : config.raw.FACEBOOK_CALLBACK_URL_DEV
     );
   }
-
   return isConfigured(
     config.raw.TWITTER_CONSUMER_KEY,
     config.raw.TWITTER_CONSUMER_SECRET,
@@ -76,107 +75,36 @@ const ensureProviderEnabled =
       next(new AppError(503, `${provider} OAuth is not configured.`));
       return;
     }
-
     next();
   };
 
-/**
- * @swagger
- * /google:
- *   get:
- *     summary: Redirect to Google for authentication
- *     description: Initiates the OAuth flow for Google login.
- *     responses:
- *       302:
- *         description: Redirect to Google login page.
- */
+// ── OAuth ─────────────────────────────────────────────────────────────────
 router.get("/google", ensureProviderEnabled("google"), handleSocialLogin("google"));
 router.get(
   "/google/callback",
-  passport.authenticate("google", {
-    session: false,
-    failureRedirect: clientRedirectUrl,
-  }),
+  passport.authenticate("google", { session: false, failureRedirect: clientRedirectUrl }),
   async (req: any, res: any) => {
-    const user = req.user;
-    const { accessToken, refreshToken } = user;
-
-    res.cookie("refreshToken", refreshToken, cookieOptions);
-    res.cookie("accessToken", accessToken, cookieOptions);
-
+    res.cookie("refreshToken", req.user.refreshToken, cookieOptions);
+    res.cookie("accessToken", req.user.accessToken, cookieOptions);
     res.redirect(clientRedirectUrl);
   }
 );
-/**
- * @swagger
- * /google/callback:
- *   get:
- *     summary: Handle callback from Google OAuth
- *     description: Handles the response from Google after OAuth authentication is complete.
- *     responses:
- *       200:
- *         description: Successfully authenticated with Google.
- */
 
-/**
- * @swagger
- * /facebook:
- *   get:
- *     summary: Redirect to Facebook for authentication
- *     description: Initiates the OAuth flow for Facebook login.
- *     responses:
- *       302:
- *         description: Redirect to Facebook login page.
- */
-router.get(
-  "/facebook",
-  ensureProviderEnabled("facebook"),
-  handleSocialLogin("facebook")
-);
+router.get("/facebook", ensureProviderEnabled("facebook"), handleSocialLogin("facebook"));
 router.get(
   "/facebook/callback",
-  passport.authenticate("facebook", {
-    session: false,
-    failureRedirect: clientRedirectUrl,
-  }),
+  passport.authenticate("facebook", { session: false, failureRedirect: clientRedirectUrl }),
   async (req: any, res: any) => {
-    const user = req.user;
-    const { accessToken, refreshToken } = user;
-
-    res.cookie("refreshToken", refreshToken, cookieOptions);
-    res.cookie("accessToken", accessToken, cookieOptions);
-
+    res.cookie("refreshToken", req.user.refreshToken, cookieOptions);
+    res.cookie("accessToken", req.user.accessToken, cookieOptions);
     res.redirect(clientRedirectUrl);
   }
 );
-/**
- * @swagger
- * /facebook/callback:
- *   get:
- *     summary: Handle callback from Facebook OAuth
- *     description: Handles the response from Facebook after OAuth authentication is complete.
- *     responses:
- *       200:
- *         description: Successfully authenticated with Facebook.
- */
 
-/**
- * @swagger
- * /twitter:
- *   get:
- *     summary: Redirect to Twitter for authentication
- *     description: Initiates the OAuth flow for Twitter login.
- *     responses:
- *       302:
- *         description: Redirect to Twitter login page.
- */
 router.get(
   "/twitter",
   ensureProviderEnabled("twitter"),
-  passport.authenticate("twitter", {
-    session: false,
-    scope: ["email"],
-  })
+  passport.authenticate("twitter", { session: false, scope: ["email"] })
 );
 router.get(
   "/twitter/callback",
@@ -185,36 +113,13 @@ router.get(
     failureRedirect: `${clientRedirectUrl}?error=auth_failed`,
   }),
   async (req: any, res: any) => {
-    const user = req.user;
-    const { accessToken, refreshToken } = user;
-
-    res.cookie("refreshToken", refreshToken, cookieOptions);
-    res.cookie("accessToken", accessToken, cookieOptions);
-
+    res.cookie("refreshToken", req.user.refreshToken, cookieOptions);
+    res.cookie("accessToken", req.user.accessToken, cookieOptions);
     res.redirect(clientRedirectUrl);
   }
 );
-/**
- * @swagger
- * /twitter/callback:
- *   get:
- *     summary: Handle callback from Twitter OAuth
- *     description: Handles the response from Twitter after OAuth authentication is complete.
- *     responses:
- *       200:
- *         description: Successfully authenticated with Twitter.
- */
 
-/**
- * @swagger
- * /request-registration-otp:
- *   post:
- *     summary: Request registration OTP
- *     description: Sends an email OTP for account/dealer registration verification.
- *     responses:
- *       200:
- *         description: OTP sent successfully.
- */
+// ── Registration ──────────────────────────────────────────────────────────
 router.post(
   "/request-registration-otp",
   otpRateLimiter,
@@ -223,32 +128,6 @@ router.post(
   authController.requestRegistrationOtp
 );
 
-/**
- * @swagger
- * /sign-up:
- *   post:
- *     summary: User sign-up
- *     description: Allows a new user to register by providing necessary details.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *                 description: User's email address.
- *               password:
- *                 type: string
- *                 description: User's password.
- *               fullName:
- *                 type: string
- *                 description: User's full name.
- *     responses:
- *       201:
- *         description: User successfully created.
- */
 router.post(
   "/sign-up",
   registrationLimiter,
@@ -265,158 +144,26 @@ router.post(
   authController.applyDealerAccess
 );
 
-/**
- * @swagger
- * /verify-email:
- *   post:
- *     summary: Verify email address
- *     description: Sends a verification email to the user to confirm their email address.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *                 description: The email address of the user to verify.
- *     responses:
- *       200:
- *         description: Email verification sent.
- */
-
-/**
- * @swagger
- * /verification-email/{email}:
- *   get:
- *     summary: Resend verification email
- *     description: Resends the verification email to a given address.
- *     parameters:
- *       - in: path
- *         name: email
- *         required: true
- *         schema:
- *           type: string
- *         description: The email address of the user who needs a verification email.
- *     responses:
- *       200:
- *         description: Verification email resent.
- */
-
-/**
- * @swagger
- * /sign-in:
- *   post:
- *     summary: User sign-in
- *     description: Allows an existing user to sign in using their credentials.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *                 description: User's email address.
- *               password:
- *                 type: string
- *                 description: User's password.
- *     responses:
- *       200:
- *         description: User successfully signed in.
- */
-router.post("/sign-in", authRateLimiter, csrfProtection, validateDto(SigninDto), authController.signin);
-
-/**
- * @swagger
- * /refresh-token:
- *   post:
- *     summary: Refresh authentication token
- *     description: Allows a user to refresh their authentication token when it expires.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               refreshToken:
- *                 type: string
- *                 description: Refresh token to obtain a new access token.
- *     responses:
- *       200:
- *         description: Successfully refreshed the token.
- */
-router.post("/refresh-token", refreshTokenLimiter, csrfProtection, authController.refreshToken);
-
-/**
- * @swagger
- * /forgot-password:
- *   post:
- *     summary: Forgot password
- *     description: Sends a password reset email to the user who has forgotten their password.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *                 description: The user's email address to receive the password reset link.
- *     responses:
- *       200:
- *         description: Password reset email sent.
- */
+// ── Sign in / out / refresh ───────────────────────────────────────────────
 router.post(
-  "/forgot-password",
-  passwordResetLimiter,
+  "/sign-in",
+  authRateLimiter,
   csrfProtection,
-  validateDto(ForgotPasswordDto),
-  authController.forgotPassword
+  validateDto(SigninDto),
+  authController.signin
 );
 
-/**
- * @swagger
- * /reset-password:
- *   post:
- *     summary: Reset password
- *     description: Allows a user to reset their password using a reset token.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               token:
- *                 type: string
- *                 description: The token used for resetting the password.
- *               newPassword:
- *                 type: string
- *                 description: The new password to be set for the user.
- *     responses:
- *       200:
- *         description: Password successfully reset.
- */
+router.get("/sign-out", optionalAuth, authController.signout);
+
 router.post(
-  "/reset-password",
-  passwordResetLimiter,
+  "/refresh-token",
+  refreshTokenLimiter,
   csrfProtection,
-  validateDto(ResetPasswordDto),
-  authController.resetPassword
+  authController.refreshToken
 );
 
-/**
- * POST /change-password
- * Forced first-login password change for legacy dealer accounts.
- * No auth required — the user provides their email + temporary password for
- * re-verification, and the new password they want to set.
- * On success, full session cookies are issued so the dealer can proceed.
- */
+// ── Forced first-login password change (legacy dealers) ───────────────────
+// Unauthenticated — user provides email + temp password + new password.
 router.post(
   "/change-password",
   authRateLimiter,
@@ -425,16 +172,46 @@ router.post(
   authController.changePasswordOnFirstLogin
 );
 
-/**
- * @swagger
- * /sign-out:
- *   get:
- *     summary: User sign-out
- *     description: Logs the user out of the application by invalidating their session.
- *     responses:
- *       200:
- *         description: User successfully signed out.
- */
-router.get("/sign-out", optionalAuth, authController.signout);
+// ── Authenticated self-service password change (ALL roles) ───────────────
+// Requires a valid session. Works for USER, DEALER, ADMIN, and SUPERADMIN.
+// This is the ONLY self-service password change path for admin accounts.
+router.post(
+  "/change-own-password",
+  protect,                      // must be logged in
+  changePasswordLimiter,        // 5 attempts per 15 min per IP+email
+  csrfProtection,
+  validateDto(ChangeOwnPasswordDto),
+  authController.changeOwnPassword
+);
+
+// ── Public forgot / reset (USER and DEALER only — admins are blocked) ─────
+router.post(
+  "/forgot-password",
+  passwordResetLimiter,
+  csrfProtection,
+  validateDto(ForgotPasswordDto),
+  authController.forgotPassword
+);
+
+router.post(
+  "/reset-password",
+  passwordResetLimiter,
+  csrfProtection,
+  validateDto(ResetPasswordDto),
+  authController.resetPassword
+);
+
+// ── SuperAdmin out-of-band emergency reset ────────────────────────────────
+// Unauthenticated but protected by SUPERADMIN_RESET_SECRET (shared secret).
+// Used ONLY when a SuperAdmin cannot sign in (compromised / forgotten password).
+// Rate-limited to 5 req/hour per IP. In production, restrict this path to
+// known IPs in nginx for an additional layer of protection.
+router.post(
+  "/superadmin/reset-password",
+  superAdminResetLimiter,
+  csrfProtection,
+  validateDto(SuperAdminResetPasswordDto),
+  authController.resetSuperAdminPassword
+);
 
 export default router;

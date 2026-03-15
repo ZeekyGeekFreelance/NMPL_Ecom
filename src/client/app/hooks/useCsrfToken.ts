@@ -13,7 +13,7 @@ export const useCsrfToken = () => {
       try {
         // Hit the lightweight CSRF bootstrap endpoint to set the cookie.
         await axiosInstance.get("/csrf");
-      } catch (error) {
+      } catch {
         // Silently fail - token will be generated on next safe API request
         console.debug("CSRF token prefetch failed; token will be set by the next safe API request.");
       }

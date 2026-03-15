@@ -16,7 +16,6 @@ import {
   ClipboardPlus,
   ClipboardCheck,
   Section,
-  ChartArea,
   Truck,
   CreditCard,
 } from "lucide-react";

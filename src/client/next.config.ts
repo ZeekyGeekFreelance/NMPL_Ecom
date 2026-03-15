@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
   // Produce a self-contained build under .next/standalone — required for the
   // multi-stage Dockerfile (copies only the standalone folder, not node_modules).
   output: "standalone",
+  // Keep the standalone output rooted at the client app directory even in a
+  // monorepo, so the runtime expects .next/static under the same root.
+  outputFileTracingRoot: process.cwd(),
 
   // Gzip/Brotli compress all responses (HTML, JSON, JS chunks).
   // Cuts payload size ~65-70% on typical pages at negligible CPU cost.
@@ -43,10 +46,19 @@ const nextConfig: NextConfig = {
   },
 
   webpack: (config, { dev }) => {
-    // Disable eval-based source maps in production to prevent CWE-94 code injection risks
-    if (!dev) {
-      config.devtool = false;
-    }
+    // Replace eval-based source maps with a safe alternative in all environments.
+    // eval-source-map (Next.js dev default) triggers CWE-94 because webpack's
+    // global resolver emits `new Function('return this')()` as a fallback.
+    // cheap-module-source-map gives equivalent line-level accuracy without eval.
+    config.devtool = dev ? "cheap-module-source-map" : false;
+
+    // Tell webpack the target supports globalThis natively so it never emits
+    // the `new Function('return this')` shim (the CWE-94 vector at line 369).
+    config.output = {
+      ...config.output,
+      globalObject: "globalThis",
+    };
+
     return config;
   },
 };

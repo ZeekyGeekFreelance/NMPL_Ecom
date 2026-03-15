@@ -1,6 +1,5 @@
 import prisma from "@/infra/database/database.config";
 import { ROLE } from "@prisma/client";
-import AppError from "@/shared/errors/AppError";
 import { passwordUtils } from "@/shared/utils/authUtils";
 import { clearProtectUserCache } from "@/shared/utils/auth/protectCache";
 import {
@@ -8,30 +7,19 @@ import {
   upsertDealerProfile as sharedUpsertDealerProfile,
 } from "@/shared/repositories/dealer.repository";
 
-// Re-export types so existing imports from auth.repository continue to work
 export type { DealerStatus, DealerProfileRecord } from "@/shared/repositories/dealer.repository";
 
 export class AuthRepository {
 
   async findUserByEmail(email: string) {
     return prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: "insensitive",
-        },
-      },
+      where: { email: { equals: email, mode: "insensitive" } },
     });
   }
 
   async findUserByEmailWithPassword(email: string) {
     return prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: "insensitive",
-        },
-      },
+      where: { email: { equals: email, mode: "insensitive" } },
       select: {
         id: true,
         password: true,
@@ -41,7 +29,29 @@ export class AuthRepository {
         email: true,
         phone: true,
         avatar: true,
-        /** Checked immediately after sign-in to gate token issuance. */
+        mustChangePassword: true,
+      },
+    });
+  }
+
+  /**
+   * Fetches a user by ID including their hashed password.
+   * Used by changeOwnPassword — the user is authenticated (we have their ID
+   * from the JWT) but we still re-verify their current password before
+   * allowing the change.
+   */
+  async findUserByIdWithPassword(id: string) {
+    return prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        avatar: true,
+        tokenVersion: true,
+        password: true,
         mustChangePassword: true,
       },
     });
@@ -61,16 +71,10 @@ export class AuthRepository {
       },
     });
 
-    if (!user) {
-      return null;
-    }
+    if (!user) return null;
 
     const dealerProfile = await this.findDealerProfileByUserId(user.id);
-
-    return {
-      ...user,
-      dealerProfile,
-    };
+    return { ...user, dealerProfile };
   }
 
   async createUser(data: {
@@ -83,10 +87,7 @@ export class AuthRepository {
     const hashedPassword = await passwordUtils.hashPassword(data.password);
 
     return prisma.user.create({
-      data: {
-        ...data,
-        password: hashedPassword,
-      },
+      data: { ...data, password: hashedPassword },
       select: {
         id: true,
         name: true,
@@ -99,8 +100,7 @@ export class AuthRepository {
     });
   }
 
-  // ── Dealer profile methods — delegate to shared repository ──────────────
-  // Single source of truth: @/shared/repositories/dealer.repository
+  // ── Dealer profile — delegate to shared repository ──────────────────────
 
   async findDealerProfileByUserId(
     userId: string
@@ -126,10 +126,7 @@ export class AuthRepository {
       emailVerified?: boolean;
     }
   ) {
-    return prisma.user.update({
-      where: { id: userId },
-      data,
-    });
+    return prisma.user.update({ where: { id: userId }, data });
   }
 
   async updateUserPasswordReset(
@@ -141,22 +138,15 @@ export class AuthRepository {
     }
   ) {
     const updateData = { ...data };
-    
-    // Hash the user-provided password before storage (never store plaintext)
+
     if (typeof updateData.password === "string") {
-      const userProvidedPassword = updateData.password;
-      updateData.password = await passwordUtils.hashPassword(userProvidedPassword);
+      updateData.password = await passwordUtils.hashPassword(updateData.password);
     }
 
     const user = await this.findUserByEmail(email);
-    if (!user) {
-      return null;
-    }
+    if (!user) return null;
 
-    return prisma.user.update({
-      where: { id: user.id },
-      data: updateData,
-    });
+    return prisma.user.update({ where: { id: user.id }, data: updateData });
   }
 
   async findUserByResetToken(hashedToken: string) {
@@ -169,9 +159,20 @@ export class AuthRepository {
   }
 
   /**
-   * Clears the mustChangePassword flag after a successful first-login
-   * password change.  Called only from changePasswordOnFirstLogin.
+   * Clears the password-reset token without changing the password.
+   * Used when a privileged account's token must be invalidated without
+   * completing the reset.
    */
+  async clearResetToken(userId: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        resetPasswordToken: null,
+        resetPasswordTokenExpiresAt: null,
+      },
+    });
+  }
+
   async clearMustChangePassword(userId: string): Promise<void> {
     await prisma.user.update({
       where: { id: userId },
@@ -184,9 +185,7 @@ export class AuthRepository {
     password: string,
     options?: { invalidateSessions?: boolean }
   ) {
-    // Hash the user-provided password before storage (never store plaintext)
-    const userProvidedPassword = password;
-    const hashedPassword = await passwordUtils.hashPassword(userProvidedPassword);
+    const hashedPassword = await passwordUtils.hashPassword(password);
     const invalidateSessions = options?.invalidateSessions ?? true;
 
     const result = await prisma.user.update({
@@ -195,14 +194,12 @@ export class AuthRepository {
         password: hashedPassword,
         resetPasswordToken: null,
         resetPasswordTokenExpiresAt: null,
-        ...(invalidateSessions
-          ? { tokenVersion: { increment: 1 } }
-          : {}),
+        ...(invalidateSessions ? { tokenVersion: { increment: 1 } } : {}),
       },
     });
 
-    // Invalidate the protect middleware cache so the new tokenVersion
-    // is picked up on the very next request — no 60-second lag.
+    // Immediately evict the protect-middleware cache entry so the new
+    // tokenVersion is picked up on the very next request without a 60s lag.
     if (invalidateSessions) {
       await clearProtectUserCache(userId);
     }

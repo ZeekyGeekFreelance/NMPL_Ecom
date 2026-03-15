@@ -7,6 +7,34 @@ import prisma from "@/infra/database/database.config";
 import { parse } from "graphql/language/parser";
 import { Kind } from "graphql/language/kinds";
 import { FieldNode, OperationDefinitionNode } from "graphql/language/ast";
+import { graphqlRateLimiter } from "@/shared/middlewares/rateLimiter";
+import { GraphQLError } from "graphql/error";
+import { specifiedRules } from "graphql/validation";
+import { validate } from "graphql/validation";
+
+const MAX_QUERY_DEPTH = 6;
+
+const measureDepth = (selectionSet: any, depth = 0): number => {
+  if (!selectionSet?.selections) return depth;
+  return Math.max(
+    ...selectionSet.selections.map((sel: any) =>
+      measureDepth(sel.selectionSet, depth + 1)
+    )
+  );
+};
+
+const depthLimitRule = (context: any) => ({
+  OperationDefinition(node: any) {
+    const depth = measureDepth(node.selectionSet);
+    if (depth > MAX_QUERY_DEPTH) {
+      context.reportError(
+        new GraphQLError(
+          `Query depth ${depth} exceeds maximum allowed depth of ${MAX_QUERY_DEPTH}.`
+        )
+      );
+    }
+  },
+});
 
 const PUBLIC_CATALOG_ROOT_FIELDS = new Set([
   "__typename",
@@ -120,14 +148,14 @@ const optionalAuthForNonCatalogQueries: express.RequestHandler = (
 export async function configureGraphQL(app: express.Application) {
   const apolloServer = new ApolloServer({
     schema: combinedSchemas,
-    // Required to accept batched requests from BatchHttpLink on the client.
-    // Without this flag Apollo Server rejects array-body POSTs with 400.
     allowBatchedHttpRequests: true,
+    validationRules: [...specifiedRules, depthLimitRule],
   });
   await apolloServer.start();
 
   app.use(
     "/api/v1/graphql",
+    graphqlRateLimiter,
     optionalAuthForNonCatalogQueries,
     expressMiddleware(apolloServer, {
       context: async ({ req, res }) => ({

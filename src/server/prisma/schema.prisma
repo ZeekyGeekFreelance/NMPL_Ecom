@@ -5,11 +5,8 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  // directUrl is only needed when DATABASE_URL points to a pgbouncer-pooled
-  // connection (e.g. Neon free tier). Direct connections do not require
-  // directUrl. If you ever switch back to a pooled provider, uncomment the
-  // line below and set DIRECT_URL to the non-pooled URL.
-  // directUrl = env("DIRECT_URL")
+  // directUrl removed — only needed for Neon's pgbouncer pooled connections.
+  // Railway Postgres is a plain connection; DATABASE_URL handles both queries and migrations.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,29 +95,22 @@ enum DELIVERY_MODE {
 // PAYMENT ENUMS (Phase 2 — Legacy Dealer Pay-Later)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// All supported payment methods across offline admin recording and online gateway.
 enum PAYMENT_METHOD_TYPE {
-  // Offline / admin-recorded
   CASH
   BANK_TRANSFER
   CHEQUE
-  // Online gateway
   UPI
   NET_BANKING
   CARD
   WALLET
 }
 
-/// Source of truth for who or what created the PaymentTransaction record.
-/// ADMIN_MANUAL = admin recorded offline payment; GATEWAY = real gateway; MOCK_GATEWAY = dev only.
 enum PAYMENT_SOURCE_TYPE {
   ADMIN_MANUAL
   GATEWAY
   MOCK_GATEWAY
 }
 
-/// Lifecycle of a single PaymentTransaction record.
-/// PENDING = awaiting confirmation; CONFIRMED = verified; BOUNCED = cheque bounced; REVERSED = refunded.
 enum PAYMENT_TXN_STATUS {
   PENDING
   CONFIRMED
@@ -128,8 +118,6 @@ enum PAYMENT_TXN_STATUS {
   REVERSED
 }
 
-/// Payment state shown on invoice documents.
-/// PAID = prepaid order; PAYMENT_DUE = pay-later awaiting; OVERDUE = deadline passed; SUPERSEDED = replaced.
 enum INVOICE_PAYMENT_STATUS {
   PAID
   PAYMENT_DUE
@@ -137,8 +125,6 @@ enum INVOICE_PAYMENT_STATUS {
   SUPERSEDED
 }
 
-/// Event types for the immutable credit ledger.
-/// ORDER_DELIVERED = debit (dealer owes); PAYMENT_RECEIVED = credit (reduces balance); ORDER_CANCELLED = reversal; CREDIT_ADJUSTED = manual.
 enum CREDIT_EVENT_TYPE {
   ORDER_DELIVERED
   PAYMENT_RECEIVED
@@ -165,10 +151,7 @@ model User {
   resetPasswordTokenExpiresAt DateTime?
   role                        ROLE          @default(USER)
   isBillingSupervisor         Boolean       @default(false)
-
-  /// Forced password change on first login (used for admin-created legacy dealer accounts).
   mustChangePassword          Boolean       @default(false)
-
   orders                      Order[]
   payments                    Payment[]
   addresses                   Address[]
@@ -184,15 +167,10 @@ model User {
   createdAt                   DateTime      @default(now())
   updatedAt                   DateTime      @updatedAt
   Restock                     Restock[]
-
-  /// PaymentTransactions where this user is the payer/dealer.
   paymentTransactions         PaymentTransaction[] @relation("UserPaymentTransactions")
-  /// PaymentTransactions that this admin recorded.
   recordedPayments            PaymentTransaction[] @relation("RecordedByUser")
-  /// Credit ledger entries for this dealer.
   creditLedgerEntries         DealerCreditLedger[] @relation("DealerCreditLedger")
-  /// Audit log entries where this user was the actor.
-  paymentAuditActions         PaymentAuditLog[]   @relation("AuditActorUser")
+  paymentAuditActions         PaymentAuditLog[]    @relation("AuditActorUser")
 
   @@index([email])
   @@index([phone])
@@ -203,26 +181,20 @@ model User {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model DealerProfile {
-  id           String        @id
-  userId       String        @unique
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  businessName String?
-  contactPhone String?
-  status       DEALER_STATUS @default(PENDING)
-  approvedAt   DateTime?
-  approvedBy   String?
-
-  /// True only for LEGACY dealers.  Normal + newly-registered dealers remain false.
-  payLaterEnabled Boolean  @default(false)
-
-  /// Payment term window in days (NET 30 = 30).  Only meaningful when payLaterEnabled = true.
-  creditTermDays  Int      @default(30)
-
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String        @id
+  userId          String        @unique
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName    String?
+  contactPhone    String?
+  status          DEALER_STATUS @default(PENDING)
+  approvedAt      DateTime?
+  approvedBy      String?
+  payLaterEnabled Boolean       @default(false)
+  creditTermDays  Int           @default(30)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([status])
-  // Index for fast scan of all pay-later dealers.
   @@index([payLaterEnabled])
 }
 
@@ -417,15 +389,8 @@ model Order {
   quotationSentAt      DateTime?
   paymentRequestedAt   DateTime?
   reservationExpiresAt DateTime?
-
-  /// True when the order was placed by a pay-later legacy dealer.
-  /// Snapshot of dealer's payLaterEnabled at order placement time.
   isPayLater           Boolean              @default(false)
-
-  /// Populated at DELIVERED for pay-later orders: orderDate + creditTermDays.
-  /// null for all prepaid / non-pay-later orders.
   paymentDueDate       DateTime?
-
   user                 User                 @relation(fields: [userId], references: [id])
   orderItems           OrderItem[]
   payment              Payment?             @relation("OrderPayment")
@@ -435,14 +400,12 @@ model Order {
   quotationLogs        OrderQuotationLog[]
   invoice              Invoice?
   paymentTransactions  PaymentTransaction[]
-
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
   @@index([userId])
   @@index([customerRoleSnapshot])
   @@index([status])
-  // Indexes for pay-later order queries and the outstanding/overdue dashboard.
   @@index([isPayLater])
   @@index([paymentDueDate])
   @@index([isPayLater, status, paymentDueDate])
@@ -480,10 +443,6 @@ model OrderItem {
   @@index([orderId, variantId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PAYMENT (legacy thin record — retained for backward compatibility)
-// ─────────────────────────────────────────────────────────────────────────────
-
 model Payment {
   id        String         @id @default(uuid())
   method    String
@@ -499,62 +458,34 @@ model Payment {
   @@index([userId, orderId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PAYMENT TRANSACTION  (Phase 2 — full audit-grade payment record)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Full payment record for every real money movement — offline or gateway.
-/// Replaces the thin Payment model for new pay-later and gateway flows.
-/// The legacy Payment record is still updated for backward compatibility.
 model PaymentTransaction {
   id                  String               @id @default(uuid())
-
   orderId             String
   order               Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
-
-  /// The active invoice at time of payment recording.  Null if invoice not yet generated.
   invoiceId           String?
   invoice             Invoice?             @relation("InvoicePaymentTransactions", fields: [invoiceId], references: [id], onDelete: SetNull)
-
-  /// The dealer or customer who made/owes the payment.
   userId              String
   user                User                 @relation("UserPaymentTransactions", fields: [userId], references: [id], onDelete: Restrict)
-
-  /// Admin who recorded the payment (null for gateway-initiated payments).
   recordedByUserId    String?
   recordedBy          User?                @relation("RecordedByUser", fields: [recordedByUserId], references: [id], onDelete: SetNull)
-
   amount              Float
   paymentMethod       PAYMENT_METHOD_TYPE
   paymentSource       PAYMENT_SOURCE_TYPE  @default(ADMIN_MANUAL)
-
-  // ── Online gateway fields ──────────────────────────────────────────────────
-  gatewayName         String?              // "Razorpay" | "Stripe"
-  gatewayOrderId      String?              // Gateway's order ID
-  gatewayPaymentId    String?              @unique  // Gateway's payment ID — unique prevents duplicate capture
-  gatewaySignature    String?              // HMAC signature for verification
-  gatewayPayload      Json?                // Full gateway webhook payload (stored securely)
-
-  // ── Bank transfer fields ───────────────────────────────────────────────────
-  utrNumber           String?              // UTR / IMPS / NEFT reference
+  gatewayName         String?
+  gatewayOrderId      String?
+  gatewayPaymentId    String?              @unique
+  gatewaySignature    String?
+  gatewayPayload      Json?
+  utrNumber           String?
   bankName            String?
   transferDate        DateTime?
-
-  // ── Cheque fields ──────────────────────────────────────────────────────────
   chequeNumber        String?
   chequeDate          DateTime?
   chequeClearingDate  DateTime?
-
-  // ── Cash fields ───────────────────────────────────────────────────────────
-  // paymentReceivedAt is used for cash received date
-
-  paymentReceivedAt   DateTime             // When payment was physically received / gateway confirmed
+  paymentReceivedAt   DateTime
   notes               String?
-
   status              PAYMENT_TXN_STATUS   @default(PENDING)
-
   auditLogs           PaymentAuditLog[]    @relation("AuditPaymentTransaction")
-
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -562,93 +493,50 @@ model PaymentTransaction {
   @@index([userId])
   @@index([status])
   @@index([invoiceId])
-  @@index([gatewayPaymentId])                     // fast idempotency lookup
-  @@index([orderId, status])                      // double-payment guard query
-  @@index([paymentMethod, paymentSource])         // admin payment type reports
+  @@index([gatewayPaymentId])
+  @@index([orderId, status])
+  @@index([paymentMethod, paymentSource])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DEALER CREDIT LEDGER  (Phase 2 — running balance of outstanding credit)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Double-entry-style ledger that tracks each dealer's outstanding balance.
-/// Every delivered pay-later order creates a DEBIT entry.
-/// Every recorded payment creates a CREDIT entry.
-/// Running balance = SUM(debitAmount) - SUM(creditAmount) per dealer.
 model DealerCreditLedger {
-  id             String            @id @default(uuid())
-
-  dealerId       String
-  dealer         User              @relation("DealerCreditLedger", fields: [dealerId], references: [id], onDelete: Restrict)
-
-  orderId        String?           // linked order (ORDER_DELIVERED / ORDER_CANCELLED)
-  paymentTxnId   String?           // linked payment (PAYMENT_RECEIVED)
-
-  eventType      CREDIT_EVENT_TYPE
-
-  /// Amount charged to the dealer (order delivered = dealer owes this).
-  debitAmount    Float             @default(0)
-
-  /// Amount credited to the dealer (payment received = reduces outstanding).
-  creditAmount   Float             @default(0)
-
-  /// Running balance AFTER this event.  Positive = dealer owes money.
-  balanceAfter   Float
-
-  notes          String?
-  createdAt      DateTime          @default(now())
+  id           String            @id @default(uuid())
+  dealerId     String
+  dealer       User              @relation("DealerCreditLedger", fields: [dealerId], references: [id], onDelete: Restrict)
+  orderId      String?
+  paymentTxnId String?
+  eventType    CREDIT_EVENT_TYPE
+  debitAmount  Float             @default(0)
+  creditAmount Float             @default(0)
+  balanceAfter Float
+  notes        String?
+  createdAt    DateTime          @default(now())
 
   @@index([dealerId])
-  @@index([dealerId, createdAt])   // chronological ledger per dealer
+  @@index([dealerId, createdAt])
   @@index([orderId])
   @@index([eventType])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PAYMENT AUDIT LOG  (Phase 2 — immutable audit trail)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Immutable append-only log of every payment-related action.
-/// Never updated or deleted — admin actions, gateway events, invoice regenerations.
 model PaymentAuditLog {
-  id             String    @id @default(uuid())
-
+  id             String              @id @default(uuid())
   orderId        String
   invoiceId      String?
-
-  /// The PaymentTransaction this audit event relates to (null for non-payment events).
   paymentTxnId   String?
   paymentTxn     PaymentTransaction? @relation("AuditPaymentTransaction", fields: [paymentTxnId], references: [id], onDelete: SetNull)
-
-  /// The user who performed the action (admin, system, dealer).
   actorUserId    String
-  actorUser      User     @relation("AuditActorUser", fields: [actorUserId], references: [id], onDelete: Restrict)
-
+  actorUser      User                @relation("AuditActorUser", fields: [actorUserId], references: [id], onDelete: Restrict)
   actorRole      String
-
-  /// Structured action label.
-  /// Examples: ADMIN_MARKED_CASH | ADMIN_MARKED_BANK_TRANSFER | ADMIN_MARKED_CHEQUE
-  ///           GATEWAY_PAYMENT_CONFIRMED | INVOICE_REGENERATED | PAYMENT_BOUNCED
-  ///           CREDIT_LEDGER_UPDATED | DOUBLE_PAYMENT_BLOCKED
   action         String
-
   previousStatus String?
   nextStatus     String?
-
-  /// Extra context (gateway payload summary, reference numbers, etc.)
   metadata       Json?
-
-  createdAt      DateTime @default(now())
+  createdAt      DateTime            @default(now())
 
   @@index([orderId])
   @@index([actorUserId])
-  @@index([action, createdAt])     // audit trail report by action type
-  @@index([orderId, createdAt])    // full history for one order
+  @@index([action, createdAt])
+  @@index([orderId, createdAt])
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// INVOICE  (modified — Phase 2 adds payment-aware fields + versioning)
-// ─────────────────────────────────────────────────────────────────────────────
 
 model InvoiceCounter {
   year      Int      @id
@@ -665,55 +553,28 @@ model Invoice {
   userId              String
   user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   customerEmail       String
-
-  // ── Payment state on the invoice document ─────────────────────────────────
-  /// PAID for standard prepaid orders.
-  /// PAYMENT_DUE for pay-later orders awaiting payment.
-  /// OVERDUE computed by background job when paymentDueDate has passed.
-  /// SUPERSEDED when a newer invoice version exists after payment recording.
   paymentStatus       INVOICE_PAYMENT_STATUS @default(PAID)
-
-  /// e.g. "NET 30 DAYS" — populated for pay-later invoices.
   paymentTerms        String?
-
-  /// Copied from Order.paymentDueDate.  Used for overdue calculation and display.
   paymentDueDate      DateTime?
-
-  // ── Invoice versioning (regeneration after payment) ───────────────────────
-  /// Starts at 1.  Incremented each time the invoice is superseded.
   version             Int                    @default(1)
-
-  /// Only the latest version is served via download endpoints.
-  /// Old versions are archived (isLatest = false).
   isLatest            Boolean                @default(true)
-
-  /// Points to the newer invoice that superseded this one.
-  /// null on the current active invoice.
   supersededById      String?
   supersededBy        Invoice?               @relation("InvoiceSupersededBy", fields: [supersededById], references: [id])
   previousVersions    Invoice[]              @relation("InvoiceSupersededBy")
-
-  // ── Email tracking ─────────────────────────────────────────────────────────
   customerEmailSentAt DateTime?
   internalEmailSentAt DateTime?
   lastEmailError      String?
-
   paymentTransactions PaymentTransaction[]   @relation("InvoicePaymentTransactions")
-
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 
   @@index([userId, createdAt])
   @@index([createdAt])
-  @@index([paymentStatus])                    // outstanding invoice queries
-  @@index([paymentDueDate])                   // overdue sweep
-  @@index([isLatest, paymentStatus])          // admin outstanding view: isLatest=true AND paymentStatus IN (PAYMENT_DUE, OVERDUE)
-  @@index([orderId, isLatest])                // latest invoice for an order
+  @@index([paymentStatus])
+  @@index([paymentDueDate])
+  @@index([isLatest, paymentStatus])
+  @@index([orderId, isLatest])
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSACTION / RESERVATION
-// ─────────────────────────────────────────────────────────────────────────────
 
 model Transaction {
   id              String             @id @default(uuid())
@@ -741,10 +602,6 @@ model OrderReservation {
 
   @@index([status, expiresAt])
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ADDRESS
-// ─────────────────────────────────────────────────────────────────────────────
 
 model Address {
   id          String       @id @default(uuid())
@@ -792,10 +649,6 @@ model OrderAddressSnapshot {
   @@index([pincode])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELIVERY
-// ─────────────────────────────────────────────────────────────────────────────
-
 model DeliveryRate {
   id            String   @id @default(uuid())
   pincode       String   @unique
@@ -819,10 +672,6 @@ model DeliveryStateRate {
 
   @@index([isServiceable])
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CART
-// ─────────────────────────────────────────────────────────────────────────────
 
 model Cart {
   id         String      @id @default(uuid())
@@ -872,10 +721,6 @@ model CartEvent {
 
   @@index([timestamp])
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ANALYTICS / ADMIN
-// ─────────────────────────────────────────────────────────────────────────────
 
 model Interaction {
   id        String   @id @default(uuid())
@@ -944,10 +789,6 @@ model Section {
   primaryColor   String?
   secondaryColor String?
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CHAT
-// ─────────────────────────────────────────────────────────────────────────────
 
 model Chat {
   id        String        @id @default(uuid())

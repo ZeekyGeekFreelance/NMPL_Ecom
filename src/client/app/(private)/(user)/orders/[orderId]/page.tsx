@@ -21,10 +21,10 @@ const OrderTrackingPage = () => {
     quotationActionParam === "pay" || quotationActionParam === "reject"
       ? quotationActionParam
       : null;
-  const { data, isLoading, error } = useGetOrderQuery(normalizedOrderId, {
+  const { data, isLoading, error } = useGetOrderQuery(normalizedOrderId ?? "", {
     skip: !normalizedOrderId,
   });
-  const order = data?.order || data?.data?.order;
+  const order = data?.order;
 
   useEffect(() => {
     if (typeof window === "undefined" || window.location.hash !== "#tracking") {

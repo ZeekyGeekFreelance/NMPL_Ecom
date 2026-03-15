@@ -2,7 +2,7 @@
 
 import Dropdown from "@/app/components/molecules/Dropdown";
 import Link from "next/link";
-import { ArrowLeft, Download, ExternalLink, CreditCard, Receipt } from "lucide-react";
+import { ArrowLeft, Download, CreditCard, Receipt } from "lucide-react";
 
 /**
  * paymentContextHref is provided by the parent page after computing:
@@ -29,7 +29,6 @@ const PageHeader = ({
   paymentContextHref,
   isPayLater,
   isSettled,
-  dealerId,
 }: {
   onBack: () => void;
   onUpdateStatus: () => void;
@@ -46,7 +45,6 @@ const PageHeader = ({
   paymentContextHref: string | null;
   isPayLater?: boolean;
   isSettled?: boolean;
-  dealerId?: string | null;
 }) => {
   // Decide the label & icon for the payment context button
   const showPaymentButton = !!paymentContextHref;

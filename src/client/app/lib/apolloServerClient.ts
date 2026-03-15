@@ -1,4 +1,5 @@
 import { ApolloClient, InMemoryCache, HttpLink, from } from "@apollo/client";
+import { runtimeEnv } from "./runtimeEnv";
 
 /**
  * SSR-only Apollo client.
@@ -11,10 +12,7 @@ import { ApolloClient, InMemoryCache, HttpLink, from } from "@apollo/client";
  *                        services run on localhost.
  */
 function resolveServerGraphQLUrl(): string {
-  const raw =
-    process.env.INTERNAL_API_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    "";
+  const raw = runtimeEnv.internalApiUrl || runtimeEnv.apiBaseUrl || "";
 
   if (!raw) {
     throw new Error(
@@ -22,10 +20,7 @@ function resolveServerGraphQLUrl(): string {
     );
   }
 
-  const base = raw.replace(/\/+$/, "");
-  // Normalise: ensure the path ends with /api/v1 before appending /graphql.
-  const apiBase = /\/api\/v1$/i.test(base) ? base : `${base}/api/v1`;
-  return `${apiBase}/graphql`;
+  return `${raw.replace(/\/+$/, "")}/graphql`;
 }
 
 const SERVER_GRAPHQL_URL = resolveServerGraphQLUrl();

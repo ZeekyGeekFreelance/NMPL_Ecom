@@ -111,6 +111,41 @@ export class DataCleanupWorker {
   }
 
   /**
+   * Delete Interaction rows older than 90 days.
+   * Interactions are high-volume analytics events (page views, clicks).
+   * Keeping 90 days is sufficient for all dashboard queries; older rows
+   * only bloat the table and slow index scans.
+   * Runs in batches of 5,000 to avoid long-running transactions.
+   */
+  async archiveOldInteractions() {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 90);
+
+    let totalDeleted = 0;
+    let batch: number;
+
+    do {
+      const ids = await prisma.interaction.findMany({
+        where: { createdAt: { lt: cutoffDate } },
+        select: { id: true },
+        take: 5000,
+      });
+
+      if (!ids.length) break;
+
+      const result = await prisma.interaction.deleteMany({
+        where: { id: { in: ids.map((r) => r.id) } },
+      });
+
+      batch = result.count;
+      totalDeleted += batch;
+    } while (batch === 5000);
+
+    console.log(`[CLEANUP] Deleted ${totalDeleted} interaction rows older than 90 days`);
+    return totalDeleted;
+  }
+
+  /**
    * Run all cleanup tasks.
    */
   async runFullCleanup() {
@@ -119,6 +154,7 @@ export class DataCleanupWorker {
     const results = {
       canceledOrdersDeleted: await this.deleteOldCanceledOrders(),
       unsoldProductsArchived: await this.softArchiveUnsoldProducts(),
+      interactionsArchived: await this.archiveOldInteractions(),
     };
 
     console.log("[CLEANUP] Cleanup completed:", results);

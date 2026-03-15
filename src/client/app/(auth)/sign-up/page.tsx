@@ -7,13 +7,8 @@ import { Loader2 } from "lucide-react";
 import PasswordField from "@/app/components/molecules/PasswordField";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { useSignupMutation } from "@/app/store/apis/AuthApi";
-import GoogleIcon from "@/app/assets/icons/google.png";
-import FacebookIcon from "@/app/assets/icons/facebook.png";
-import TwitterIcon from "@/app/assets/icons/twitter.png";
-import Image from "next/image";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
-import { AUTH_API_BASE_URL } from "@/app/lib/constants/config";
 import { useRegistrationOtp } from "../shared/useRegistrationOtp";
 import {
   normalizeEmailValue,
@@ -90,10 +85,6 @@ const Signup = () => {
     } catch {
       // Error is surfaced from mutation state.
     }
-  };
-
-  const handleOAuthLogin = (provider: string) => {
-    window.location.href = `${AUTH_API_BASE_URL}/auth/${provider}`;
   };
 
   const handleSendOtp = async () => {
@@ -264,43 +255,7 @@ const Signup = () => {
               </Link>
             </div>
 
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">or</span>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              {[
-                {
-                  provider: "google",
-                  icon: GoogleIcon,
-                  label: "Sign up with Google",
-                },
-                {
-                  provider: "facebook",
-                  icon: FacebookIcon,
-                  label: "Sign up with Facebook",
-                },
-                {
-                  provider: "twitter",
-                  icon: TwitterIcon,
-                  label: "Sign up with X",
-                },
-              ].map(({ provider, icon, label }) => (
-                <button
-                  key={provider}
-                  onClick={() => handleOAuthLogin(provider)}
-                  className="btn-base w-full border-2 border-gray-100 bg-transparent text-black hover:bg-gray-50"
-                >
-                  <Image width={20} height={20} src={icon} alt={provider} />
-                  {label}
-                </button>
-              ))}
-            </div>
           </main>
         </div>
       </MainLayout>

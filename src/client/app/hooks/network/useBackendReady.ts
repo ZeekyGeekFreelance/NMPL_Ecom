@@ -105,7 +105,7 @@ export const useBackendReady = (): boolean => {
       cancelled = true;
       clearTimeout(timeoutHandle);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   return ready;
 };

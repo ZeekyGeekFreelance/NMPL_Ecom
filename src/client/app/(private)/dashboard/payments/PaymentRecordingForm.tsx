@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { useGetOrderByIdQuery } from "@/app/store/apis/OrderApi";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { Calendar, DollarSign, FileText, Loader2 } from "lucide-react";
-import { toOrderReference, toTransactionReference, toPaymentReference } from "@/app/lib/utils/accountReference";
+import { toOrderReference, toTransactionReference } from "@/app/lib/utils/accountReference";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CHEQUE";
 
@@ -350,7 +350,7 @@ const PaymentRecordingForm = ({ orderId, onSubmit, onCancel }: PaymentRecordingF
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Leave empty if cheque hasn't cleared yet
+                  Leave empty if cheque hasn&apos;t cleared yet
                 </p>
               </div>
             </div>

@@ -1,0 +1,114 @@
+version: '3.8'
+
+# Production Docker Compose Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Prerequisites:
+#   1. Place SSL certificates at ./nginx/certs/nmpl.in.crt and nmpl.in.key
+#      (or use Let's Encrypt / Certbot — see nginx/README.md)
+#   2. Populate src/server/.env.production with real REDIS_URL and payment keys
+#   3. Populate src/client/.env.production with correct NEXT_PUBLIC_API_URL
+
+services:
+  # ── Nginx reverse proxy — SSL termination + routing ───────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      server:
+        condition: service_healthy
+      client:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.production
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - ./server/.env.production
+    restart: unless-stopped
+    # Do NOT expose port 5000 to the host — nginx proxies to it internally.
+    expose:
+      - "5000"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.production
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - ./client/.env.production
+    restart: unless-stopped
+    # Do NOT expose port 3000 to the host — nginx proxies to it internally.
+    expose:
+      - "3000"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Remove local database and Redis — use managed services (Neon + Upstash) in production
+  db:
+    profiles:
+      - disabled
+
+  redis:
+    profiles:
+      - disabled
+
+networks:
+  default:
+    name: nmpl_production

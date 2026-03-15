@@ -196,10 +196,12 @@ const AboutUsPage = () => {
           <div className="mt-8 columns-2 gap-4 sm:columns-3 lg:columns-4">
             {awards.map((award, index) => (
               <div key={`award-${index + 1}`} className="mb-4 break-inside-avoid">
-                <img
+                <Image
                   src={award.src}
                   alt={award.alt}
-                  loading="lazy"
+                  width={640}
+                  height={480}
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   className="h-auto w-full rounded-md border border-slate-200 bg-white shadow-sm"
                 />
               </div>

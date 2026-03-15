@@ -2,7 +2,18 @@
 
 Full-stack ecommerce platform for NMPL with role-based workflows (`SUPERADMIN`, `ADMIN`, `USER`) and dealer lifecycle features.
 
-## Most Important Setup Steps
+## 🚀 Production Ready
+
+This application is now production-ready with comprehensive security, monitoring, and deployment configurations.
+
+**📚 Production Documentation:**
+- [Quick Start Production Guide](QUICK_START_PRODUCTION.md) - 30-minute deployment
+- [Detailed Production Deployment](PRODUCTION_DEPLOYMENT.md) - Complete guide
+- [Security Checklist](SECURITY_CHECKLIST.md) - Security audit
+- [Production Launch Checklist](PRODUCTION_LAUNCH_CHECKLIST.md) - Final checklist
+- [Monitoring Setup](MONITORING_SETUP.md) - Monitoring & alerting
+
+## 🔧 Development Setup
 
 This project is now configured for **Neon Postgres only** (no local Postgres service).
 

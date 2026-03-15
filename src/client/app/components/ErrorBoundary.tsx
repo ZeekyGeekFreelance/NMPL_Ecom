@@ -1,5 +1,6 @@
 "use client";
 import React, { Component, ReactNode } from "react";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -39,7 +40,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       return this.props.fallback;
     }
 
-    const isDev = process.env.NODE_ENV !== "production";
+    const isDev = runtimeEnv.isDevelopment;
 
     return (
       <div className="text-center py-12 px-4">

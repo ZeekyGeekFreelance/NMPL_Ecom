@@ -84,6 +84,15 @@ const envSchema = z.object({
       }
       return parsed;
     }),
+  INTERNAL_API_URL: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (value === undefined || value.trim() === "") {
+        return undefined;
+      }
+      return normalizeApiBaseUrl(value);
+    }),
 });
 
 const parsed = envSchema.parse({
@@ -94,6 +103,7 @@ const parsed = envSchema.parse({
   NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: process.env.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,
   NEXT_PUBLIC_DEALER_CATALOG_POLL_MS:
     process.env.NEXT_PUBLIC_DEALER_CATALOG_POLL_MS,
+  INTERNAL_API_URL: process.env.INTERNAL_API_URL,
 });
 
 if (parsed.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(parsed.NEXT_PUBLIC_API_URL)) {
@@ -113,6 +123,7 @@ export const runtimeEnv = Object.freeze({
   isDevelopment: parsed.NODE_ENV === "development",
   isTest: parsed.NODE_ENV === "test",
   apiBaseUrl: resolvedApiBaseUrl,
+  internalApiUrl: parsed.INTERNAL_API_URL,
   platformName: parsed.NEXT_PUBLIC_PLATFORM_NAME,
   supportEmail: parsed.NEXT_PUBLIC_SUPPORT_EMAIL,
   enableNativeConfirm: parsed.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,

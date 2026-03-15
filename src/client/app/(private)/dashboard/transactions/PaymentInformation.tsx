@@ -1,7 +1,7 @@
 "use client";
 
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
-import { toPaymentReference, toTransactionReference } from "@/app/lib/utils/accountReference";
+import { toPaymentReference } from "@/app/lib/utils/accountReference";
 import {
   getPaymentStateColor,
   getPaymentStateLabel,
@@ -118,7 +118,7 @@ const PaymentInformation = ({
    * Always points to the dealer's payment history so the admin has full context
    * (credit ledger, past orders, balance) rather than the outstanding-only queue.
    */
-  const buildDealerHistoryHref = (txnId?: string) => {
+  const buildDealerHistoryHref = () => {
     if (dealerId) return `/dashboard/dealers?paymentHistory=${dealerId}`;
     return `/dashboard/payments`;
   };
@@ -246,7 +246,7 @@ const PaymentInformation = ({
         <div className="space-y-3">
           {confirmedTransactions.map((txn: any) => {
             const reference = buildPaymentReference(txn);
-            const historyHref = buildDealerHistoryHref(txn.id);
+            const historyHref = buildDealerHistoryHref();
             return (
               <div
                 key={txn.id}

@@ -12,18 +12,17 @@ import {
 import useToast from "@/app/hooks/ui/useToast";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
-import { 
-  Calendar, 
-  Clock, 
-  CreditCard, 
-  DollarSign, 
-  FileText, 
-  Search, 
+import {
+  Clock,
+  CreditCard,
+  DollarSign,
+  FileText,
+  Search,
   AlertTriangle,
   XCircle,
   Eye,
   Plus,
-  ExternalLink
+  ExternalLink,
 } from "lucide-react";
 import Modal from "@/app/components/organisms/Modal";
 import PaymentRecordingForm from "./PaymentRecordingForm";
@@ -66,7 +65,7 @@ const PaymentsDashboard = () => {
     }
   }, [initialSearchTerm, searchTerm]);
 
-  const [recordPayment, { isLoading: isRecording }] = useRecordPaymentMutation();
+  const [recordPayment] = useRecordPaymentMutation();
 
   const outstandingOrders = outstandingData?.orders || [];
 

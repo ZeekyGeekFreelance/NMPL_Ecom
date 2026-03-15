@@ -58,10 +58,14 @@ export class OrderRepository {
     });
   }
 
-  async findOrdersByUserId(userId: string) {
+  async findOrdersByUserId(userId: string, options?: { skip?: number; take?: number }) {
+    const skip = options?.skip ?? 0;
+    const take = Math.min(options?.take ?? 20, 100);
     return prisma.order.findMany({
       where: { userId },
       orderBy: { orderDate: "desc" },
+      skip,
+      take,
       include: {
         orderItems: { include: { variant: { include: { product: true } } } },
         payment: true,

@@ -23,17 +23,11 @@ export class AuthController {
     async (req: Request, res: Response): Promise<void> => {
       const { email, phone, purpose, requestDealerAccess } = req.body;
       const response = await this.authService.requestRegistrationOtp({
-        email,
-        phone,
-        purpose,
-        requestDealerAccess,
+        email, phone, purpose, requestDealerAccess,
       });
-
       sendResponse(res, 200, {
         message: response.message,
-        data: {
-          resendAvailableInSeconds: response.resendAvailableInSeconds,
-        },
+        data: { resendAvailableInSeconds: response.resendAvailableInSeconds },
       });
     }
   );
@@ -41,27 +35,13 @@ export class AuthController {
   signup = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const start = Date.now();
     const {
-      name,
-      email,
-      phone,
-      password,
-      emailOtpCode,
-      phoneOtpCode,
-      requestDealerAccess,
-      businessName,
-      contactPhone,
+      name, email, phone, password, emailOtpCode, phoneOtpCode,
+      requestDealerAccess, businessName, contactPhone,
     } = req.body;
     const { user, accessToken, refreshToken, requiresApproval } =
       await this.authService.registerUser({
-        name,
-        email,
-        phone,
-        password,
-        emailOtpCode,
-        phoneOtpCode,
-        requestDealerAccess,
-        businessName,
-        contactPhone,
+        name, email, phone, password, emailOtpCode, phoneOtpCode,
+        requestDealerAccess, businessName, contactPhone,
       });
 
     if (accessToken && refreshToken) {
@@ -92,21 +72,17 @@ export class AuthController {
       },
     });
 
-    const userId = user.id;
-    const end = Date.now();
     this.logsService.info("Register", {
-      userId,
+      userId: user.id,
       sessionId: req.session.id,
-      timePeriod: end - start,
+      timePeriod: Date.now() - start,
     });
   });
 
   applyDealerAccess = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const currentUserId = req.user?.id;
-      if (!currentUserId) {
-        throw new AppError(401, "User not authenticated");
-      }
+      if (!currentUserId) throw new AppError(401, "User not authenticated");
 
       const { businessName, contactPhone } = req.body as {
         businessName?: string;
@@ -115,9 +91,7 @@ export class AuthController {
 
       const { user, wasResubmission } =
         await this.authService.applyDealerAccessForCurrentUser({
-          userId: currentUserId,
-          businessName,
-          contactPhone,
+          userId: currentUserId, businessName, contactPhone,
         });
 
       sendResponse(res, 200, {
@@ -133,17 +107,12 @@ export class AuthController {
     const { email, password, portal } = req.body;
     const result = await this.authService.signin({ email, password, portal });
     const { user } = result;
-    // requiresPasswordChange is only set for legacy dealer first-login.
-    // When it's true, no tokens are issued — the client must redirect to /change-password.
     const requiresPasswordChange = !!(result as any).requiresPasswordChange;
 
     if (!requiresPasswordChange) {
-      // Only set cookies when tokens are actually issued.
       res.cookie("refreshToken", result.refreshToken!, cookieOptions);
       res.cookie("accessToken", result.accessToken!, cookieOptions);
     }
-
-    const userId = user.id;
 
     sendResponse(res, 200, {
       data: {
@@ -168,10 +137,7 @@ export class AuthController {
         : "User logged in successfully",
     });
 
-    this.logsService.info("Sign in", {
-      userId,
-      sessionId: req.session.id,
-    });
+    this.logsService.info("Sign in", { userId: user.id, sessionId: req.session.id });
   });
 
   signout = asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -181,20 +147,12 @@ export class AuthController {
 
     if (!userId && refreshToken) {
       try {
-        const decoded = jwt.verify(
-          refreshToken,
-          config.auth.refreshTokenSecret
-        ) as { id?: string };
-        if (typeof decoded.id === "string") {
-          userId = decoded.id;
-        }
+        const decoded = jwt.verify(refreshToken, config.auth.refreshTokenSecret) as { id?: string };
+        if (typeof decoded.id === "string") userId = decoded.id;
       } catch {
-        // Ignore invalid refresh token and continue clearing cookies.
+        // Ignore — continue clearing cookies.
       }
     }
-
-    // Preserve cart on sign-out for all external accounts (customer + dealer)
-    // to ensure parity and continuity across sessions.
 
     if (refreshToken) {
       const decoded: any = jwt.decode(refreshToken);
@@ -207,28 +165,20 @@ export class AuthController {
       }
     }
 
-    res.clearCookie("refreshToken", {
-      ...clearCookieOptions,
-    });
+    res.clearCookie("refreshToken", { ...clearCookieOptions });
+    res.clearCookie("accessToken", { ...clearCookieOptions });
 
-    res.clearCookie("accessToken", {
-      ...clearCookieOptions,
-    });
-
-    const signoutDuration = Date.now() - start;
     sendResponse(res, 200, { message: "Logged out successfully" });
 
     this.logsService.info("Sign out", {
       userId,
       sessionId: req.session.id,
-      timePeriod: signoutDuration,
+      timePeriod: Date.now() - start,
     });
   });
 
   /**
-   * Handles the forced first-login password change for legacy dealer accounts.
-   * The client posts the original temporary password + the new password.
-   * On success, full session tokens are issued so the dealer lands in the portal.
+   * Forced first-login password change for legacy dealer accounts.
    */
   changePasswordOnFirstLogin = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
@@ -239,11 +189,7 @@ export class AuthController {
       };
 
       const { user, accessToken, refreshToken } =
-        await this.authService.changePasswordOnFirstLogin({
-          email,
-          currentPassword,
-          newPassword,
-        });
+        await this.authService.changePasswordOnFirstLogin({ email, currentPassword, newPassword });
 
       res.cookie("refreshToken", refreshToken, cookieOptions);
       res.cookie("accessToken", accessToken, cookieOptions);
@@ -273,18 +219,82 @@ export class AuthController {
     }
   );
 
+  /**
+   * Authenticated self-service password change.
+   * Available to ALL roles (USER, DEALER, ADMIN, SUPERADMIN).
+   * Requires the current password for re-verification.
+   * Issues fresh tokens so the caller's session continues uninterrupted.
+   */
+  changeOwnPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const userId = req.user?.id;
+      if (!userId) throw new AppError(401, "User not authenticated.");
+
+      const { currentPassword, newPassword } = req.body as {
+        currentPassword: string;
+        newPassword: string;
+      };
+
+      const { accessToken, refreshToken } = await this.authService.changeOwnPassword({
+        userId,
+        currentPassword,
+        newPassword,
+      });
+
+      // Replace existing cookies with the freshly-issued tokens.
+      res.clearCookie("refreshToken", { ...clearCookieOptions });
+      res.clearCookie("accessToken", { ...clearCookieOptions });
+      res.cookie("refreshToken", refreshToken, cookieOptions);
+      res.cookie("accessToken", accessToken, cookieOptions);
+
+      sendResponse(res, 200, {
+        message: "Password changed successfully. All other sessions have been logged out.",
+      });
+
+      this.logsService.info("Self password change", {
+        userId,
+        sessionId: req.session.id,
+      });
+    }
+  );
+
+  /**
+   * SuperAdmin out-of-band emergency reset.
+   * Used when a SuperAdmin cannot log in (compromised / forgotten password).
+   * Requires the SUPERADMIN_RESET_SECRET env variable.
+   */
+  resetSuperAdminPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { resetSecret, targetEmail, newPassword } = req.body as {
+        resetSecret: string;
+        targetEmail: string;
+        newPassword: string;
+      };
+
+      const result = await this.authService.resetSuperAdminPassword({
+        resetSecret,
+        targetEmail,
+        newPassword,
+      });
+
+      sendResponse(res, 200, { message: result.message });
+
+      this.logsService.info("SuperAdmin out-of-band password reset", {
+        targetEmail,
+        sessionId: req.session?.id,
+      });
+    }
+  );
+
   requestOwnPasswordResetLink = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const userId = req.user?.id;
-      if (!userId) {
-        throw new AppError(401, "User not authenticated");
-      }
+      if (!userId) throw new AppError(401, "User not authenticated");
 
       const response = await this.authService.requestOwnPasswordResetLink(userId);
-
       sendResponse(res, 200, { message: response.message });
 
-      this.logsService.info("Self Password Reset Link Requested", {
+      this.logsService.info("Self password reset link requested", {
         userId,
         sessionId: req.session.id,
       });
@@ -295,12 +305,9 @@ export class AuthController {
     async (req: Request, res: Response): Promise<void> => {
       const { email } = req.body as { email: string };
       const response = await this.authService.forgotPassword(email);
-
       sendResponse(res, 200, { message: response.message });
 
-      this.logsService.info("Forgot Password Link Requested", {
-        sessionId: req.session.id,
-      });
+      this.logsService.info("Forgot password request", { sessionId: req.session.id });
     }
   );
 
@@ -308,12 +315,10 @@ export class AuthController {
     async (req: Request, res: Response): Promise<void> => {
       const { token, newPassword } = req.body;
       const response = await this.authService.resetPassword(token, newPassword);
-      const userId = req.user?.id;
-
       sendResponse(res, 200, { message: response.message });
 
-      this.logsService.info("Reset Password", {
-        userId,
+      this.logsService.info("Password reset via token", {
+        userId: req.user?.id,
         sessionId: req.session.id,
       });
     }
@@ -324,14 +329,11 @@ export class AuthController {
       const start = Date.now();
       const oldRefreshToken = req?.cookies?.refreshToken;
 
-      if (!oldRefreshToken) {
-        throw new AppError(401, "Refresh token not found");
-      }
+      if (!oldRefreshToken) throw new AppError(401, "Refresh token not found");
 
       const { newAccessToken, newRefreshToken, user } =
         await this.authService.refreshToken(oldRefreshToken);
 
-      // Clear old cookies first
       res.clearCookie("refreshToken", {
         httpOnly: true,
         secure: config.isProduction,
@@ -345,7 +347,6 @@ export class AuthController {
         path: "/",
       });
 
-      // Set new cookies
       res.cookie("refreshToken", newRefreshToken, cookieOptions);
       res.cookie("accessToken", newAccessToken, cookieOptions);
 
@@ -353,12 +354,11 @@ export class AuthController {
         message: "Token refreshed successfully",
         data: { accessToken: newAccessToken, user },
       });
-      const end = Date.now();
 
-      this.logsService.info("Refresh Token", {
+      this.logsService.info("Refresh token", {
         userId: req.user?.id,
         sessionId: req.session.id,
-        timePeriod: end - start,
+        timePeriod: Date.now() - start,
       });
     }
   );

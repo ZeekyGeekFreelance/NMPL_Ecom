@@ -1,7 +1,6 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as FacebookStrategy } from "passport-facebook";
-import { Strategy as TwitterStrategy } from "passport-twitter";
 import { Profile } from "passport";
 import prisma from "@/infra/database/database.config";
 import {
@@ -176,6 +175,8 @@ export default function configurePassport() {
     : config.raw.TWITTER_CALLBACK_URL_DEV;
 
   if (isConfigured(twitterConsumerKey, twitterConsumerSecret, twitterCallback)) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Strategy: TwitterStrategy } = require("passport-twitter") as { Strategy: any };
     passport.use(
       new TwitterStrategy(
         {

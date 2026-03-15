@@ -318,7 +318,7 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                                     <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">
                                       {sanitizeText(log.previousStatus)}
                                     </span>
-                                    <span className="text-gray-400">-></span>
+                                    <span className="text-gray-400">{"->"}</span>
                                     <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">
                                       {sanitizeText(log.nextStatus)}
                                     </span>

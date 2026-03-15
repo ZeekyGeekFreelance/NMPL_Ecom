@@ -2,6 +2,8 @@
 // That guarantees the environment is populated before any module (config, prisma) is evaluated.
 // Do NOT add a second dotenv.config() call here — it would run AFTER module-alias/register
 // has already triggered module evaluation.
+
+// Global error handlers MUST be registered before any imports
 import path from "path";
 import "reflect-metadata";
 import { addAlias } from "module-alias";

@@ -10,9 +10,7 @@ import {
   aggregateInteractionTrends,
   aggregateMonthlyTrends,
   calculateChanges,
-  calculateCustomerMetrics,
   calculateEngagementScores,
-  calculateMetrics,
   calculateRetentionRate,
   generateTopCustomers,
 } from "@/shared/utils/analytics";
@@ -151,20 +149,14 @@ export class AnalyticsService {
     const range = this.resolveDateRange(query);
     const shouldCompare = this.shouldComparePreviousPeriod(range);
 
-    const [orders, orderItems, users] = await Promise.all([
-      this.analyticsRepository.getOrdersByTimePeriod(
+    const [currentMetrics, currentUserMetrics] = await Promise.all([
+      this.analyticsRepository.getOrderMetricsAggregated(
         range.currentStartDate,
         range.currentEndDate,
         range.yearStart,
         range.yearEnd
       ),
-      this.analyticsRepository.getOrderItemsByTimePeriod(
-        range.currentStartDate,
-        range.currentEndDate,
-        range.yearStart,
-        range.yearEnd
-      ),
-      this.analyticsRepository.getUsersByTimePeriod(
+      this.analyticsRepository.getUserMetricsAggregated(
         range.currentStartDate,
         range.currentEndDate,
         range.yearStart,
@@ -172,37 +164,31 @@ export class AnalyticsService {
       ),
     ]);
 
-    const currentMetrics = calculateMetrics(orders, orderItems, users);
-
-    const [previousOrders, previousOrderItems, previousUsers] = shouldCompare
+    const [previousMetrics, previousUserMetrics] = shouldCompare
       ? await Promise.all([
-          this.analyticsRepository.getOrdersByTimePeriod(
+          this.analyticsRepository.getOrderMetricsAggregated(
             range.previousStartDate,
             range.previousEndDate,
             range.yearStart,
             range.yearEnd
           ),
-          this.analyticsRepository.getOrderItemsByTimePeriod(
-            range.previousStartDate,
-            range.previousEndDate,
-            range.yearStart,
-            range.yearEnd
-          ),
-          this.analyticsRepository.getUsersByTimePeriod(
+          this.analyticsRepository.getUserMetricsAggregated(
             range.previousStartDate,
             range.previousEndDate,
             range.yearStart,
             range.yearEnd
           ),
         ])
-      : [[], [], []];
+      : [
+          { totalOrders: 0, totalRevenue: 0, totalSales: 0, averageOrderValue: 0 },
+          { totalUsers: 0, repeatUsers: 0, totalRevenue: 0 },
+        ];
 
-    const previousMetrics = calculateMetrics(
-      previousOrders,
-      previousOrderItems,
-      previousUsers
+    const changes = calculateChanges(
+      { totalRevenue: currentMetrics.totalRevenue, totalOrders: currentMetrics.totalOrders, totalSales: currentMetrics.totalSales, totalUsers: currentUserMetrics.totalUsers, averageOrderValue: currentMetrics.averageOrderValue },
+      { totalRevenue: previousMetrics.totalRevenue, totalOrders: previousMetrics.totalOrders, totalSales: previousMetrics.totalSales, totalUsers: previousUserMetrics.totalUsers, averageOrderValue: previousMetrics.averageOrderValue },
+      shouldCompare
     );
-    const changes = calculateChanges(currentMetrics, previousMetrics, shouldCompare);
 
     const trendStartDate = range.yearStart ?? range.currentStartDate;
     const trendEndDate = range.yearEnd ?? range.currentEndDate;
@@ -216,7 +202,7 @@ export class AnalyticsService {
       totalRevenue: this.round(currentMetrics.totalRevenue),
       totalOrders: currentMetrics.totalOrders,
       totalSales: currentMetrics.totalSales,
-      totalUsers: currentMetrics.totalUsers,
+      totalUsers: currentUserMetrics.totalUsers,
       averageOrderValue: this.round(currentMetrics.averageOrderValue),
       changes: {
         revenue: this.roundNullable(changes.revenue),
@@ -231,7 +217,7 @@ export class AnalyticsService {
 
   async getProductPerformance(query: DateRangeQuery): Promise<ProductPerformance[]> {
     const range = this.resolveDateRange(query);
-    const orderItems = await this.analyticsRepository.getOrderItemsByTimePeriod(
+    const rows = await this.analyticsRepository.getProductPerformanceAggregated(
       range.currentStartDate,
       range.currentEndDate,
       range.yearStart,
@@ -239,64 +225,33 @@ export class AnalyticsService {
       query.category
     );
 
-    const productSales: Record<
-      string,
-      {
-        id: string;
-        name: string;
-        sku: string;
-        quantity: number;
-        revenue: number;
-        skuSales: Record<string, number>;
+    // Merge variants that belong to the same product
+    const byProduct = new Map<string, ProductPerformance>();
+    for (const row of rows) {
+      const existing = byProduct.get(row.productId);
+      if (existing) {
+        existing.quantity += row.totalQuantity;
+        existing.revenue = Number((existing.revenue + row.totalRevenue).toFixed(2));
+      } else {
+        byProduct.set(row.productId, {
+          id: row.productId,
+          sku: row.sku,
+          name: row.productName,
+          quantity: row.totalQuantity,
+          revenue: row.totalRevenue,
+        });
       }
-    > = {};
-
-    for (const item of orderItems) {
-      const productId = item.variant.product?.id || item.variantId;
-      const productName =
-        item.variant.product?.name || item.variant.sku || "Unknown";
-      const sku = item.variant.sku || "N/A";
-
-      if (!productSales[productId]) {
-        productSales[productId] = {
-          id: productId,
-          name: productName,
-          sku,
-          quantity: 0,
-          revenue: 0,
-          skuSales: {},
-        };
-      }
-
-      productSales[productId].skuSales[sku] =
-        (productSales[productId].skuSales[sku] || 0) + item.quantity;
-      productSales[productId].quantity += item.quantity;
-      productSales[productId].revenue += item.quantity * item.price;
     }
 
-    return Object.values(productSales)
-      .map((product) => {
-        const topSku = Object.entries(product.skuSales).sort(
-          (first, second) => second[1] - first[1]
-        )[0]?.[0];
-
-        return {
-          id: product.id,
-          sku: topSku || product.sku,
-          name: product.name,
-          quantity: product.quantity,
-          revenue: this.round(product.revenue),
-        };
-      })
-      .sort((first, second) => second.quantity - first.quantity);
+    return [...byProduct.values()].sort((a, b) => b.quantity - a.quantity);
   }
 
   async getUserAnalytics(query: DateRangeQuery): Promise<UserAnalytics> {
     const range = this.resolveDateRange(query);
     const shouldCompare = this.shouldComparePreviousPeriod(range);
 
-    const [users, interactions] = await Promise.all([
-      this.analyticsRepository.getUsersByTimePeriod(
+    const [userMetrics, interactions] = await Promise.all([
+      this.analyticsRepository.getUserMetricsAggregated(
         range.currentStartDate,
         range.currentEndDate,
         range.yearStart,
@@ -310,36 +265,44 @@ export class AnalyticsService {
       ),
     ]);
 
-    const customerMetrics = calculateCustomerMetrics(users);
-    const previousUsers = shouldCompare
-      ? await this.analyticsRepository.getUsersByTimePeriod(
+    const previousUserMetrics = shouldCompare
+      ? await this.analyticsRepository.getUserMetricsAggregated(
           range.previousStartDate,
           range.previousEndDate,
           range.yearStart,
           range.yearEnd
         )
-      : [];
-    const previousMetrics = calculateCustomerMetrics(previousUsers);
+      : { totalUsers: 0, repeatUsers: 0, totalRevenue: 0 };
 
-    const retentionRate = shouldCompare
-      ? calculateRetentionRate(users, previousUsers)
+    const lifetimeValue = userMetrics.totalUsers > 0
+      ? userMetrics.totalRevenue / userMetrics.totalUsers
       : 0;
+    const repeatPurchaseRate = userMetrics.totalUsers > 0
+      ? (userMetrics.repeatUsers / userMetrics.totalUsers) * 100
+      : 0;
+    const retentionRate = shouldCompare
+      ? calculateRetentionRate(
+          Array(userMetrics.totalUsers).fill({}),
+          Array(previousUserMetrics.totalUsers).fill({})
+        )
+      : 0;
+
     const { scores: engagementScores, averageScore: engagementScore } =
       calculateEngagementScores(interactions);
-    const topUsers = generateTopCustomers(users, engagementScores);
+    const topUsers = generateTopCustomers([], engagementScores);
     const interactionTrends = aggregateInteractionTrends(interactions);
     const changes = calculateChanges(
-      { totalUsers: customerMetrics.totalCustomers },
-      { totalUsers: previousMetrics.totalCustomers },
+      { totalUsers: userMetrics.totalUsers },
+      { totalUsers: previousUserMetrics.totalUsers },
       shouldCompare
     );
 
     return {
-      totalUsers: customerMetrics.totalCustomers,
-      totalRevenue: this.round(customerMetrics.totalRevenue),
+      totalUsers: userMetrics.totalUsers,
+      totalRevenue: this.round(userMetrics.totalRevenue),
       retentionRate: this.round(retentionRate),
-      lifetimeValue: this.round(customerMetrics.lifetimeValue),
-      repeatPurchaseRate: this.round(customerMetrics.repeatPurchaseRate),
+      lifetimeValue: this.round(lifetimeValue),
+      repeatPurchaseRate: this.round(repeatPurchaseRate),
       engagementScore: this.round(engagementScore),
       changes: {
         users: this.roundNullable(changes.users),

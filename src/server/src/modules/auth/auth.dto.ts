@@ -11,58 +11,34 @@ import {
 
 export class RegisterDto {
   @IsString()
-  @IsNotEmpty({
-    message: "Name is required",
-  })
-  @MinLength(2, {
-    message: "Name must be at least 2 characters long",
-  })
+  @IsNotEmpty({ message: "Name is required" })
+  @MinLength(2, { message: "Name must be at least 2 characters long" })
   name!: string;
 
   @IsEmail()
-  @IsNotEmpty({
-    message: "Email is required",
-  })
+  @IsNotEmpty({ message: "Email is required" })
   email!: string;
 
   @IsString()
-  @IsNotEmpty({
-    message: "Phone number is required",
-  })
-  @Matches(/^\d{10}$/, {
-    message: "Phone number must be exactly 10 digits",
-  })
+  @IsNotEmpty({ message: "Phone number is required" })
+  @Matches(/^\d{10}$/, { message: "Phone number must be exactly 10 digits" })
   phone!: string;
 
-  @MinLength(8, {
-    message: "Password must be at least 8 characters long",
-  })
-  @Matches(/[A-Z]/, {
-    message: "Password must contain at least one uppercase letter",
-  })
-  @Matches(/[a-z]/, {
-    message: "Password must contain at least one lowercase letter",
-  })
-  @Matches(/[0-9]/, {
-    message: "Password must contain at least one number",
-  })
-  @Matches(/[!@#$%^&*]/, {
-    message: "Password must contain at least one special character (!@#$%^&*)",
-  })
+  @MinLength(8, { message: "Password must be at least 8 characters long" })
+  @Matches(/[A-Z]/, { message: "Password must contain at least one uppercase letter" })
+  @Matches(/[a-z]/, { message: "Password must contain at least one lowercase letter" })
+  @Matches(/[0-9]/, { message: "Password must contain at least one number" })
+  @Matches(/[!@#$%^&*]/, { message: "Password must contain at least one special character (!@#$%^&*)" })
   password!: string;
 
   @IsNotEmpty()
   @IsString()
-  @Matches(/^\d{6}$/, {
-    message: "Email OTP must be a valid 6-digit code",
-  })
+  @Matches(/^\d{6}$/, { message: "Email OTP must be a valid 6-digit code" })
   emailOtpCode!: string;
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{6}$/, {
-    message: "Phone OTP must be a valid 6-digit code",
-  })
+  @Matches(/^\d{6}$/, { message: "Phone OTP must be a valid 6-digit code" })
   phoneOtpCode?: string;
 
   @IsOptional()
@@ -75,42 +51,30 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{10}$/, {
-    message: "Contact phone must be exactly 10 digits",
-  })
+  @Matches(/^\d{10}$/, { message: "Contact phone must be exactly 10 digits" })
   contactPhone?: string;
 }
 
 export class ApplyDealerAccessDto {
   @IsOptional()
   @IsString()
-  @IsNotEmpty({
-    message: "Business name cannot be empty",
-  })
+  @IsNotEmpty({ message: "Business name cannot be empty" })
   businessName?: string;
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{10}$/, {
-    message: "Contact phone must be exactly 10 digits",
-  })
+  @Matches(/^\d{10}$/, { message: "Contact phone must be exactly 10 digits" })
   contactPhone?: string;
 }
 
 export class RequestRegistrationOtpDto {
   @IsEmail()
-  @IsNotEmpty({
-    message: "Email is required",
-  })
+  @IsNotEmpty({ message: "Email is required" })
   email!: string;
 
   @IsString()
-  @IsNotEmpty({
-    message: "Phone number is required",
-  })
-  @Matches(/^\d{10}$/, {
-    message: "Phone number must be exactly 10 digits",
-  })
+  @IsNotEmpty({ message: "Phone number is required" })
+  @Matches(/^\d{10}$/, { message: "Phone number must be exactly 10 digits" })
   phone!: string;
 
   @IsOptional()
@@ -126,9 +90,7 @@ export class SigninDto {
   @IsEmail()
   email!: string;
 
-  @IsNotEmpty({
-    message: "Password is required",
-  })
+  @IsNotEmpty({ message: "Password is required" })
   password!: string;
 
   @IsOptional()
@@ -152,28 +114,17 @@ export class ResetPasswordDto {
   @IsNotEmpty()
   token!: string;
 
-  @MinLength(8, {
-    message: "Password must be at least 8 characters long",
-  })
-  @Matches(/[A-Z]/, {
-    message: "Password must contain at least one uppercase letter",
-  })
-  @Matches(/[a-z]/, {
-    message: "Password must contain at least one lowercase letter",
-  })
-  @Matches(/[0-9]/, {
-    message: "Password must contain at least one number",
-  })
-  @Matches(/[!@#$%^&*]/, {
-    message: "Password must contain at least one special character (!@#$%^&*)",
-  })
+  @MinLength(8, { message: "Password must be at least 8 characters long" })
+  @Matches(/[A-Z]/, { message: "Password must contain at least one uppercase letter" })
+  @Matches(/[a-z]/, { message: "Password must contain at least one lowercase letter" })
+  @Matches(/[0-9]/, { message: "Password must contain at least one number" })
+  @Matches(/[!@#$%^&*]/, { message: "Password must contain at least one special character (!@#$%^&*)" })
   newPassword!: string;
 }
 
 /**
- * Validates the forced first-login password change flow for legacy dealer accounts.
- * The client re-submits the original temporary password for re-verification alongside
- * the new password they want to set.
+ * Forced first-login password change for legacy dealer accounts.
+ * The client re-submits the temporary password + new password.
  */
 export class ChangePasswordOnFirstLoginDto {
   @IsEmail()
@@ -184,17 +135,47 @@ export class ChangePasswordOnFirstLoginDto {
   currentPassword!: string;
 
   @MinLength(8, { message: "New password must be at least 8 characters long" })
-  @Matches(/[A-Z]/, {
-    message: "New password must contain at least one uppercase letter",
-  })
-  @Matches(/[a-z]/, {
-    message: "New password must contain at least one lowercase letter",
-  })
-  @Matches(/[0-9]/, {
-    message: "New password must contain at least one number",
-  })
-  @Matches(/[!@#$%^&*]/, {
-    message: "New password must contain at least one special character (!@#$%^&*)",
-  })
+  @Matches(/[A-Z]/, { message: "New password must contain at least one uppercase letter" })
+  @Matches(/[a-z]/, { message: "New password must contain at least one lowercase letter" })
+  @Matches(/[0-9]/, { message: "New password must contain at least one number" })
+  @Matches(/[!@#$%^&*]/, { message: "New password must contain at least one special character (!@#$%^&*)" })
+  newPassword!: string;
+}
+
+/**
+ * Authenticated self-service password change for any logged-in user (including admins).
+ * Requires re-verification of the current password before allowing the change.
+ */
+export class ChangeOwnPasswordDto {
+  @IsNotEmpty({ message: "Current password is required" })
+  currentPassword!: string;
+
+  @MinLength(8, { message: "New password must be at least 8 characters long" })
+  @Matches(/[A-Z]/, { message: "New password must contain at least one uppercase letter" })
+  @Matches(/[a-z]/, { message: "New password must contain at least one lowercase letter" })
+  @Matches(/[0-9]/, { message: "New password must contain at least one number" })
+  @Matches(/[!@#$%^&*]/, { message: "New password must contain at least one special character (!@#$%^&*)" })
+  newPassword!: string;
+}
+
+/**
+ * SuperAdmin out-of-band emergency reset.
+ * Requires the SUPERADMIN_RESET_SECRET shared secret configured in environment.
+ * Used when a SuperAdmin cannot log in to change their own password.
+ */
+export class SuperAdminResetPasswordDto {
+  @IsNotEmpty({ message: "Reset secret is required" })
+  @IsString()
+  resetSecret!: string;
+
+  @IsEmail()
+  @IsNotEmpty({ message: "Target email is required" })
+  targetEmail!: string;
+
+  @MinLength(8, { message: "New password must be at least 8 characters long" })
+  @Matches(/[A-Z]/, { message: "New password must contain at least one uppercase letter" })
+  @Matches(/[a-z]/, { message: "New password must contain at least one lowercase letter" })
+  @Matches(/[0-9]/, { message: "New password must contain at least one number" })
+  @Matches(/[!@#$%^&*]/, { message: "New password must contain at least one special character (!@#$%^&*)" })
   newPassword!: string;
 }
