@@ -18,7 +18,7 @@ ENV NODE_ENV=production
 # Copy package files and install ALL dependencies first (including dev for build)
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN npm ci && npm cache clean --force
+RUN npm ci --include=dev && npm cache clean --force
 
 # Generate Prisma client
 RUN npx prisma generate
