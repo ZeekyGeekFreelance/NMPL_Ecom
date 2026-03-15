@@ -20,10 +20,10 @@ const addHealthCorsHeaders = (req: any, res: any) => {
 const buildHealthPayload = async () => {
   // Allow up to 10s for DB ping — Neon free tier has cold-start latency.
   const dbConnected = await Promise.race([
-    pingDB(),
+    pingDB().catch(() => false),
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3_000)),
   ]);
-  const redisConnected = config.redis.enabled ? await pingRedis() : true;
+  const redisConnected = config.redis.enabled ? await pingRedis().catch(() => false) : true;
   const heapUsedMb = Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
   const memoryHealthy = heapUsedMb <= config.server.memoryUnhealthyThresholdMb;
 
@@ -58,14 +58,36 @@ const buildHealthPayload = async () => {
 
 router.get("/health", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, async (req, res) => {
   addHealthCorsHeaders(req, res);
-  const payload = await buildHealthPayload();
-  res.status(payload.healthy ? 200 : 503).json(payload);
+  try {
+    const payload = await buildHealthPayload();
+    res.status(payload.healthy ? 200 : 503).json(payload);
+  } catch (error) {
+    // Fallback health response if main health check fails
+    res.status(503).json({
+      healthy: false,
+      status: "error",
+      message: "Health check failed",
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  }
 });
 
 router.get("/ready", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, async (req, res) => {
   addHealthCorsHeaders(req, res);
-  const payload = await buildHealthPayload();
-  res.status(payload.healthy ? 200 : 503).json(payload);
+  try {
+    const payload = await buildHealthPayload();
+    res.status(payload.healthy ? 200 : 503).json(payload);
+  } catch (error) {
+    res.status(503).json({
+      healthy: false,
+      status: "error",
+      message: "Readiness check failed",
+      error: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 router.get("/live", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, (req, res) => {

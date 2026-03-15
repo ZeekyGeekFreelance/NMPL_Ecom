@@ -19,7 +19,7 @@
     "repo:sanity": "node ./scripts/repo-sanity-proxy.js",
     "env:check": "ts-node --transpile-only -r dotenv/config src/config/index.ts",
     "build": "npm run repo:sanity && npm run env:check && node ./scripts/clean-build.js && node ./scripts/assert-determinism.js pre && tsc && node ./scripts/assert-determinism.js post",
-    "start": "node dist/server.js",
+    "start": "node -r ./scripts/load-env.js -r module-alias/register dist/server.js",
     "prisma": "prisma",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",

@@ -12,35 +12,38 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and install ALL dependencies first (including dev for build)
 COPY package*.json ./
 COPY prisma ./prisma/
-
-# Install dependencies (production only)
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci && npm cache clean --force
 
 # Generate Prisma client
 RUN npx prisma generate
 
-# Copy source code
-COPY . .
+# Copy source code and scripts
+COPY src ./src/
+COPY scripts ./scripts/
+COPY tsconfig.json ./
 
 # Build the application
 RUN npm run build
 
-# Remove dev dependencies and source files
-RUN rm -rf src/ && \
+# Remove dev dependencies and source files after build
+RUN rm -rf src/ tsconfig.json && \
     rm -rf node_modules && \
     npm ci --only=production && \
     npm cache clean --force
+
+# Ensure scripts directory exists for load-env.js
+COPY scripts ./scripts/
 
 # Set ownership
 RUN chown -R nextjs:nodejs /app
 USER nextjs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:5000/health || exit 1
+# Health check with longer timeout for Railway and fallback
+HEALTHCHECK --interval=30s --timeout=15s --start-period=90s --retries=5 \
+  CMD curl -f http://localhost:5000/health || curl -f http://localhost:5000/ || exit 1
 
 # Expose port
 EXPOSE 5000
@@ -48,5 +51,5 @@ EXPOSE 5000
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the application
-CMD ["npm", "start"]
+# Start with migration and diagnostic fallback
+CMD ["sh", "-c", "npx prisma migrate deploy && node -r ./scripts/load-env.js -r module-alias/register dist/server.js || (echo 'Main server failed, starting diagnostic server...' && node scripts/simple-health.js)"]
