@@ -2,8 +2,17 @@
 
 import Dropdown from "@/app/components/molecules/Dropdown";
 import Link from "next/link";
-import { ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, CreditCard, Receipt } from "lucide-react";
 
+/**
+ * paymentContextHref is provided by the parent page after computing:
+ *   - isPayLater && !isSettled  -> /dashboard/payments   (record outstanding payment)
+ *   - dealerId exists otherwise -> /dashboard/dealers?paymentHistory=DEALER_ID
+ *   - null                      -> hide the button
+ *
+ * The label and icon are chosen accordingly so admins always know what they'll
+ * land on before they click.
+ */
 const PageHeader = ({
   onBack,
   onUpdateStatus,
@@ -17,8 +26,34 @@ const PageHeader = ({
   newStatus,
   setNewStatus,
   statusOptions,
-  paymentManagementHref,
+  paymentContextHref,
+  isPayLater,
+  isSettled,
+  dealerId,
+}: {
+  onBack: () => void;
+  onUpdateStatus: () => void;
+  onOpenQuotationEditor: () => void;
+  onDownloadInvoice: () => void;
+  isDownloadingInvoice: boolean;
+  isUpdating: boolean;
+  isIssuingQuotation: boolean;
+  canUpdateStatus: boolean;
+  canEditQuotation: boolean;
+  newStatus: string;
+  setNewStatus: (v: string) => void;
+  statusOptions: Array<{ value: string; label: string }>;
+  paymentContextHref: string | null;
+  isPayLater?: boolean;
+  isSettled?: boolean;
+  dealerId?: string | null;
 }) => {
+  // Decide the label & icon for the payment context button
+  const showPaymentButton = !!paymentContextHref;
+  const isOutstandingLink = isPayLater && !isSettled;
+  const paymentButtonLabel = isOutstandingLink ? "Record Payment" : "Payment History";
+  const PaymentIcon = isOutstandingLink ? Receipt : CreditCard;
+
   return (
     <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center">
       <div>
@@ -34,16 +69,22 @@ const PageHeader = ({
           View detailed information about this transaction
         </p>
       </div>
+
       <div className="flex items-center space-x-3 mt-4 md:mt-0">
-        {paymentManagementHref ? (
+        {showPaymentButton && (
           <Link
-            href={paymentManagementHref}
-            className="px-4 py-2 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 transition duration-200 inline-flex items-center gap-2"
+            href={paymentContextHref!}
+            className={`px-4 py-2 border rounded-md hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 transition duration-200 inline-flex items-center gap-2 text-sm font-medium ${
+              isOutstandingLink
+                ? "border-green-200 text-green-700 hover:bg-green-50 focus:ring-green-300"
+                : "border-blue-200 text-blue-700 hover:bg-blue-50 focus:ring-blue-300"
+            }`}
           >
-            <ExternalLink size={16} />
-            Payment Management
+            <PaymentIcon size={16} />
+            {paymentButtonLabel}
           </Link>
-        ) : null}
+        )}
+
         <button
           type="button"
           onClick={onDownloadInvoice}
@@ -53,6 +94,7 @@ const PageHeader = ({
           <Download size={16} />
           {isDownloadingInvoice ? "Downloading..." : "Invoice PDF"}
         </button>
+
         <button
           type="button"
           onClick={onOpenQuotationEditor}
@@ -61,6 +103,7 @@ const PageHeader = ({
         >
           {isIssuingQuotation ? "Sending..." : "Edit Quotation"}
         </button>
+
         {!isUpdating ? (
           <>
             <Dropdown
@@ -80,7 +123,7 @@ const PageHeader = ({
           </>
         ) : (
           <div className="flex items-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2" />
             <span>Updating...</span>
           </div>
         )}

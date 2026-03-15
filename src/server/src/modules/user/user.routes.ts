@@ -3,6 +3,7 @@ import { makeUserController } from "./user.factory";
 import protect from "@/shared/middlewares/protect";
 import authorizeRole from "@/shared/middlewares/authorizeRole";
 import authorizeRoleHierarchy from "@/shared/middlewares/authorizeRoleHierarchy";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import {
   UpdateUserDto,
@@ -67,6 +68,7 @@ router.get("/me", protect, userController.getMe);
 router.patch(
   "/me",
   protect,
+  csrfProtection,
   validateDto(UpdateOwnProfileDto),
   userController.updateCurrentUserProfile
 );
@@ -109,6 +111,7 @@ router.post(
   "/admin",
   protect,
   authorizeRole("SUPERADMIN"),
+  csrfProtection,
   validateDto(CreateAdminDto),
   userController.createAdmin
 );
@@ -117,6 +120,7 @@ router.patch(
   "/:id/billing-supervisor",
   protect,
   authorizeRole("SUPERADMIN"),
+  csrfProtection,
   validateDto(UpdateBillingSupervisorDto),
   userController.updateBillingSupervisor
 );
@@ -125,6 +129,7 @@ router.patch(
   "/:id/admin-password",
   protect,
   authorizeRole("SUPERADMIN"),
+  csrfProtection,
   validateDto(UpdateAdminPasswordDto),
   userController.updateAdminPassword
 );
@@ -158,6 +163,7 @@ router.post(
   "/dealers",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   validateDto(CreateDealerDto),
   userController.createDealer
 );
@@ -166,6 +172,7 @@ router.patch(
   "/dealers/:id/status",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   validateDto(UpdateDealerStatusDto),
   userController.updateDealerStatus
 );
@@ -174,6 +181,7 @@ router.delete(
   "/dealers/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   userController.deleteDealer
 );
 
@@ -188,6 +196,7 @@ router.put(
   "/dealers/:id/prices",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   validateDto(SetDealerPricesDto),
   userController.setDealerPrices
 );
@@ -290,6 +299,7 @@ router.put(
   protect,
   authorizeRole("SUPERADMIN"),
   authorizeRoleHierarchy("ADMIN"),
+  csrfProtection,
   validateDto(UpdateUserDto),
   userController.updateMe
 );
@@ -324,6 +334,7 @@ router.delete(
   protect,
   authorizeRole("SUPERADMIN"),
   authorizeRoleHierarchy("ADMIN"),
+  csrfProtection,
   userController.deleteUser
 );
 

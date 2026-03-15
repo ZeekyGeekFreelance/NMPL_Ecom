@@ -42,7 +42,6 @@ export const addressApi = apiSlice.injectEndpoints({
       query: () => ({
         url: "/addresses",
         method: "GET",
-        credentials: "include",
       }),
       providesTags: ["Address"],
     }),
@@ -51,7 +50,6 @@ export const addressApi = apiSlice.injectEndpoints({
         url: "/addresses",
         method: "POST",
         body,
-        credentials: "include",
       }),
       invalidatesTags: ["Address"],
     }),
@@ -59,7 +57,6 @@ export const addressApi = apiSlice.injectEndpoints({
       query: (addressId) => ({
         url: `/addresses/${addressId}/default`,
         method: "PATCH",
-        credentials: "include",
       }),
       invalidatesTags: ["Address"],
     }),
@@ -71,7 +68,6 @@ export const addressApi = apiSlice.injectEndpoints({
         url: `/addresses/${addressId}`,
         method: "PATCH",
         body,
-        credentials: "include",
       }),
       invalidatesTags: ["Address"],
     }),
@@ -79,7 +75,6 @@ export const addressApi = apiSlice.injectEndpoints({
       query: (addressId) => ({
         url: `/addresses/${addressId}`,
         method: "DELETE",
-        credentials: "include",
       }),
       invalidatesTags: ["Address"],
     }),

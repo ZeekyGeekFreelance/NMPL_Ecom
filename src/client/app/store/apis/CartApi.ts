@@ -6,7 +6,6 @@ export const cartApi = apiSlice.injectEndpoints({
       query: () => ({
         url: "/cart",
         method: "GET",
-        credentials: "include",
       }),
       providesTags: ["Cart"],
     }),
@@ -15,7 +14,6 @@ export const cartApi = apiSlice.injectEndpoints({
       query: () => ({
         url: "/cart/count",
         method: "GET",
-        credentials: "include",
       }),
       providesTags: ["Cart"],
     }),
@@ -25,7 +23,6 @@ export const cartApi = apiSlice.injectEndpoints({
         url: "/cart",
         method: "POST",
         body: productData,
-        credentials: "include",
       }),
       invalidatesTags: ["Cart"],
     }),
@@ -35,7 +32,6 @@ export const cartApi = apiSlice.injectEndpoints({
         url: `/cart/item/${id}`,
         method: "PUT",
         body: { quantity },
-        credentials: "include",
       }),
       invalidatesTags: ["Cart"],
     }),
@@ -44,7 +40,6 @@ export const cartApi = apiSlice.injectEndpoints({
       query: (id) => ({
         url: `/cart/item/${id}`,
         method: "DELETE",
-        credentials: "include",
       }),
       invalidatesTags: ["Cart"],
     }),

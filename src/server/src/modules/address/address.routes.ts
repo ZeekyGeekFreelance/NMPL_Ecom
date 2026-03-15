@@ -1,5 +1,6 @@
 import express from "express";
 import protect from "@/shared/middlewares/protect";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import { makeAddressController } from "./address.factory";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import { CreateAddressDto, UpdateAddressDto } from "./address.dto";
@@ -25,6 +26,7 @@ router.get("/", protect, addressController.getUserAddresses);
 router.post(
   "/",
   protect,
+  csrfProtection,
   validateDto(CreateAddressDto),
   addressController.createAddress
 );
@@ -56,10 +58,11 @@ router.get("/:addressId", protect, addressController.getAddressDetails);
 router.patch(
   "/:addressId",
   protect,
+  csrfProtection,
   validateDto(UpdateAddressDto),
   addressController.updateAddress
 );
-router.patch("/:addressId/default", protect, addressController.setDefaultAddress);
+router.patch("/:addressId/default", protect, csrfProtection, addressController.setDefaultAddress);
 
 /**
  * @swagger
@@ -84,6 +87,6 @@ router.patch("/:addressId/default", protect, addressController.setDefaultAddress
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.delete("/:addressId", protect, addressController.deleteAddress);
+router.delete("/:addressId", protect, csrfProtection, addressController.deleteAddress);
 
 export default router;

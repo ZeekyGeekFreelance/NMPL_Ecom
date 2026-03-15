@@ -1,4 +1,5 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type prismaClient from "@/infra/database/database.config";
 
 export const isDealerTableMissing = (error: unknown): boolean => {
   if (!(error instanceof Error)) {
@@ -23,7 +24,7 @@ export const isDealerTableMissing = (error: unknown): boolean => {
  * No separate mapping query. No N+1. No table scans.
  */
 export const getDealerPriceMap = async (
-  prisma: PrismaClient,
+  prisma: typeof prismaClient,
   userId: string | undefined,
   variantIds: string[]
 ): Promise<Map<string, number>> => {

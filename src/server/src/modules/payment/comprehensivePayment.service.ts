@@ -60,6 +60,9 @@ export class ComprehensivePaymentService {
         throw new AppError(404, "Order not found");
       }
 
+      // invoice is an array from the include â€” pick the first (latest) entry
+      const latestInvoice = Array.isArray(order.invoice) ? order.invoice[0] ?? null : (order.invoice ?? null);
+
       // 3. Check for existing confirmed payment
       if (order.paymentTransactions.length > 0) {
         throw new AppError(409, "Order is already paid");
@@ -83,7 +86,7 @@ export class ComprehensivePaymentService {
           chequeDate: request.chequeDate,
           chequeClearingDate: request.chequeClearingDate,
           status: PAYMENT_TXN_STATUS.CONFIRMED,
-          invoiceId: order.invoice?.id,
+          invoiceId: latestInvoice?.id ?? null,
         }
       });
 
@@ -105,7 +108,7 @@ export class ComprehensivePaymentService {
         data: {
           orderId: request.orderId,
           paymentTxnId: paymentTransaction.id,
-          invoiceId: order.invoice?.id,
+          invoiceId: latestInvoice?.id ?? null,
           actorUserId: adminUserId,
           actorRole: 'ADMIN',
           action: `ADMIN_MARKED_${request.paymentMethod}`,
@@ -174,6 +177,9 @@ export class ComprehensivePaymentService {
         throw new AppError(404, "Order not found");
       }
 
+      // invoice is an array from the include â€” pick the first (latest) entry
+      const latestInvoice = Array.isArray(order.invoice) ? order.invoice[0] ?? null : (order.invoice ?? null);
+
       // 3. Validate amount
       if (Math.abs(request.amount - order.amount) > 0.01) {
         throw new AppError(400, "Payment amount does not match order total");
@@ -201,7 +207,7 @@ export class ComprehensivePaymentService {
           gatewayPayload: request.gatewayPayload,
           paymentReceivedAt: new Date(),
           status: PAYMENT_TXN_STATUS.CONFIRMED,
-          invoiceId: order.invoice?.id,
+          invoiceId: latestInvoice?.id ?? null,
         }
       });
 
@@ -223,7 +229,7 @@ export class ComprehensivePaymentService {
         data: {
           orderId: request.orderId,
           paymentTxnId: paymentTransaction.id,
-          invoiceId: order.invoice?.id,
+          invoiceId: latestInvoice?.id ?? null,
           actorUserId: order.userId,
           actorRole: order.customerRoleSnapshot || 'USER',
           action: 'GATEWAY_PAYMENT_CONFIRMED',
@@ -392,7 +398,7 @@ export class ComprehensivePaymentService {
         debitAmount: 0,
         creditAmount: amount,
         balanceAfter: newBalance,
-        notes: `Payment received - amount paid: ₹${amount}`
+        notes: `Payment received - amount paid: â‚¹${amount}`
       }
     });
   }
@@ -494,23 +500,16 @@ export class ComprehensivePaymentService {
     limit?: number;
     offset?: number;
   }) {
+    // Outstanding = pay-later orders that have been DELIVERED (payment now owed)
+    // or CONFIRMED (stock released, awaiting delivery) and are not yet paid.
+    // Explicitly exclude PENDING_VERIFICATION / WAITLISTED / AWAITING_PAYMENT
+    // orders — those are not yet "outstanding" from a collections standpoint.
     const where: any = {
       isPayLater: true,
+      status: { in: ['DELIVERED', 'CONFIRMED'] },
       paymentTransactions: {
         none: { status: 'CONFIRMED' }
       },
-      OR: [
-        { payment: { is: null } },
-        { payment: { is: { status: { not: 'PAID' } } } }
-      ],
-      AND: [
-        {
-          OR: [
-            { invoice: { is: null } },
-            { invoice: { is: { paymentStatus: { not: 'PAID' } } } }
-          ]
-        }
-      ]
     };
 
     if (filters?.dealerId) {
@@ -576,21 +575,83 @@ export class ComprehensivePaymentService {
   }
 
   /**
-   * Get dealer credit ledger entries
+   * Get dealer credit ledger entries, enriched with full PaymentTransaction details.
+   *
+   * DealerCreditLedger.paymentTxnId is a bare string field (no Prisma relation),
+   * so we batch-fetch the linked PaymentTransaction rows and stitch them in.
+   * This connects PAY-XXXXXXXX in the UI to real payment data: method, gateway ID
+   * (Razorpay pay_mock_...), UTR/cheque reference, and the admin who recorded it.
    */
   async getDealerCreditLedger(dealerId: string) {
     const entries = await prisma.dealerCreditLedger.findMany({
       where: { dealerId },
       orderBy: { createdAt: 'desc' },
-      take: 100 // Limit to recent 100 entries
+      take: 100,
     });
 
-    const currentBalance = entries.length > 0 ? entries[0].balanceAfter : 0;
-    
+    // Batch-lookup all PaymentTransaction rows referenced by these ledger entries.
+    const txnIds = entries
+      .map((e) => e.paymentTxnId)
+      .filter((id): id is string => Boolean(id));
+
+    const txnMap = new Map<string, any>();
+    if (txnIds.length > 0) {
+      const txns = await prisma.paymentTransaction.findMany({
+        where: { id: { in: txnIds } },
+        select: {
+          id: true,
+          amount: true,
+          paymentMethod: true,
+          paymentSource: true,
+          gatewayName: true,
+          gatewayPaymentId: true,
+          utrNumber: true,
+          bankName: true,
+          chequeNumber: true,
+          paymentReceivedAt: true,
+          status: true,
+          notes: true,
+          recordedBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+      txns.forEach((t) => txnMap.set(t.id, t));
+    }
+
+    // Batch-fetch Transaction IDs for every order in the ledger.
+    // This lets the frontend build a clickable /dashboard/transactions/TXN-xxx link
+    // from each credit ledger entry without a second round-trip.
+    const ledgerOrderIds = entries
+      .map((e) => e.orderId)
+      .filter((id): id is string => Boolean(id));
+
+    const orderTransactionMap = new Map<string, string>();
+    if (ledgerOrderIds.length > 0) {
+      const orderTxns = await prisma.transaction.findMany({
+        where: { orderId: { in: ledgerOrderIds } },
+        select: { id: true, orderId: true },
+      });
+      orderTxns.forEach((t) => orderTransactionMap.set(t.orderId, t.id));
+    }
+
+    const enrichedEntries = entries.map((entry) => ({
+      ...entry,
+      // null for ORDER_DELIVERED/ORDER_CANCELLED; populated for PAYMENT_RECEIVED.
+      paymentTransaction: entry.paymentTxnId
+        ? (txnMap.get(entry.paymentTxnId) ?? null)
+        : null,
+      // Transaction ID for the order — enables deep navigation to transaction detail page.
+      transactionId: entry.orderId
+        ? (orderTransactionMap.get(entry.orderId) ?? null)
+        : null,
+    }));
+
+    const currentBalance =
+      enrichedEntries.length > 0 ? enrichedEntries[0].balanceAfter : 0;
+
     return {
-      entries,
+      entries: enrichedEntries,
       currentBalance,
-      totalEntries: entries.length
+      totalEntries: enrichedEntries.length,
     };
   }
 

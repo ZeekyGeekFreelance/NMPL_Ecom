@@ -1,6 +1,7 @@
 import express from "express";
 import authorizeRole from "@/shared/middlewares/authorizeRole";
 import protect from "@/shared/middlewares/protect";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import { makeProductController } from "./product.factory";
 import upload from "@/shared/middlewares/upload";
 
@@ -108,6 +109,7 @@ router.put(
   "/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   upload.array("images", 10),
   productController.updateProduct
 );
@@ -152,6 +154,7 @@ router.post(
   "/",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   upload.any(),
   productController.createProduct
 );
@@ -188,6 +191,7 @@ router.post(
   "/bulk",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   upload.single("file"),
   productController.bulkCreateProducts
 );
@@ -221,6 +225,7 @@ router.delete(
   "/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   productController.deleteProduct
 );
 

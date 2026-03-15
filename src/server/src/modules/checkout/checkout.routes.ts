@@ -1,5 +1,6 @@
 import express from "express";
 import protect from "@/shared/middlewares/protect";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import { makeCheckoutController } from "./checkout.factory";
 import { validateDto } from "@/shared/middlewares/validateDto";
 import { CheckoutSelectionDto } from "./checkout.dto";
@@ -29,6 +30,7 @@ const checkoutController = makeCheckoutController();
 router.post(
   "/summary",
   protect,
+  csrfProtection,
   validateDto(CheckoutSelectionDto),
   checkoutController.getCheckoutSummary
 );
@@ -37,6 +39,7 @@ router.post(
   "/",
   protect,
   orderRateLimiter,
+  csrfProtection,
   validateDto(CheckoutSelectionDto),
   checkoutController.initiateCheckout
 );

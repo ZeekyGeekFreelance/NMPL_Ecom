@@ -2,6 +2,7 @@ import protect from "@/shared/middlewares/protect";
 import { makeTransactionController } from "./transaction.factory";
 import express from "express";
 import authorizeRole from "@/shared/middlewares/authorizeRole";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 
 const router = express.Router();
 const transactionController = makeTransactionController();
@@ -92,6 +93,7 @@ router.put(
   "/quotation/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   transactionController.updateTransactionQuotation
 );
 
@@ -99,6 +101,7 @@ router.put(
   "/status/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   transactionController.updateTransactionStatus
 );
 
@@ -131,6 +134,7 @@ router.delete(
   "/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   transactionController.deleteTransaction
 );
 

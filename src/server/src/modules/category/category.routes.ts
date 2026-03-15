@@ -1,6 +1,7 @@
 import express from "express";
 import protect from "@/shared/middlewares/protect";
 import authorizeRole from "@/shared/middlewares/authorizeRole";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import { makeCategoryController } from "./category.factory";
 import upload from "@/shared/middlewares/upload";
 
@@ -78,6 +79,7 @@ router.post(
   "/",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   upload.array("images", 5),
   categoryController.createCategory
 );
@@ -111,6 +113,7 @@ router.delete(
   "/:id",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
+  csrfProtection,
   categoryController.deleteCategory
 );
 

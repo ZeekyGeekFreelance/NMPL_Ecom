@@ -2,6 +2,7 @@ import { Router } from "express";
 import { makeAnalyticsController } from "./analytics.factory";
 import protect from "@/shared/middlewares/protect";
 import authorizeRole from "@/shared/middlewares/authorizeRole";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 
 const router = Router();
 const controller = makeAnalyticsController();
@@ -36,8 +37,8 @@ const allowDashboardRoles = authorizeRole("ADMIN", "SUPERADMIN");
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.post("/interactions", protect, controller.createInteraction);
-router.post("/interactions/bulk", protect, controller.createBulkInteractions);
+router.post("/interactions", protect, csrfProtection, controller.createInteraction);
+router.post("/interactions/bulk", protect, csrfProtection, controller.createBulkInteractions);
 
 /**
  * @swagger

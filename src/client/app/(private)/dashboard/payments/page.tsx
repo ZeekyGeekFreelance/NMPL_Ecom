@@ -29,7 +29,7 @@ import Modal from "@/app/components/organisms/Modal";
 import PaymentRecordingForm from "./PaymentRecordingForm";
 import CreditLedgerModal from "./CreditLedgerModal";
 import PaymentAuditModal from "./PaymentAuditModal";
-import { toOrderReference, toTransactionReference } from "@/app/lib/utils/accountReference";
+import { toOrderReference, toTransactionReference, toPaymentReference } from "@/app/lib/utils/accountReference";
 import { normalizeOrderStatus } from "@/app/lib/orderLifecycle";
 
 type PaymentFilter = "ALL" | "DUE" | "OVERDUE";
@@ -100,6 +100,8 @@ const PaymentsDashboard = () => {
           ? order.invoice[0]
           : order.invoice;
         const invoiceNumber = String(invoice?.invoiceNumber || "").toLowerCase();
+        const paymentRefs = (order.paymentTransactions || [])
+          .map((pt: any) => toPaymentReference(pt.id).toLowerCase());
 
         return (
           order.user.name.toLowerCase().includes(search) ||
@@ -109,7 +111,8 @@ const PaymentsDashboard = () => {
           rawOrderId.includes(search) ||
           transactionRef.includes(search) ||
           rawTransactionId.includes(search) ||
-          invoiceNumber.includes(search)
+          invoiceNumber.includes(search) ||
+          paymentRefs.some((ref: string) => ref.includes(search))
         );
       });
     }
@@ -389,6 +392,17 @@ const PaymentsDashboard = () => {
                             <p className="text-xs text-gray-500">
                               Invoice: {invoice?.invoiceNumber || "Not issued"}
                             </p>
+                            {order.paymentTransactions && order.paymentTransactions.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => openAuditTrail(order.id)}
+                                className="inline-flex items-center gap-1 text-xs font-mono font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
+                                title="Click to view audit trail for this payment"
+                              >
+                                <Eye size={10} />
+                                {toPaymentReference(order.paymentTransactions[0].id)}
+                              </button>
+                            )}
                             <p className="text-xs text-gray-500">
                               {order.orderItems?.length || 0} items
                             </p>

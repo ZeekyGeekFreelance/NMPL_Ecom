@@ -8,6 +8,7 @@ import { RazorpayGatewayService } from "./razorpayGateway.service";
 import { PaymentNotificationService } from "./paymentNotification.service";
 import { makeLogsService } from "../logs/logs.factory";
 import { PAYMENT_METHOD_TYPE } from "@prisma/client";
+import prisma from "@/infra/database/database.config";
 
 export class PaymentController {
   private logsService = makeLogsService();
@@ -337,6 +338,67 @@ export class PaymentController {
   /**
    * Map gateway payment method to our enum
    */
+  /**
+   * GET /payments/summary — admin dashboard header cards.
+   * Returns outstanding balance totals, overdue counts, and recent payments.
+   */
+  getPaymentSummary = asyncHandler(async (req: Request, res: Response) => {
+    const userRole = req.user?.role;
+    if (userRole !== "ADMIN" && userRole !== "SUPERADMIN") {
+      throw new AppError(403, "Only admins can view payment summary");
+    }
+
+    const [outstandingOrders, overdueOrders, recentPayments] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          isPayLater: true,
+          status: { in: ["DELIVERED", "CONFIRMED"] },
+          paymentTransactions: { none: { status: "CONFIRMED" } },
+        },
+        select: { id: true, amount: true, paymentDueDate: true },
+      }),
+      prisma.order.findMany({
+        where: {
+          isPayLater: true,
+          status: { in: ["DELIVERED", "CONFIRMED"] },
+          paymentTransactions: { none: { status: "CONFIRMED" } },
+          paymentDueDate: { lt: new Date() },
+        },
+        select: { id: true, amount: true },
+      }),
+      prisma.paymentTransaction.findMany({
+        where: { status: "CONFIRMED" },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          orderId: true,
+          amount: true,
+          paymentMethod: true,
+          createdAt: true,
+          user: { select: { name: true, email: true } },
+        },
+      }),
+    ]);
+
+    const totalOutstanding = outstandingOrders.reduce(
+      (s, o) => s + Number(o.amount), 0
+    );
+    const totalOverdue = overdueOrders.reduce(
+      (s, o) => s + Number(o.amount), 0
+    );
+
+    sendResponse(res, 200, {
+      data: {
+        totalOutstanding,
+        totalOverdue,
+        outstandingOrdersCount: outstandingOrders.length,
+        overdueOrdersCount: overdueOrders.length,
+        recentPayments,
+      },
+      message: "Payment summary retrieved successfully",
+    });
+  });
   private mapPaymentMethod(gatewayMethod: string): PAYMENT_METHOD_TYPE {
     const methodMap: Record<string, PAYMENT_METHOD_TYPE> = {
       upi: PAYMENT_METHOD_TYPE.UPI,

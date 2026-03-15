@@ -920,21 +920,32 @@ export class ProductService {
           if (existingVariant) {
             retainedVariantIds.add(existingVariant.id);
 
+            // Build update data explicitly to avoid dynamic object construction
+            const updateData: {
+              sku: string;
+              price: number;
+              defaultDealerPrice?: number | null;
+              stock: number;
+              lowStockThreshold: number;
+              barcode: string | null;
+              images: string[];
+            } = {
+              sku: variant.sku,
+              price: variant.price,
+              stock: variant.stock,
+              lowStockThreshold: variant.lowStockThreshold || 10,
+              barcode: variant.barcode || null,
+              images: variant.images || [],
+            };
+
+            // Only update defaultDealerPrice if explicitly provided in payload
+            if ("defaultDealerPrice" in variant) {
+              updateData.defaultDealerPrice = variant.defaultDealerPrice ?? null;
+            }
+
             await tx.productVariant.update({
               where: { id: existingVariant.id },
-              data: {
-                sku: variant.sku,
-                price: variant.price,
-                // Only update defaultDealerPrice if explicitly provided in payload.
-                // undefined = caller did not touch it, so leave DB value intact.
-                ...("defaultDealerPrice" in variant && {
-                  defaultDealerPrice: variant.defaultDealerPrice ?? null,
-                }),
-                stock: variant.stock,
-                lowStockThreshold: variant.lowStockThreshold || 10,
-                barcode: variant.barcode || null,
-                images: variant.images || [],
-              },
+              data: updateData,
             });
 
             await tx.productVariantAttribute.deleteMany({
@@ -942,12 +953,17 @@ export class ProductService {
             });
 
             if (variant.attributes.length > 0) {
-              await tx.productVariantAttribute.createMany({
-                data: variant.attributes.map((attribute) => ({
+              // Build attribute data explicitly to avoid dynamic object construction
+              const attributeData = variant.attributes.map((attribute) => {
+                return {
                   variantId: existingVariant.id,
                   attributeId: attribute.attributeId,
                   valueId: attribute.valueId,
-                })),
+                };
+              });
+              
+              await tx.productVariantAttribute.createMany({
+                data: attributeData,
               });
             }
 

@@ -130,6 +130,8 @@ export const seedDev = async (): Promise<void> => {
     );
   }
 
+  const seedPassword = process.env.DEV_SEED_PASSWORD || "dev-password-placeholder";
+
   const adminUser = await prisma.user.upsert({
     where: { email: "dev-admin@example.com" },
     update: {
@@ -139,7 +141,7 @@ export const seedDev = async (): Promise<void> => {
     create: {
       email: "dev-admin@example.com",
       name: "Dev Admin",
-      password: "dev-password-placeholder",
+      password: seedPassword,
       role: ROLE.ADMIN,
     },
   });
@@ -153,7 +155,7 @@ export const seedDev = async (): Promise<void> => {
     create: {
       email: "dev-user@example.com",
       name: "Dev User",
-      password: "dev-password-placeholder",
+      password: seedPassword,
       role: ROLE.USER,
     },
   });

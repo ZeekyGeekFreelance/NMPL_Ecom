@@ -30,7 +30,20 @@ import {
   type OrderLifecycleStatus,
 } from "@/app/lib/orderLifecycle";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
-import { toOrderReference, toTransactionReference } from "@/app/lib/utils/accountReference";
+import { toTransactionReference } from "@/app/lib/utils/accountReference";
+import { Loader2 } from "lucide-react";
+
+/** True when the error is a transient server / infra failure (5xx, network). */
+const isTransientServerError = (err: unknown): boolean => {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { status?: unknown };
+  const s = Number(e.status);
+  return (
+    s >= 500 ||
+    (e.status as string) === "FETCH_ERROR" ||
+    (e.status as string) === "PARSING_ERROR"
+  );
+};
 
 const TransactionDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -39,10 +52,10 @@ const TransactionDetailsPage = () => {
   const searchParams = useSearchParams();
   const { showToast } = useToast();
   const { user, isLoading: isAuthLoading } = useAuth();
+
   const [newStatus, setNewStatus] = useState<OrderLifecycleStatus | "">("");
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
-  const [isStatusConfirmModalOpen, setIsStatusConfirmModalOpen] =
-    useState(false);
+  const [isStatusConfirmModalOpen, setIsStatusConfirmModalOpen] = useState(false);
   const [isQuotationModalOpen, setIsQuotationModalOpen] = useState(false);
   const [isQuotationConfirmOpen, setIsQuotationConfirmOpen] = useState(false);
   const [hasProcessedQuickAction, setHasProcessedQuickAction] = useState(false);
@@ -57,6 +70,7 @@ const TransactionDetailsPage = () => {
       originalQuantity: number;
     }>
   >([]);
+
   const [updateTransactionStatus, { isLoading: isUpdating }] =
     useUpdateTransactionStatusMutation();
   const [issueQuotation, { isLoading: isIssuingQuotation }] =
@@ -64,36 +78,45 @@ const TransactionDetailsPage = () => {
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
 
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-  } = useGetTransactionQuery(id, {
+  const { data, isLoading, error, refetch } = useGetTransactionQuery(id, {
     skip: !id || !isAdmin,
-    pollingInterval: 8000,
+    // Always refetch on mount so a fresh navigation never serves stale cache
+    refetchOnMountOrArgChange: true,
+    // Short poll so cold-start 503s self-recover within a few seconds
+    pollingInterval: 5000,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
 
   const transaction = data?.transaction;
   const order = transaction?.order;
-  const paymentManagementHref = useMemo(() => {
-    if (!transaction) {
-      return "/dashboard/payments";
-    }
 
-    const params = new URLSearchParams();
-    if (transaction.id) {
-      params.set("transaction", toTransactionReference(transaction.id));
-    }
-    if (transaction.orderId) {
-      params.set("order", toOrderReference(transaction.orderId));
-    }
+  // Dealer user ID — used to build contextual navigation links
+  const dealerId: string | null = order?.user?.id ?? null;
 
-    const query = params.toString();
-    return query ? `/dashboard/payments?${query}` : "/dashboard/payments";
-  }, [transaction?.id, transaction?.orderId]);
+  // Determine whether outstanding balance exists (affects header button label)
+  const paymentTransactions = Array.isArray(order?.paymentTransactions)
+    ? order.paymentTransactions
+    : [];
+  const confirmedTxns = paymentTransactions.filter((t: any) => t.status === "CONFIRMED");
+  const totalPaid = confirmedTxns.reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
+  const amountDue = Math.max(0, Number(order?.amount ?? 0) - totalPaid);
+  const isPayLater = !!order?.isPayLater;
+  const isSettled = amountDue <= 0;
+
+  /**
+   * Context-aware payment navigation:
+   *   pay-later + outstanding balance  -> /dashboard/payments  (record / track payment)
+   *   pay-later + settled OR no pay-later with known dealer -> /dashboard/dealers?paymentHistory=ID
+   *   no dealer (retail order) -> /dashboard/payments
+   */
+  const paymentContextHref = useMemo(() => {
+    if (!transaction) return null;
+    if (isPayLater && !isSettled) return "/dashboard/payments";
+    if (dealerId) return `/dashboard/dealers?paymentHistory=${dealerId}`;
+    return "/dashboard/payments";
+  }, [transaction, isPayLater, isSettled, dealerId]);
+
   const transactionReferenceForDisplay = transaction?.id
     ? toTransactionReference(transaction.id)
     : id.toUpperCase().startsWith("TXN-")
@@ -113,44 +136,24 @@ const TransactionDetailsPage = () => {
     return base;
   }, [currentStatus, order?.isPayLater]);
 
-  const statusOptions = useMemo(
-    () => {
-      if (!availableNextStatuses.length) {
-        return [
-          {
-            label: getOrderStatusLabel(currentStatus),
-            value: currentStatus,
-          },
-        ];
-      }
-
-      return availableNextStatuses.map((status) => {
-        const existingOption = ORDER_STATUS_OPTIONS.find(
-          (option) => option.value === status
-        );
-
-        return (
-          existingOption || {
-            label: getOrderStatusLabel(status),
-            value: status,
-          }
-        );
-      });
-    },
-    [availableNextStatuses, currentStatus]
-  );
+  const statusOptions = useMemo(() => {
+    if (!availableNextStatuses.length) {
+      return [{ label: getOrderStatusLabel(currentStatus), value: currentStatus }];
+    }
+    return availableNextStatuses.map((status) => {
+      const existing = ORDER_STATUS_OPTIONS.find((o) => o.value === status);
+      return existing || { label: getOrderStatusLabel(status), value: status };
+    });
+  }, [availableNextStatuses, currentStatus]);
 
   const selectedStatus = useMemo(
     () =>
-      normalizeOrderStatus(
-        newStatus || availableNextStatuses[0] || transaction?.status
-      ),
+      normalizeOrderStatus(newStatus || availableNextStatuses[0] || transaction?.status),
     [newStatus, availableNextStatuses, transaction?.status]
   );
 
   const canUpdateStatus =
-    availableNextStatuses.length > 0 &&
-    availableNextStatuses.includes(selectedStatus);
+    availableNextStatuses.length > 0 && availableNextStatuses.includes(selectedStatus);
   const isIrreversibleStatusTransition =
     selectedStatus === "QUOTATION_REJECTED" ||
     selectedStatus === "QUOTATION_EXPIRED" ||
@@ -170,20 +173,14 @@ const TransactionDetailsPage = () => {
         row.price >= 0
     );
 
-  const handleBack = () => {
-    router.push("/dashboard/transactions");
-  };
+  const handleBack = () => router.push("/dashboard/transactions");
 
   const executeStatusUpdate = async (params: {
     id: string;
     status: OrderLifecycleStatus;
   }) => {
     try {
-      await updateTransactionStatus({
-        id: params.id,
-        status: params.status,
-      }).unwrap();
-
+      await updateTransactionStatus({ id: params.id, status: params.status }).unwrap();
       showToast("Transaction status updated successfully", "success");
       setNewStatus("");
       refetch();
@@ -205,23 +202,14 @@ const TransactionDetailsPage = () => {
       setIsStatusConfirmModalOpen(false);
       return;
     }
-
     setIsStatusConfirmModalOpen(false);
-    await executeStatusUpdate({
-      id,
-      status: selectedStatus,
-    });
+    await executeStatusUpdate({ id, status: selectedStatus });
   };
 
-  const handleCancelStatusUpdate = () => {
-    setIsStatusConfirmModalOpen(false);
-  };
+  const handleCancelStatusUpdate = () => setIsStatusConfirmModalOpen(false);
 
   const handleOpenQuotationModal = useCallback(() => {
-    if (!canEditQuotation) {
-      return;
-    }
-
+    if (!canEditQuotation) return;
     const originalOrderLog = Array.isArray(order?.quotationLogs)
       ? order.quotationLogs.find(
           (log: any) => String(log?.event || "").toUpperCase() === "ORIGINAL_ORDER"
@@ -234,20 +222,13 @@ const TransactionDetailsPage = () => {
           entry && typeof entry === "object"
             ? (entry as Record<string, unknown>)
             : null;
-        if (!row) {
-          continue;
-        }
-
+        if (!row) continue;
         const orderItemId = String(row.orderItemId || "").trim();
         const quantity = Number(row.quantity);
-        if (!orderItemId || !Number.isInteger(quantity) || quantity <= 0) {
-          continue;
-        }
-
+        if (!orderItemId || !Number.isInteger(quantity) || quantity <= 0) continue;
         originalQuantityByOrderItemId.set(orderItemId, quantity);
       }
     }
-
     const rows = Array.isArray(order?.orderItems)
       ? order.orderItems.map((item: any) => ({
           orderItemId: item.id,
@@ -263,9 +244,7 @@ const TransactionDetailsPage = () => {
           originalQuantity: Math.max(
             1,
             Number(
-              originalQuantityByOrderItemId.get(item.id) ||
-                Number(item.quantity) ||
-                1
+              originalQuantityByOrderItemId.get(item.id) || Number(item.quantity) || 1
             )
           ),
         }))
@@ -281,12 +260,9 @@ const TransactionDetailsPage = () => {
       hasProcessedQuickAction ||
       isLoading ||
       !transaction
-    ) {
+    )
       return;
-    }
-
     setHasProcessedQuickAction(true);
-
     if (canEditQuotation) {
       handleOpenQuotationModal();
     } else {
@@ -295,7 +271,6 @@ const TransactionDetailsPage = () => {
         "error"
       );
     }
-
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.delete("quickAction");
     const nextQuery = nextParams.toString();
@@ -322,8 +297,8 @@ const TransactionDetailsPage = () => {
     quantityValue: string
   ) => {
     const parsedQuantity = Number.parseInt(quantityValue, 10);
-    setQuotationRows((prevRows) =>
-      prevRows.map((row) =>
+    setQuotationRows((prev) =>
+      prev.map((row) =>
         row.orderItemId === orderItemId
           ? {
               ...row,
@@ -345,23 +320,17 @@ const TransactionDetailsPage = () => {
     priceValue: string
   ) => {
     const parsedPrice = Number.parseFloat(priceValue);
-    setQuotationRows((prevRows) =>
-      prevRows.map((row) =>
+    setQuotationRows((prev) =>
+      prev.map((row) =>
         row.orderItemId === orderItemId
-          ? {
-              ...row,
-              price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
-            }
+          ? { ...row, price: Number.isFinite(parsedPrice) ? parsedPrice : 0 }
           : row
       )
     );
   };
 
   const handleIssueQuotation = async () => {
-    if (!id || !canSubmitQuotation || quotationRows.length === 0) {
-      return;
-    }
-
+    if (!id || !canSubmitQuotation || quotationRows.length === 0) return;
     try {
       await issueQuotation({
         id,
@@ -371,7 +340,6 @@ const TransactionDetailsPage = () => {
           price: Number(row.price.toFixed(2)),
         })),
       }).unwrap();
-
       setIsQuotationModalOpen(false);
       showToast("Quotation updated and sent to customer", "success");
       refetch();
@@ -387,9 +355,7 @@ const TransactionDetailsPage = () => {
   };
 
   const requestIssueQuotation = () => {
-    if (!canSubmitQuotation || isIssuingQuotation) {
-      return;
-    }
+    if (!canSubmitQuotation || isIssuingQuotation) return;
     setIsQuotationConfirmOpen(true);
   };
 
@@ -400,7 +366,6 @@ const TransactionDetailsPage = () => {
 
   const handleDownloadInvoice = useCallback(async () => {
     if (!order?.id) return;
-
     setIsDownloadingInvoice(true);
     try {
       await downloadInvoiceByOrderId(order.id);
@@ -416,9 +381,8 @@ const TransactionDetailsPage = () => {
     }
   }, [order?.id, showToast]);
 
-  if (isAuthLoading) {
-    return <CustomLoader />;
-  }
+  // ── Guard: auth loading ───────────────────────────────────────────────────
+  if (isAuthLoading) return <CustomLoader />;
 
   if (!isAdmin) {
     return (
@@ -429,6 +393,7 @@ const TransactionDetailsPage = () => {
     );
   }
 
+  // ── Guard: query loading ──────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="p-6">
@@ -443,7 +408,36 @@ const TransactionDetailsPage = () => {
     );
   }
 
+  // ── Guard: error — distinguish transient server errors from genuine 404s ──
   if (error || !transaction) {
+    // Server is cold-starting or temporarily unavailable: show a retrying
+    // state instead of "not found".  The 5-second poll will auto-recover.
+    if (isTransientServerError(error)) {
+      return (
+        <div className="p-6">
+          <div className="flex flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50 p-10 text-center">
+            <Loader2
+              size={36}
+              className="animate-spin text-amber-500 mb-4"
+            />
+            <p className="text-base font-semibold text-amber-800">
+              Connecting to server&hellip;
+            </p>
+            <p className="mt-1 text-sm text-amber-600">
+              The server is initializing. This page will reload automatically.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="mt-5 rounded-md border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+            >
+              Retry now
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <ErrorState
         message={
@@ -455,6 +449,7 @@ const TransactionDetailsPage = () => {
     );
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <PageHeader
@@ -470,17 +465,27 @@ const TransactionDetailsPage = () => {
         newStatus={selectedStatus}
         setNewStatus={setNewStatus}
         statusOptions={statusOptions}
-        paymentManagementHref={paymentManagementHref}
+        paymentContextHref={paymentContextHref}
+        isPayLater={isPayLater}
+        isSettled={isSettled}
+        dealerId={dealerId}
       />
 
       <TransactionOverview transaction={transaction} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <OrderInformation order={order} className="lg:col-span-2" />
-        <CustomerInformation user={order?.user} customerType={order?.customerType} />
+        <CustomerInformation
+          user={order?.user}
+          customerType={order?.customerType}
+        />
       </div>
 
-      <PaymentInformation payment={order?.payment} order={order} />
+      <PaymentInformation
+        payment={order?.payment}
+        order={order}
+        dealerId={dealerId}
+      />
 
       <ShippingAddress address={order?.address} />
 
@@ -490,6 +495,7 @@ const TransactionDetailsPage = () => {
         order={order}
       />
 
+      {/* ── Quotation editor modal ─────────────────────────────────────────── */}
       <Modal
         open={isQuotationModalOpen}
         onClose={handleCloseQuotationModal}
@@ -501,9 +507,8 @@ const TransactionDetailsPage = () => {
               Edit Quotation and Reserve Stock
             </h2>
             <p className="mt-2 text-sm text-gray-600">
-              Update final quantity and unit price for each line item before
-              issuing quotation. Quoted quantity cannot exceed original ordered
-              units.
+              Update final quantity and unit price for each line item before issuing
+              quotation. Quoted quantity cannot exceed original ordered units.
             </p>
           </div>
 
@@ -519,58 +524,32 @@ const TransactionDetailsPage = () => {
               <table className="w-full table-fixed divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="w-[20%] px-3 py-2 text-left font-medium text-gray-600">
-                      Product
-                    </th>
-                    <th className="w-[18%] px-3 py-2 text-left font-medium text-gray-600">
-                      SKU
-                    </th>
-                    <th className="w-[10%] px-3 py-2 text-left font-medium text-gray-600">
-                      Available
-                    </th>
-                    <th className="w-[10%] px-3 py-2 text-left font-medium text-gray-600">
-                      Original Qty
-                    </th>
-                    <th className="w-[16%] px-3 py-2 text-left font-medium text-gray-600">
-                      Quoted Qty
-                    </th>
-                    <th className="w-[13%] px-3 py-2 text-left font-medium text-gray-600">
-                      Unit Price
-                    </th>
-                    <th className="w-[13%] px-3 py-2 text-right font-medium text-gray-600">
-                      Line Total
-                    </th>
+                    <th className="w-[20%] px-3 py-2 text-left font-medium text-gray-600">Product</th>
+                    <th className="w-[18%] px-3 py-2 text-left font-medium text-gray-600">SKU</th>
+                    <th className="w-[10%] px-3 py-2 text-left font-medium text-gray-600">Available</th>
+                    <th className="w-[10%] px-3 py-2 text-left font-medium text-gray-600">Original Qty</th>
+                    <th className="w-[16%] px-3 py-2 text-left font-medium text-gray-600">Quoted Qty</th>
+                    <th className="w-[13%] px-3 py-2 text-left font-medium text-gray-600">Unit Price</th>
+                    <th className="w-[13%] px-3 py-2 text-right font-medium text-gray-600">Line Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {quotationRows.map((row) => {
                     const exceedsAvailableStock = row.quantity > row.availableStock;
-                    const exceedsOriginalQuantity =
-                      row.quantity > row.originalQuantity;
+                    const exceedsOriginalQuantity = row.quantity > row.originalQuantity;
                     const hasQuantityError =
                       exceedsAvailableStock ||
                       exceedsOriginalQuantity ||
                       !Number.isInteger(row.quantity) ||
                       row.quantity <= 0;
-
                     return (
                       <tr
                         key={row.orderItemId}
                         className={hasQuantityError ? "bg-red-50/40" : undefined}
                       >
-                        <td className="break-words px-3 py-2 text-gray-900">
-                          {row.productName}
-                        </td>
-                        <td className="break-all px-3 py-2 font-mono text-xs text-gray-700">
-                          {row.sku}
-                        </td>
-                        <td
-                          className={`px-3 py-2 ${
-                            exceedsAvailableStock
-                              ? "font-semibold text-red-700"
-                              : "text-gray-900"
-                          }`}
-                        >
+                        <td className="break-words px-3 py-2 text-gray-900">{row.productName}</td>
+                        <td className="break-all px-3 py-2 font-mono text-xs text-gray-700">{row.sku}</td>
+                        <td className={`px-3 py-2 ${exceedsAvailableStock ? "font-semibold text-red-700" : "text-gray-900"}`}>
                           {row.availableStock}
                         </td>
                         <td className="px-3 py-2">{row.originalQuantity}</td>
@@ -581,11 +560,8 @@ const TransactionDetailsPage = () => {
                             max={row.originalQuantity}
                             step={1}
                             value={Number.isFinite(row.quantity) ? row.quantity : ""}
-                            onChange={(event) =>
-                              handleQuotationQuantityChange(
-                                row.orderItemId,
-                                event.target.value
-                              )
+                            onChange={(e) =>
+                              handleQuotationQuantityChange(row.orderItemId, e.target.value)
                             }
                             className={`w-full rounded-md border px-2 py-1 ${
                               hasQuantityError
@@ -595,8 +571,7 @@ const TransactionDetailsPage = () => {
                           />
                           {exceedsAvailableStock && (
                             <p className="mt-1 text-xs font-medium text-red-700">
-                              Exceeds available stock by{" "}
-                              {row.quantity - row.availableStock} unit(s).
+                              Exceeds available stock by {row.quantity - row.availableStock} unit(s).
                             </p>
                           )}
                         </td>
@@ -606,11 +581,8 @@ const TransactionDetailsPage = () => {
                             min={0}
                             step="0.01"
                             value={Number.isFinite(row.price) ? row.price : ""}
-                            onChange={(event) =>
-                              handleQuotationPriceChange(
-                                row.orderItemId,
-                                event.target.value
-                              )
+                            onChange={(e) =>
+                              handleQuotationPriceChange(row.orderItemId, e.target.value)
                             }
                             className="w-full rounded-md border border-gray-300 px-2 py-1"
                           />
@@ -634,7 +606,6 @@ const TransactionDetailsPage = () => {
                   .reduce((sum, row) => sum + row.quantity * row.price, 0)
                   .toFixed(2)}
               </p>
-
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
@@ -663,12 +634,8 @@ const TransactionDetailsPage = () => {
         type={isIrreversibleStatusTransition ? "danger" : "warning"}
         message={`Are you sure you want to update ${transactionReferenceForDisplay} from ${getOrderStatusLabel(
           currentStatus
-        )} to ${getOrderStatusLabel(
-          selectedStatus
-        )}?${
-          isIrreversibleStatusTransition
-            ? " This action cannot be undone."
-            : ""
+        )} to ${getOrderStatusLabel(selectedStatus)}?${
+          isIrreversibleStatusTransition ? " This action cannot be undone." : ""
         }`}
         onConfirm={handleConfirmStatusUpdate}
         onCancel={handleCancelStatusUpdate}
@@ -684,9 +651,7 @@ const TransactionDetailsPage = () => {
         confirmLabel="Send Quotation"
         onConfirm={handleConfirmIssueQuotation}
         onCancel={() => {
-          if (isIssuingQuotation) {
-            return;
-          }
+          if (isIssuingQuotation) return;
           setIsQuotationConfirmOpen(false);
         }}
         isConfirming={isIssuingQuotation}
@@ -697,4 +662,3 @@ const TransactionDetailsPage = () => {
 };
 
 export default withAuth(TransactionDetailsPage);
-

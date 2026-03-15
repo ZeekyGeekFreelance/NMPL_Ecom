@@ -555,7 +555,7 @@ const appConfig = {
       devDefault: 900,
     }) as number,
     refreshAbsoluteTtlSeconds: parsePositiveInt("REFRESH_TOKEN_ABS_TTL_SECONDS", {
-      devDefault: 86400,
+      devDefault: 604800, // 7 days — must match cookieOptions.maxAge
     }) as number,
   },
   registrationOtp: {

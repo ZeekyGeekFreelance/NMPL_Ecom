@@ -1,5 +1,7 @@
 import express from "express";
 import protect from "@/shared/middlewares/protect";
+import authorizeRole from "@/shared/middlewares/authorizeRole";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import { makePaymentController } from "./payment.factory";
 
 const router = express.Router();
@@ -41,7 +43,9 @@ const paymentController = makePaymentController();
  *       403:
  *         description: Admin access required
  */
-router.get("/outstanding", protect, paymentController.getOutstandingPaymentOrders);
+router.get("/summary", protect, authorizeRole("ADMIN", "SUPERADMIN"), paymentController.getPaymentSummary);
+
+router.get("/outstanding", protect, authorizeRole("ADMIN", "SUPERADMIN"), paymentController.getOutstandingPaymentOrders);
 
 /**
  * @swagger
@@ -102,7 +106,7 @@ router.get("/outstanding", protect, paymentController.getOutstandingPaymentOrder
  *       409:
  *         description: Order already paid
  */
-router.post("/record", protect, paymentController.recordAdminPayment);
+router.post("/record", protect, authorizeRole("ADMIN", "SUPERADMIN"), csrfProtection, paymentController.recordAdminPayment);
 
 /**
  * @swagger
@@ -125,7 +129,7 @@ router.post("/record", protect, paymentController.recordAdminPayment);
  *       403:
  *         description: Admin access required
  */
-router.get("/credit-ledger/:dealerId", protect, paymentController.getDealerCreditLedger);
+router.get("/credit-ledger/:dealerId", protect, authorizeRole("ADMIN", "SUPERADMIN"), paymentController.getDealerCreditLedger);
 
 /**
  * @swagger
@@ -148,7 +152,7 @@ router.get("/credit-ledger/:dealerId", protect, paymentController.getDealerCredi
  *       403:
  *         description: Admin access required
  */
-router.get("/audit-trail/:orderId", protect, paymentController.getOrderAuditTrail);
+router.get("/audit-trail/:orderId", protect, authorizeRole("ADMIN", "SUPERADMIN"), paymentController.getOrderAuditTrail);
 
 // Gateway payment endpoints
 /**
@@ -202,7 +206,7 @@ router.get("/gateway/config", paymentController.getGatewayConfig);
  *       404:
  *         description: Order not found
  */
-router.post("/gateway/create-order", protect, paymentController.createPaymentOrder);
+router.post("/gateway/create-order", protect, csrfProtection, paymentController.createPaymentOrder);
 
 /**
  * @swagger
@@ -243,7 +247,7 @@ router.post("/gateway/create-order", protect, paymentController.createPaymentOrd
  *       401:
  *         description: Authentication required
  */
-router.post("/gateway/verify-payment", protect, paymentController.verifyPayment);
+router.post("/gateway/verify-payment", protect, csrfProtection, paymentController.verifyPayment);
 
 /**
  * @swagger
@@ -303,6 +307,6 @@ router.get("/:paymentId", protect, paymentController.getPaymentDetails);
  *       404:
  *         description: Payment not found.
  */
-router.delete("/:paymentId", protect, paymentController.deletePayment);
+router.delete("/:paymentId", protect, csrfProtection, paymentController.deletePayment);
 
 export default router;

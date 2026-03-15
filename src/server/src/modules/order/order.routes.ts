@@ -1,6 +1,7 @@
 import express from "express";
 import protect from "@/shared/middlewares/protect";
 import authorizeRole from "@/shared/middlewares/authorizeRole";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import { makeOrderController } from "./order.factory";
 
 const router = express.Router();
@@ -48,12 +49,14 @@ router.get("/user", protect, orderController.getUserOrders);
 router.post(
   "/:orderId/quotation/accept",
   protect,
+  csrfProtection,
   orderController.acceptQuotation
 );
 
 router.post(
   "/:orderId/quotation/reject",
   protect,
+  csrfProtection,
   orderController.rejectQuotation
 );
 

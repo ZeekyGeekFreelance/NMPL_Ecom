@@ -152,16 +152,23 @@ export class OrderService {
     let resolvedOrderId: string;
     
     if (isAdmin) {
-      // Admin provided a reference like "ORD-ABC123" - resolve it
+      // Admin provided a reference like "ORD-ABC123" — resolve it efficiently
       if (normalizedOrderId.toUpperCase().startsWith("ORD-")) {
-        // Try to resolve as reference first (works for any user's order)
-        const allOrders = await this.orderRepository.findAllOrders({ skip: 0, take: 200 });
-        const match = allOrders.find(
-          (order) => toOrderReference(order.id).toUpperCase() === normalizedOrderId.toUpperCase()
+        const checksum = normalizedOrderId.slice(-2).toLowerCase();
+        const candidates = await prisma.order.findMany({
+          where: { id: { endsWith: checksum } },
+          select: { id: true },
+          orderBy: { orderDate: "desc" },
+        });
+        const match = candidates.find(
+          (o) => toOrderReference(o.id).toUpperCase() === normalizedOrderId.toUpperCase()
         );
-        resolvedOrderId = match?.id || normalizedOrderId;
+        if (!match) {
+          throw new AppError(404, "Order not found");
+        }
+        resolvedOrderId = match.id;
       } else {
-        // Admin provided raw UUID - use it directly
+        // Admin provided raw UUID — use it directly
         resolvedOrderId = normalizedOrderId;
       }
     } else {

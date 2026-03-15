@@ -3,7 +3,7 @@
 import { useGetPaymentAuditTrailQuery } from "@/app/store/apis/PaymentApi";
 import { useGetOrderByIdQuery } from "@/app/store/apis/OrderApi";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
-import { toOrderReference, toTransactionReference } from "@/app/lib/utils/accountReference";
+import { toOrderReference, toTransactionReference, toPaymentReference } from "@/app/lib/utils/accountReference";
 import { 
   getOrderStatusLabel,
   getPaymentStateColor,
@@ -15,18 +15,81 @@ import {
   Calendar, 
   CheckCircle, 
   Clock, 
+  ExternalLink,
   FileText, 
   Loader2, 
   Shield, 
   User, 
   X 
 } from "lucide-react";
+import Link from "next/link";
 
 interface PaymentAuditModalProps {
   isOpen: boolean;
   onClose: () => void;
   orderId: string | null;
 }
+
+type Sanitizable = string | number | boolean | null | undefined;
+
+type AuditActionKind = "ADMIN_MARKED" | "GATEWAY" | "INVOICE" | "BLOCKED" | "OTHER";
+
+/**
+ * Sanitize user-controllable strings to prevent XSS attacks.
+ * Removes HTML tags, JavaScript protocols, event handlers, and restricts to safe characters.
+ */
+const sanitizeText = (text: Sanitizable, maxLength = 500): string => {
+  if (text === null || text === undefined) return "";
+
+  return String(text)
+    .replace(/[<>"'&\/\\]/g, "") // Remove HTML special chars and slashes
+    .replace(/javascript:/gi, "") // Remove javascript: protocol
+    .replace(/data:/gi, "") // Remove data: protocol
+    .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
+    .replace(/[^a-zA-Z0-9_\-\s@.,:()]/g, "") // Only allow safe characters
+    .trim()
+    .slice(0, maxLength); // Limit length to prevent DoS
+};
+
+/**
+ * Less restrictive sanitizer for structured data (keeps JSON punctuation readable).
+ */
+const sanitizeStructuredText = (text: Sanitizable, maxLength = 1000): string => {
+  if (text === null || text === undefined) return "";
+
+  return String(text)
+    .replace(/javascript:/gi, "")
+    .replace(/data:/gi, "")
+    .replace(/on\w+=/gi, "")
+    .replace(/[<>]/g, "")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, maxLength);
+};
+
+const sanitizeMetadataValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return sanitizeText(value, 500);
+  }
+
+  try {
+    return sanitizeStructuredText(JSON.stringify(value, null, 2), 1000);
+  } catch {
+    return "";
+  }
+};
+
+const normalizeAuditAction = (action: Sanitizable): AuditActionKind => {
+  const normalized = sanitizeText(action, 100).toUpperCase();
+
+  if (normalized.includes("ADMIN_MARKED")) return "ADMIN_MARKED";
+  if (normalized.includes("GATEWAY")) return "GATEWAY";
+  if (normalized.includes("INVOICE")) return "INVOICE";
+  if (normalized.includes("BLOCKED")) return "BLOCKED";
+  return "OTHER";
+};
 
 const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps) => {
   const formatPrice = useFormatPrice();
@@ -51,38 +114,47 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
     paymentTransactions: order?.paymentTransactions,
     payment: order?.payment,
   });
-  const paymentStatusLabel = getPaymentStateLabel(paymentState.state);
+  const paymentStatusLabel = sanitizeText(getPaymentStateLabel(paymentState.state), 100);
   const paymentStatusColor = getPaymentStateColor(paymentState.state);
-  const orderStatusLabel = getOrderStatusLabel(order?.status);
+  const orderStatusLabel = sanitizeText(getOrderStatusLabel(order?.status), 100);
+  const safeOrderReference = sanitizeText(orderReference, 100);
+  const safeTransactionReference = sanitizeText(transactionReference, 100);
+  const safeDealerName = sanitizeText(order?.user?.name, 200) || "Unknown";
+  const latestPaymentRef = order?.paymentTransactions?.[0]?.id
+    ? sanitizeText(toPaymentReference(order.paymentTransactions[0].id), 100)
+    : null;
 
-  const getActionIcon = (action: string) => {
-    if (action.includes("ADMIN_MARKED")) {
+  const getActionIcon = (action: AuditActionKind) => {
+    if (action === "ADMIN_MARKED") {
       return <CheckCircle size={16} className="text-green-600" />;
-    } else if (action.includes("GATEWAY")) {
+    } else if (action === "GATEWAY") {
       return <Activity size={16} className="text-blue-600" />;
-    } else if (action.includes("INVOICE")) {
+    } else if (action === "INVOICE") {
       return <FileText size={16} className="text-purple-600" />;
-    } else if (action.includes("BLOCKED")) {
+    } else if (action === "BLOCKED") {
       return <Shield size={16} className="text-red-600" />;
     }
     return <Clock size={16} className="text-gray-600" />;
   };
 
-  const getActionColor = (action: string) => {
-    if (action.includes("ADMIN_MARKED")) {
+  const getActionColor = (action: AuditActionKind) => {
+    if (action === "ADMIN_MARKED") {
       return "text-green-700 bg-green-50 border-green-200";
-    } else if (action.includes("GATEWAY")) {
+    } else if (action === "GATEWAY") {
       return "text-blue-700 bg-blue-50 border-blue-200";
-    } else if (action.includes("INVOICE")) {
+    } else if (action === "INVOICE") {
       return "text-purple-700 bg-purple-50 border-purple-200";
-    } else if (action.includes("BLOCKED")) {
+    } else if (action === "BLOCKED") {
       return "text-red-700 bg-red-50 border-red-200";
     }
     return "text-gray-700 bg-gray-50 border-gray-200";
   };
 
   const formatActionLabel = (action: string) => {
-    return action
+    // Sanitize and format action label
+    const sanitized = sanitizeText(action);
+    
+    return sanitized
       .replace(/_/g, " ")
       .toLowerCase()
       .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -98,10 +170,23 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Payment Audit Trail</h2>
             {order && (
-              <p className="text-sm text-gray-600 mt-1">
-                Order {orderReference}
-                {transactionReference ? ` | ${transactionReference}` : ""}
-              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                <span className="text-sm text-gray-600">Order <span className="font-mono font-medium text-gray-900">{safeOrderReference}</span></span>
+                {safeTransactionReference && (
+                  <span className="text-sm text-gray-500">TXN <span className="font-mono">{safeTransactionReference}</span></span>
+                )}
+                {latestPaymentRef && (
+                  <Link
+                    href={`/dashboard/payments?q=${latestPaymentRef}`}
+                    onClick={onClose}
+                    className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-mono font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    title="View in Payment Management"
+                  >
+                    {latestPaymentRef}
+                    <ExternalLink size={10} className="shrink-0" />
+                  </Link>
+                )}
+              </div>
             )}
           </div>
           <button
@@ -134,7 +219,7 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Dealer</p>
-                  <p className="text-sm font-medium text-gray-900">{order.user.name}</p>
+                  <p className="text-sm font-medium text-gray-900">{safeDealerName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Order Date</p>
@@ -173,8 +258,12 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
               ) : (
                 <div className="h-full overflow-y-auto p-6">
                   <div className="space-y-4">
-                    {auditLogs.map((log, index) => (
-                      <div key={log.id} className="relative">
+                    {auditLogs.map((log, index) => {
+                      const actionKind = normalizeAuditAction(log.action);
+                      const safeActorEmail = sanitizeText(log.actorUser?.email);
+
+                      return (
+                        <div key={log.id} className="relative">
                         {/* Timeline connector */}
                         {index < auditLogs.length - 1 && (
                           <div className="absolute left-6 top-12 bottom-0 w-0.5 bg-gray-200" />
@@ -182,10 +271,9 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
 
                         <div className="flex gap-4">
                           {/* Icon */}
-                          <div className={`flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center ${getActionColor(log.action)}`}>
-                            {getActionIcon(log.action)}
+                          <div className={`flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center ${getActionColor(actionKind)}`}>
+                            {getActionIcon(actionKind)}
                           </div>
-
                           {/* Content */}
                           <div className="flex-1 pb-8">
                             <div className="rounded-lg border border-gray-200 bg-white p-4">
@@ -206,8 +294,8 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                                     </div>
                                   </div>
                                 </div>
-                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium border ${getActionColor(log.action)}`}>
-                                  {log.actorRole}
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium border ${getActionColor(actionKind)}`}>
+                                  {sanitizeText(log.actorRole)}
                                 </span>
                               </div>
 
@@ -215,10 +303,10 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                               <div className="flex items-center gap-2 mb-3 text-sm">
                                 <User size={14} className="text-gray-400" />
                                 <span className="text-gray-700">
-                                  {log.actorUser?.name || "System"}
+                                  {sanitizeText(log.actorUser?.name) || "System"}
                                 </span>
-                                {log.actorUser?.email && (
-                                  <span className="text-gray-500">({log.actorUser.email})</span>
+                                {safeActorEmail && (
+                                  <span className="text-gray-500">({safeActorEmail})</span>
                                 )}
                               </div>
 
@@ -228,11 +316,11 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                                   <span className="text-gray-600">Status: </span>
                                   <span className="inline-flex items-center gap-2">
                                     <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">
-                                      {log.previousStatus}
+                                      {sanitizeText(log.previousStatus)}
                                     </span>
-                                    <span className="text-gray-400">→</span>
+                                    <span className="text-gray-400">-></span>
                                     <span className="rounded bg-green-100 px-2 py-0.5 text-green-700">
-                                      {log.nextStatus}
+                                      {sanitizeText(log.nextStatus)}
                                     </span>
                                   </span>
                                 </div>
@@ -243,18 +331,21 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                                 <div className="mt-3 rounded-lg bg-gray-50 p-3">
                                   <p className="text-xs font-medium text-gray-700 mb-2">Additional Details:</p>
                                   <div className="space-y-1">
-                                    {Object.entries(log.metadata).map(([key, value]) => (
-                                      <div key={key} className="flex items-start gap-2 text-xs">
-                                        <span className="text-gray-600 font-medium min-w-[120px]">
-                                          {key.replace(/([A-Z])/g, " $1").trim()}:
-                                        </span>
-                                        <span className="text-gray-900">
-                                          {typeof value === "object" 
-                                            ? JSON.stringify(value, null, 2) 
-                                            : String(value)}
-                                        </span>
-                                      </div>
-                                    ))}
+                                    {Object.entries(log.metadata).map(([key, value]) => {
+                                      const sanitizedKey = sanitizeText(key.replace(/([A-Z])/g, " $1").trim());
+                                      const sanitizedValue = sanitizeMetadataValue(value);
+                                      
+                                      return (
+                                        <div key={key} className="flex items-start gap-2 text-xs">
+                                          <span className="text-gray-600 font-medium min-w-[120px]">
+                                            {sanitizedKey}:
+                                          </span>
+                                          <span className="text-gray-900 break-all">
+                                            {sanitizedValue}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
@@ -265,9 +356,21 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                                   <p className="text-xs font-medium text-blue-900 mb-2">Payment Transaction:</p>
                                   <div className="space-y-1 text-xs">
                                     <div className="flex justify-between">
+                                      <span className="text-blue-700">Payment Ref:</span>
+                                      <Link
+                                        href={`/dashboard/payments?q=${toPaymentReference(log.paymentTxn.id)}`}
+                                        onClick={onClose}
+                                        className="inline-flex items-center gap-1 font-mono font-semibold text-indigo-700 hover:underline"
+                                        title="View in Payment Management"
+                                      >
+                                        {toPaymentReference(log.paymentTxn.id)}
+                                        <ExternalLink size={10} className="shrink-0" />
+                                      </Link>
+                                    </div>
+                                    <div className="flex justify-between">
                                       <span className="text-blue-700">Method:</span>
                                       <span className="text-blue-900 font-medium">
-                                        {log.paymentTxn.paymentMethod}
+                                        {sanitizeText(log.paymentTxn.paymentMethod)}
                                       </span>
                                     </div>
                                     <div className="flex justify-between">
@@ -279,7 +382,7 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                                     <div className="flex justify-between">
                                       <span className="text-blue-700">Status:</span>
                                       <span className="text-blue-900 font-medium">
-                                        {log.paymentTxn.status}
+                                        {sanitizeText(log.paymentTxn.status)}
                                       </span>
                                     </div>
                                   </div>
@@ -288,8 +391,9 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

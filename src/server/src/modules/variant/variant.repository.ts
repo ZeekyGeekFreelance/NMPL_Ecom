@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import prisma from "@/infra/database/database.config";
+import prisma, { type TransactionClient } from "@/infra/database/database.config";
 
 export class VariantRepository {
   async findManyVariants(params: {
@@ -128,7 +128,7 @@ export class VariantRepository {
     lowStockThreshold?: number;
     barcode?: string;
     attributes: { attributeId: string; valueId: string }[];
-  }, tx?: Prisma.TransactionClient) {
+  }, tx?: TransactionClient) {
     const { attributes, ...variantData } = data;
     const client = tx || prisma;
 

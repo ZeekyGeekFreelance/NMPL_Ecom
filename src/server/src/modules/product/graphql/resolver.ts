@@ -1,17 +1,17 @@
 import AppError from "@/shared/errors/AppError";
 import { getCurrentRequestMetricStore } from "@/shared/observability/requestMetrics";
 import { config } from "@/config";
-import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
 import redisClient from "@/infra/cache/redis";
 import { cacheKey } from "@/shared/utils/cacheKey";
 import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
+import type prismaClient from "@/infra/database/database.config";
 // Re-export from the canonical shared module — keeps any existing imports
 // pointing at resolver.ts working, and avoids duplicating the implementation.
 export { clearCatalogListingCache, clearCategoryCache } from "@/shared/utils/catalogCache";
 
 export interface Context {
-  prisma: PrismaClient;
+  prisma: typeof prismaClient;
   req: Request;
   res: Response;
 }
@@ -430,7 +430,7 @@ const resolveProductConnection = async (
     label: options.scope,
   });
 
-  const cacheKey = buildCatalogCacheKey({
+  const catalogCacheKey = buildCatalogCacheKey({
     scope: options.scope,
     first: pagination.first,
     skip: pagination.skip,
@@ -443,7 +443,7 @@ const resolveProductConnection = async (
   const startedAt = Date.now();
   let cacheHit = false;
 
-  const cached = await getCachedListingConnection(cacheKey);
+  const cached = await getCachedListingConnection(catalogCacheKey);
   if (cached) {
     cacheHit = true;
   }
@@ -520,7 +520,7 @@ const resolveProductConnection = async (
         totalCount,
       };
 
-      await setCachedListingConnection(cacheKey, payload);
+      await setCachedListingConnection(catalogCacheKey, payload);
       return payload;
     })());
 
@@ -666,7 +666,7 @@ export const productResolvers = {
     ) => {
       return resolveProductConnection(context, {
         scope: "newProducts",
-        where: { isNew: true },
+        where: { isNew: true, isDeleted: false },
         cacheFilters: { isNew: true },
         first,
         skip,
@@ -679,7 +679,7 @@ export const productResolvers = {
     ) => {
       return resolveProductConnection(context, {
         scope: "featuredProducts",
-        where: { isFeatured: true },
+        where: { isFeatured: true, isDeleted: false },
         cacheFilters: { isFeatured: true },
         first,
         skip,
@@ -692,7 +692,7 @@ export const productResolvers = {
     ) => {
       return resolveProductConnection(context, {
         scope: "trendingProducts",
-        where: { isTrending: true },
+        where: { isTrending: true, isDeleted: false },
         cacheFilters: { isTrending: true },
         first,
         skip,
@@ -705,7 +705,7 @@ export const productResolvers = {
     ) => {
       return resolveProductConnection(context, {
         scope: "bestSellerProducts",
-        where: { isBestSeller: true },
+        where: { isBestSeller: true, isDeleted: false },
         cacheFilters: { isBestSeller: true },
         first,
         skip,

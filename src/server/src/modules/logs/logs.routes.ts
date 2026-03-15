@@ -1,5 +1,6 @@
 import express from "express";
 import { makeLogsController } from "./logs.factory";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 
 const router = express.Router();
 const logsController = makeLogsController();
@@ -79,7 +80,7 @@ router.get("/:level", logsController.getLogByLevel);
  *       404:
  *         description: Log not found.
  */
-router.delete("/:id", logsController.deleteLog);
+router.delete("/:id", csrfProtection, logsController.deleteLog);
 
 /**
  * @swagger
@@ -91,6 +92,6 @@ router.delete("/:id", logsController.deleteLog);
  *       200:
  *         description: All logs successfully deleted.
  */
-router.delete("/", logsController.clearLogs);
+router.delete("/", csrfProtection, logsController.clearLogs);
 
 export default router;

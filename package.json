@@ -7,6 +7,9 @@
     "@commitlint/config-conventional": "^19.8.1",
     "husky": "^9.1.7"
   },
+  "overrides": {
+    "ajv": "^8.18.0"
+  },
   "scripts": {
     "prepare": "husky",
     "repo:sanity": "node ./scripts/repo-sanity.js"

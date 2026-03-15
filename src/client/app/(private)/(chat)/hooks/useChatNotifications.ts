@@ -58,8 +58,12 @@ export const useChatNotifications = ({
 
     // Show notification if permission is granted
     if (Notification.permission === 'granted') {
+      // Sanitize user input to prevent XSS in browser notifications
+      const sanitizedName = String(message.sender?.name || 'Customer').replace(/[<>"'&]/g, '');
+      const sanitizedContent = String(message.content || 'Sent a message').replace(/[<>"'&]/g, '').substring(0, 100);
+      
       new Notification('New Message', {
-        body: `${message.sender?.name || 'Customer'}: ${message.content?.substring(0, 100) || 'Sent a message'}`,
+        body: `${sanitizedName}: ${sanitizedContent}`,
         icon: '/favicon.ico',
         tag: 'chat-message',
         requireInteraction: false,

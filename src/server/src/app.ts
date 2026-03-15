@@ -170,7 +170,9 @@ export const createApp = async () => {
         "x-idempotency-key",
         "Apollo-Require-Preflight",
         "x-public-catalog",
+        "x-csrf-token",
       ],
+      exposedHeaders: ["x-csrf-token"],
     })
   );
 

@@ -1,5 +1,5 @@
-import { ADDRESS_TYPE, Prisma } from "@prisma/client";
-import prisma from "@/infra/database/database.config";
+import { ADDRESS_TYPE } from "@prisma/client";
+import prisma, { type TransactionClient } from "@/infra/database/database.config";
 
 type AddressCreateInput = {
   userId: string;
@@ -34,7 +34,7 @@ export class AddressRepository {
     });
   }
 
-  async createAddress(data: AddressCreateInput, tx?: Prisma.TransactionClient) {
+  async createAddress(data: AddressCreateInput, tx?: TransactionClient) {
     const client = tx || prisma;
     return client.address.create({
       data,
@@ -44,7 +44,7 @@ export class AddressRepository {
   async updateAddress(
     addressId: string,
     data: AddressUpdateInput,
-    tx?: Prisma.TransactionClient
+    tx?: TransactionClient
   ) {
     const client = tx || prisma;
     return client.address.update({
@@ -53,7 +53,7 @@ export class AddressRepository {
     });
   }
 
-  async unsetDefaultAddresses(userId: string, tx?: Prisma.TransactionClient) {
+  async unsetDefaultAddresses(userId: string, tx?: TransactionClient) {
     const client = tx || prisma;
     await client.address.updateMany({
       where: { userId, isDefault: true },
@@ -70,7 +70,7 @@ export class AddressRepository {
   async findNextAddressForDefault(
     userId: string,
     excludeAddressId: string,
-    tx?: Prisma.TransactionClient
+    tx?: TransactionClient
   ) {
     const client = tx || prisma;
     return client.address.findFirst({
@@ -84,7 +84,7 @@ export class AddressRepository {
     });
   }
 
-  async deleteAddress(addressId: string, tx?: Prisma.TransactionClient) {
+  async deleteAddress(addressId: string, tx?: TransactionClient) {
     const client = tx || prisma;
     return client.address.delete({
       where: { id: addressId },

@@ -1,4 +1,4 @@
-import prisma from "@/infra/database/database.config";
+import prisma, { type TransactionClient } from "@/infra/database/database.config";
 import AppError from "@/shared/errors/AppError";
 import { toTransactionReference } from "@/shared/utils/accountReference";
 import {
@@ -328,7 +328,7 @@ export class TransactionRepository {
   }
 
   private async getOriginalOrderQuantityCaps(
-    tx: Prisma.TransactionClient,
+    tx: TransactionClient,
     order: OrderSnapshot
   ): Promise<Map<string, number>> {
     const fallbackCaps = new Map<string, number>();
@@ -386,7 +386,7 @@ export class TransactionRepository {
   }
 
   private async getOrderSnapshot(
-    tx: Prisma.TransactionClient,
+    tx: TransactionClient,
     orderId: string
   ): Promise<OrderSnapshot> {
     const order = await tx.order.findUnique({
@@ -449,7 +449,7 @@ export class TransactionRepository {
   }
 
   private async applyQuotationAdjustments(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     order: OrderSnapshot;
     quotationItems: TransactionQuotationItemUpdate[];
   }): Promise<void> {
@@ -583,7 +583,7 @@ export class TransactionRepository {
   }
 
   private async appendQuotationLog(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     orderId: string;
     event: ORDER_QUOTATION_LOG_EVENT;
     previousTotal?: number | null;
@@ -610,7 +610,7 @@ export class TransactionRepository {
   }
 
   private async reserveStockForOrder(
-    tx: Prisma.TransactionClient,
+    tx: TransactionClient,
     orderItems: Array<Pick<OrderItemSnapshot, "variantId" | "quantity">>
   ): Promise<boolean> {
     const reservedItems: Array<{ variantId: string; quantity: number }> = [];
@@ -646,7 +646,7 @@ export class TransactionRepository {
   }
 
   private async upsertActiveReservation(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     orderId: string;
     expiresAt: Date;
   }) {
@@ -685,7 +685,7 @@ export class TransactionRepository {
   }
 
   private async releaseReservationStock(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     order: OrderSnapshot;
     nextReservationStatus: "EXPIRED" | "RELEASED";
     reason: string;
@@ -722,7 +722,7 @@ export class TransactionRepository {
   }
 
   private async finalizePaidOrder(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     order: OrderSnapshot;
   }) {
     if (params.order.reservation?.status !== RESERVATION_STATUS.ACTIVE) {
@@ -775,7 +775,7 @@ export class TransactionRepository {
   }
 
   private async finalizePayLaterOrder(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     order: OrderSnapshot;
     reason: string;
   }) {
@@ -829,7 +829,7 @@ export class TransactionRepository {
   }
 
   private async ensurePaymentRecord(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     order: {
       id: string;
       userId: string;
@@ -865,7 +865,7 @@ export class TransactionRepository {
   }
 
   private async promoteWaitlistedOrders(params: {
-    tx: Prisma.TransactionClient;
+    tx: TransactionClient;
     variantIds: string[];
     reservationExpiryHours: number;
   }): Promise<string[]> {

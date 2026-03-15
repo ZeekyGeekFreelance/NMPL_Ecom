@@ -244,8 +244,13 @@ export default function AuthProvider({
           return;
         }
 
+        // For non-401 errors (network issues, server down, etc.) during bootstrap,
+        // set auth to null only if we have no existing user — don't log out a
+        // known-good session just because the server is temporarily unreachable.
         if (currentUserRef.current === undefined) {
-          applyLocalSignedOutState();
+          // Unknown bootstrap state — mark as not authenticated but don't
+          // emit SIGNED_OUT so other tabs aren't affected.
+          dispatch(logout());
         }
         debugLog(`[AuthProvider] Auth revalidation failed (${reason})`, error);
       } finally {

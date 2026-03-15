@@ -6,6 +6,7 @@ import handleSocialLogin from "@/shared/utils/auth/handleSocialLogin";
 import AppError from "@/shared/errors/AppError";
 import optionalAuth from "@/shared/middlewares/optionalAuth";
 import protect from "@/shared/middlewares/protect";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import {
   authRateLimiter,
   otpRateLimiter,
@@ -217,6 +218,7 @@ router.get(
 router.post(
   "/request-registration-otp",
   otpRateLimiter,
+  csrfProtection,
   validateDto(RequestRegistrationOtpDto),
   authController.requestRegistrationOtp
 );
@@ -250,6 +252,7 @@ router.post(
 router.post(
   "/sign-up",
   registrationLimiter,
+  csrfProtection,
   validateDto(RegisterDto),
   authController.signup
 );
@@ -257,6 +260,7 @@ router.post(
 router.post(
   "/dealer/apply",
   protect,
+  csrfProtection,
   validateDto(ApplyDealerAccessDto),
   authController.applyDealerAccess
 );
@@ -323,7 +327,7 @@ router.post(
  *       200:
  *         description: User successfully signed in.
  */
-router.post("/sign-in", authRateLimiter, validateDto(SigninDto), authController.signin);
+router.post("/sign-in", authRateLimiter, csrfProtection, validateDto(SigninDto), authController.signin);
 
 /**
  * @swagger
@@ -345,7 +349,7 @@ router.post("/sign-in", authRateLimiter, validateDto(SigninDto), authController.
  *       200:
  *         description: Successfully refreshed the token.
  */
-router.post("/refresh-token", refreshTokenLimiter, authController.refreshToken);
+router.post("/refresh-token", refreshTokenLimiter, csrfProtection, authController.refreshToken);
 
 /**
  * @swagger
@@ -370,6 +374,7 @@ router.post("/refresh-token", refreshTokenLimiter, authController.refreshToken);
 router.post(
   "/forgot-password",
   passwordResetLimiter,
+  csrfProtection,
   validateDto(ForgotPasswordDto),
   authController.forgotPassword
 );
@@ -400,6 +405,7 @@ router.post(
 router.post(
   "/reset-password",
   passwordResetLimiter,
+  csrfProtection,
   validateDto(ResetPasswordDto),
   authController.resetPassword
 );
@@ -414,6 +420,7 @@ router.post(
 router.post(
   "/change-password",
   authRateLimiter,
+  csrfProtection,
   validateDto(ChangePasswordOnFirstLoginDto),
   authController.changePasswordOnFirstLogin
 );

@@ -1,5 +1,5 @@
 import { CART_STATUS, Prisma } from "@prisma/client";
-import prisma from "@/infra/database/database.config";
+import prisma, { type TransactionClient } from "@/infra/database/database.config";
 import { config } from "@/config";
 
 const isDevelopment = config.isDevelopment;
@@ -211,7 +211,7 @@ export class CartRepository {
     return result;
   }
 
-  async clearCart(userId: string, tx?: Prisma.TransactionClient) {
+  async clearCart(userId: string, tx?: TransactionClient) {
     debugLog("[CART REPOSITORY] clearCart called", { userId });
 
     const client = tx || prisma;

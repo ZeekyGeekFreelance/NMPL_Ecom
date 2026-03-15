@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { useGetOrderByIdQuery } from "@/app/store/apis/OrderApi";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { Calendar, DollarSign, FileText, Loader2 } from "lucide-react";
-import { toOrderReference, toTransactionReference } from "@/app/lib/utils/accountReference";
+import { toOrderReference, toTransactionReference, toPaymentReference } from "@/app/lib/utils/accountReference";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CHEQUE";
 
@@ -119,10 +119,12 @@ const PaymentRecordingForm = ({ orderId, onSubmit, onCancel }: PaymentRecordingF
       {/* Header */}
       <div className="border-b border-gray-200 px-6 py-4">
         <h2 className="text-lg font-semibold text-gray-900">Record Payment</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Record offline payment for {orderReference}
-          {transactionReference ? ` (${transactionReference})` : ""}
-        </p>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+          <span>Order: <span className="font-mono font-medium text-gray-800">{orderReference}</span></span>
+          {transactionReference && (
+            <span>Transaction: <span className="font-mono font-medium text-gray-800">{transactionReference}</span></span>
+          )}
+        </div>
       </div>
 
       {/* Order Summary */}

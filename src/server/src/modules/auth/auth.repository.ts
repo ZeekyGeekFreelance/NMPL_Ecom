@@ -140,9 +140,12 @@ export class AuthRepository {
       password?: string;
     }
   ) {
-    const nextData = { ...data };
-    if (typeof nextData.password === "string") {
-      nextData.password = await passwordUtils.hashPassword(nextData.password);
+    const updateData = { ...data };
+    
+    // Hash the user-provided password before storage (never store plaintext)
+    if (typeof updateData.password === "string") {
+      const userProvidedPassword = updateData.password;
+      updateData.password = await passwordUtils.hashPassword(userProvidedPassword);
     }
 
     const user = await this.findUserByEmail(email);
@@ -152,7 +155,7 @@ export class AuthRepository {
 
     return prisma.user.update({
       where: { id: user.id },
-      data: nextData,
+      data: updateData,
     });
   }
 
@@ -181,7 +184,9 @@ export class AuthRepository {
     password: string,
     options?: { invalidateSessions?: boolean }
   ) {
-    const hashedPassword = await passwordUtils.hashPassword(password);
+    // Hash the user-provided password before storage (never store plaintext)
+    const userProvidedPassword = password;
+    const hashedPassword = await passwordUtils.hashPassword(userProvidedPassword);
     const invalidateSessions = options?.invalidateSessions ?? true;
 
     const result = await prisma.user.update({

@@ -7,6 +7,14 @@ import { normalizePayloadTextFields } from "@/app/lib/textNormalization";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+const getCsrfToken = (): string | undefined => {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+  const match = document.cookie.match(/csrf-token=([^;]+)/);
+  return match ? match[1] : undefined;
+};
+
 const getHeaderEntries = (headers: unknown): Array<[string, string]> => {
   if (!headers) {
     return [];
@@ -126,12 +134,21 @@ const withMutationSafetyHeaders = (args: any) => {
     return args;
   }
 
+  const updates: Record<string, string> = {};
+
   if (!hasHeaderValue(headers, "x-idempotency-key")) {
+    updates["x-idempotency-key"] = createIdempotencyKey();
+  }
+
+  const csrfToken = getCsrfToken();
+  if (csrfToken && !hasHeaderValue(headers, "x-csrf-token")) {
+    updates["x-csrf-token"] = csrfToken;
+  }
+
+  if (Object.keys(updates).length > 0) {
     return {
       ...args,
-      headers: mergeHeaders(headers, {
-        "x-idempotency-key": createIdempotencyKey(),
-      }),
+      headers: mergeHeaders(headers, updates),
     };
   }
 
@@ -249,9 +266,12 @@ let refreshRequestPromise: Promise<any> | null = null;
 
 const refreshAuthToken = (api: any, extraOptions: any) => {
   if (!refreshRequestPromise) {
+    const csrfToken = getCsrfToken();
+    const headers: Record<string, string> = {};
+    if (csrfToken) headers["x-csrf-token"] = csrfToken;
     refreshRequestPromise = Promise.resolve(
       baseQuery(
-        { url: "/auth/refresh-token", method: "POST" },
+        { url: "/auth/refresh-token", method: "POST", headers },
         api,
         extraOptions
       )

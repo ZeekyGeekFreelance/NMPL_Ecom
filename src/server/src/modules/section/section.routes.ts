@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { makeSectionController } from "./section.factory";
 import upload from "@/shared/middlewares/upload";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 
 const router = Router();
 const sectionController = makeSectionController();
@@ -90,7 +91,7 @@ router.get("/arrivals", sectionController.findArrivals);
  *       400:
  *         description: Invalid input data.
  */
-router.post("/", upload.array("images", 5), sectionController.createSection);
+router.post("/", csrfProtection, upload.array("images", 5), sectionController.createSection);
 
 /**
  * @swagger
@@ -124,7 +125,7 @@ router.post("/", upload.array("images", 5), sectionController.createSection);
  *       400:
  *         description: Invalid input data.
  */
-router.put("/:type", sectionController.updateSection);
+router.put("/:type", csrfProtection, sectionController.updateSection);
 
 /**
  * @swagger
@@ -145,6 +146,6 @@ router.put("/:type", sectionController.updateSection);
  *       404:
  *         description: Section not found.
  */
-router.delete("/:type", sectionController.deleteSection);
+router.delete("/:type", csrfProtection, sectionController.deleteSection);
 
 export default router;

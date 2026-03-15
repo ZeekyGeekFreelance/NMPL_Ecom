@@ -9,6 +9,12 @@ import ApolloAuthSync from "./components/HOC/ApolloAuthSync";
 import GlobalInputNormalizer from "./components/HOC/GlobalInputNormalizer";
 import TopLoadingBar from "./components/feedback/TopLoadingBar";
 import { runtimeEnv } from "./lib/runtimeEnv";
+import { useCsrfToken } from "./hooks/useCsrfToken";
+
+function CsrfTokenProvider() {
+  useCsrfToken();
+  return null;
+}
 
 export default function ClientProviders({
   children,
@@ -20,6 +26,7 @@ export default function ClientProviders({
       <TopLoadingBar />
       <Provider store={store}>
         <AuthProvider>
+          <CsrfTokenProvider />
           <ApolloAuthSync />
           <GlobalInputNormalizer />
           {children}

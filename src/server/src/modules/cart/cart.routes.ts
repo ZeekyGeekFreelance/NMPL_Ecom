@@ -1,6 +1,7 @@
 import express from "express";
 import { makeCartController } from "./cart.factory";
 import protect from "@/shared/middlewares/protect";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 
 const router = express.Router();
 const cartController = makeCartController();
@@ -62,7 +63,7 @@ router.get("/count", protect, cartController.getCartCount);
  *       400:
  *         description: Invalid input data.
  */
-router.post("/", protect, cartController.addToCart);
+router.post("/", protect, csrfProtection, cartController.addToCart);
 
 /**
  * @swagger
@@ -96,7 +97,7 @@ router.post("/", protect, cartController.addToCart);
  *       404:
  *         description: Cart item not found.
  */
-router.put("/item/:itemId", protect, cartController.updateCartItem);
+router.put("/item/:itemId", protect, csrfProtection, cartController.updateCartItem);
 
 /**
  * @swagger
@@ -119,7 +120,7 @@ router.put("/item/:itemId", protect, cartController.updateCartItem);
  *       404:
  *         description: Cart item not found.
  */
-router.delete("/item/:itemId", protect, cartController.removeFromCart);
+router.delete("/item/:itemId", protect, csrfProtection, cartController.removeFromCart);
 
 /**
  * @swagger
@@ -135,6 +136,6 @@ router.delete("/item/:itemId", protect, cartController.removeFromCart);
  *       401:
  *         description: Unauthorized. Token is invalid or missing.
  */
-router.post("/merge", protect, cartController.mergeCarts);
+router.post("/merge", protect, csrfProtection, cartController.mergeCarts);
 
 export default router;

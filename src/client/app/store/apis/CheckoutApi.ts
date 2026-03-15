@@ -42,7 +42,6 @@ export const checkoutApi = apiSlice.injectEndpoints({
         url: "/checkout/summary",
         method: "POST",
         body,
-        credentials: "include",
       }),
     }),
     initiateCheckout: builder.mutation<
@@ -62,7 +61,6 @@ export const checkoutApi = apiSlice.injectEndpoints({
         url: "/checkout",
         method: "POST",
         body,
-        credentials: "include",
       }),
       invalidatesTags: ["Cart", "Order", "Transactions"],
     }),

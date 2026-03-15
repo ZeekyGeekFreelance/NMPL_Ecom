@@ -58,7 +58,9 @@ export const createRequestMetricsMiddleware = () => {
       responseSizeBytes: 0,
     };
 
+    const originalSend = res.send.bind(res);
     const originalJson = res.json.bind(res);
+
     res.json = ((body: unknown) => {
       try {
         metricStore.responseSizeBytes = Buffer.byteLength(
@@ -70,9 +72,8 @@ export const createRequestMetricsMiddleware = () => {
       return originalJson(body);
     }) as Response["json"];
 
-    const originalSend = res.send.bind(res);
     res.send = ((body?: unknown) => {
-      if (!metricStore.responseSizeBytes) {
+      if (metricStore.responseSizeBytes === 0) {
         if (typeof body === "string") {
           metricStore.responseSizeBytes = Buffer.byteLength(body);
         } else if (Buffer.isBuffer(body)) {
@@ -87,7 +88,7 @@ export const createRequestMetricsMiddleware = () => {
           }
         }
       }
-      return originalSend(body as any);
+      return originalSend(body);
     }) as Response["send"];
 
     res.on("finish", () => {

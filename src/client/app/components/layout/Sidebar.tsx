@@ -31,7 +31,6 @@ type SidebarNotificationKey =
   | "transactions"
   | "payments"
   | "dealers"
-  | "chats"
   | "users"
   | "analytics"
   | "reports"
@@ -118,13 +117,6 @@ const Sidebar = ({ notifications = {} }: SidebarProps) => {
             name: "Dealers",
             href: "/dealers",
             icon: Users,
-            roles: ["ADMIN", "SUPERADMIN"],
-          },
-          {
-            id: "chats" as SidebarNotificationKey,
-            name: "Chats",
-            href: "/chats",
-            icon: ChartArea,
             roles: ["ADMIN", "SUPERADMIN"],
           },
           {

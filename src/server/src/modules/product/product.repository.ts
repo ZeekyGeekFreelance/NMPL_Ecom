@@ -1,4 +1,4 @@
-import prisma from "@/infra/database/database.config";
+import prisma, { type TransactionClient } from "@/infra/database/database.config";
 import { Prisma } from "@prisma/client";
 
 export class ProductRepository {
@@ -149,7 +149,7 @@ export class ProductRepository {
     isBestSeller?: boolean;
     isFeatured?: boolean;
     categoryId?: string;
-  }, tx?: Prisma.TransactionClient) {
+  }, tx?: TransactionClient) {
     const client = tx || prisma;
 
     return client.product.create({
@@ -202,7 +202,7 @@ export class ProductRepository {
       isFeatured?: boolean;
       categoryId?: string;
     }>,
-    tx?: Prisma.TransactionClient
+    tx?: TransactionClient
   ) {
     const client = tx || prisma;
 

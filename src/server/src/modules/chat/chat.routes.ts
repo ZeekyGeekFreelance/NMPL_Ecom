@@ -1,6 +1,7 @@
 import express from "express";
 import { makeChatController } from "./chat.factory";
 import protect from "@/shared/middlewares/protect";
+import csrfProtection from "@/shared/middlewares/csrfProtection";
 import upload from "@/shared/middlewares/upload";
 
 export const configureChatRoutes = () => {
@@ -46,7 +47,7 @@ export const configureChatRoutes = () => {
    *       201:
    *         description: Chat created successfully.
    */
-  router.post("/", protect, chatController.createChat);
+  router.post("/", protect, csrfProtection, chatController.createChat);
 
   /**
    * @swagger
@@ -119,6 +120,7 @@ export const configureChatRoutes = () => {
   router.post(
     "/:chatId/message",
     protect,
+    csrfProtection,
     upload.single("file"),
     chatController.sendMessage
   );
@@ -144,7 +146,7 @@ export const configureChatRoutes = () => {
    *       404:
    *         description: Chat not found.
    */
-  router.patch("/:chatId/status", protect, chatController.updateChatStatus);
+  router.patch("/:chatId/status", protect, csrfProtection, chatController.updateChatStatus);
 
   return router;
 };

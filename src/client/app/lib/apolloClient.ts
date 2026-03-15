@@ -99,7 +99,9 @@ const createApolloClient = (initialState: any = null) => {
     credentials: "include",
     batchInterval: 10,
     batchMax: 5,
-    headers: { "x-public-catalog": "1" },
+    headers: {
+      "x-public-catalog": "1",
+    },
   });
 
   const retryLink = new RetryLink({

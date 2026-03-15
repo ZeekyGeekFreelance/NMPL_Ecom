@@ -35,14 +35,24 @@ export class RazorpayGatewayService {
   private isMockMode: boolean;
 
   constructor() {
-    // For now, use environment variables directly since Razorpay config is not in the main config
-    // In production, these would be added to the config structure
-    this.razorpayKeyId = "MOCK_KEY_ID"; // Will be replaced with actual config
-    this.razorpayKeySecret = "MOCK_KEY_SECRET"; // Will be replaced with actual config
-    this.isMockMode = true; // Always mock mode for now
+    // Load Razorpay credentials from environment variables
+    // In production, RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set
+    // In development/testing, use RAZORPAY_MOCK_KEY_ID and RAZORPAY_MOCK_KEY_SECRET
+    this.razorpayKeyId = process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_MOCK_KEY_ID || "";
+    this.razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_MOCK_KEY_SECRET || "";
+    
+    // Enable mock mode if credentials are not configured or explicitly set
+    this.isMockMode = 
+      process.env.RAZORPAY_MOCK_MODE === "true" ||
+      !process.env.RAZORPAY_KEY_ID ||
+      !process.env.RAZORPAY_KEY_SECRET;
 
     if (this.isMockMode) {
       this.logsService.info("Razorpay running in MOCK mode - no real payments will be processed");
+    } else {
+      this.logsService.info("Razorpay running in LIVE mode", {
+        keyId: this.razorpayKeyId.substring(0, 8) + "...", // Log partial key for verification
+      });
     }
   }
 
@@ -125,6 +135,9 @@ export class RazorpayGatewayService {
    * Create mock order for development/testing
    */
   private createMockOrder(request: RazorpayOrderRequest): RazorpayOrderResponse {
+    // nosemgrep: hardcoded-credential
+    // This is NOT a hardcoded credential - it's a dynamically generated mock order ID
+    // using timestamp and random values for development/testing purposes only
     const mockOrderId = `order_mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     this.logsService.info("Created mock Razorpay order", {
@@ -146,6 +159,9 @@ export class RazorpayGatewayService {
    * Verify mock payment for development/testing
    */
   private async verifyMockPayment(request: PaymentVerificationRequest): Promise<any> {
+    // nosemgrep: hardcoded-credential
+    // This is NOT a hardcoded credential - it's a dynamically generated mock payment ID
+    // using timestamp and random values for development/testing purposes only
     const mockPaymentId = `pay_mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     let amount = 0;
 
@@ -211,6 +227,9 @@ export class RazorpayGatewayService {
     isMockMode: boolean;
     availableMethods: string[];
   } {
+    // nosemgrep: hardcoded-credential
+    // This returns environment-loaded credentials and configuration, not hardcoded values
+    // keyId is loaded from process.env in constructor, availableMethods are payment options
     return {
       keyId: this.razorpayKeyId,
       isMockMode: this.isMockMode,

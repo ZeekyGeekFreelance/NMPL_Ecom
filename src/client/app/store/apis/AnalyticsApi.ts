@@ -6,7 +6,6 @@ export const analyticsApi = apiSlice.injectEndpoints({
       query: ({ timePeriod, year, startDate, endDate }: any) => ({
         url: "/analytics/overview",
         method: "GET",
-        credentials: "include",
         params: {
           timePeriod,
           ...(year && { year }),
@@ -46,7 +45,6 @@ export const analyticsApi = apiSlice.injectEndpoints({
       query: ({ timePeriod, year, startDate, endDate }: any) => ({
         url: "/analytics/products",
         method: "GET",
-        credentials: "include",
         params: {
           timePeriod,
           ...(year && { year }),
@@ -59,7 +57,6 @@ export const analyticsApi = apiSlice.injectEndpoints({
       query: ({ timePeriod, year, startDate, endDate }: any) => ({
         url: "/analytics/customers",
         method: "GET",
-        credentials: "include",
         params: {
           timePeriod,
           ...(year && { year }),
@@ -72,7 +69,6 @@ export const analyticsApi = apiSlice.injectEndpoints({
       query: ({ timePeriod, year, startDate, endDate }: any) => ({
         url: "/analytics/interactions",
         method: "GET",
-        credentials: "include",
         params: {
           timePeriod,
           ...(year && { year }),
@@ -93,7 +89,6 @@ export const analyticsApi = apiSlice.injectEndpoints({
       query: ({ type, format, timePeriod, year, startDate, endDate }: any) => ({
         url: "/analytics/export",
         method: "GET",
-        credentials: "include",
         responseHandler: (response) => response.blob(),
         params: {
           type,

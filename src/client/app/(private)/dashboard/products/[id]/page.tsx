@@ -146,4 +146,5 @@ const ManageProduct = () => {
   );
 };
 
-export default ManageProduct;
+import { withAuth } from "@/app/components/HOC/WithAuth";
+export default withAuth(ManageProduct, { allowedRoles: ["ADMIN", "SUPERADMIN"] });

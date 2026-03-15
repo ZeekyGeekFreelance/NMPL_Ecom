@@ -3,12 +3,13 @@
 import {
   CheckCircle,
   Clock,
+  Copy,
   Package,
   Truck,
   XCircle,
   ShoppingBag,
 } from "lucide-react";
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import getStatusStep from "@/app/utils/getStatusStep";
 import formatDate from "@/app/utils/formatDate";
@@ -23,6 +24,7 @@ import {
 } from "@/app/lib/orderLifecycle";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { toTitleCaseWords } from "@/app/lib/textNormalization";
+import { toPaymentReference } from "@/app/lib/utils/accountReference";
 
 const stepIndexByStatus: Record<OrderLifecycleStatus, number> = {
   PENDING_VERIFICATION: 1,
@@ -32,6 +34,27 @@ const stepIndexByStatus: Record<OrderLifecycleStatus, number> = {
   QUOTATION_EXPIRED: 3,
   CONFIRMED: 3,
   DELIVERED: 4,
+};
+
+const PayRefChip = ({ payRef }: { payRef: string }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(payRef).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy payment reference"
+      className="mt-1 inline-flex items-center gap-1 rounded border border-emerald-300 bg-white/80 px-2 py-0.5 font-mono text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
+    >
+      {copied ? "Copied!" : payRef}
+      <Copy size={10} className="shrink-0" />
+    </button>
+  );
 };
 
 const OrderStatus = ({ order }) => {
@@ -186,13 +209,14 @@ const OrderStatus = ({ order }) => {
           <p className="font-medium">Payment received</p>
           <div className="mt-2 space-y-2">
             {confirmedPayments.map((payment: any) => {
+              const payRef = toPaymentReference(payment.id);
               const reference =
                 payment?.utrNumber
                   ? `UTR: ${payment.utrNumber}`
                   : payment?.chequeNumber
                   ? `Cheque: ${payment.chequeNumber}`
                   : payment?.gatewayPaymentId
-                  ? `Transaction: ${payment.gatewayPaymentId}`
+                  ? `Razorpay ID: ${payment.gatewayPaymentId}`
                   : null;
               return (
                 <div
@@ -211,6 +235,7 @@ const OrderStatus = ({ order }) => {
                       ? ` (${toTitleCaseWords(String(payment.paymentSource))})`
                       : ""}
                   </p>
+                  <PayRefChip payRef={payRef} />
                   {reference ? (
                     <p className="text-xs text-emerald-700">{reference}</p>
                   ) : null}

@@ -137,6 +137,62 @@ export const userApi = apiSlice.injectEndpoints({
         { type: "DealerPrices", id: dealerId },
       ],
     }),
+
+    // ── Admin: User Management ──────────────────────────────────────────────
+
+    /** GET /users — SUPERADMIN only */
+    getAllUsers: builder.query<{ users: any[] }, void>({
+      query: () => "/users",
+      providesTags: ["User"],
+    }),
+
+    /** PATCH /users/:id — SUPERADMIN only */
+    updateUser: builder.mutation<
+      { user: any },
+      { id: string; data: { role?: string } }
+    >({
+      query: ({ id, data }) => ({
+        url: `/users/${id}`,
+        method: "PATCH",
+        body: data,
+      }),
+      invalidatesTags: ["User"],
+    }),
+
+    /** DELETE /users/:id — SUPERADMIN only */
+    deleteUser: builder.mutation<{ message: string }, string | number>({
+      query: (userId) => ({
+        url: `/users/${userId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["User"],
+    }),
+
+    /** PATCH /users/:id/billing-supervisor — SUPERADMIN only */
+    updateBillingSupervisor: builder.mutation<
+      { user: any },
+      { id: string; isBillingSupervisor: boolean }
+    >({
+      query: ({ id, isBillingSupervisor }) => ({
+        url: `/users/${id}/billing-supervisor`,
+        method: "PATCH",
+        body: { isBillingSupervisor },
+      }),
+      invalidatesTags: ["User"],
+    }),
+
+    /** PATCH /users/:id/admin-password — SUPERADMIN only */
+    updateAdminPassword: builder.mutation<
+      { message: string },
+      { id: string; newPassword: string }
+    >({
+      query: ({ id, newPassword }) => ({
+        url: `/users/${id}/admin-password`,
+        method: "PATCH",
+        body: { newPassword },
+      }),
+      invalidatesTags: ["User"],
+    }),
   }),
   overrideExisting: false,
 });
@@ -152,6 +208,11 @@ export const {
   useDeleteDealerMutation,
   useGetDealerPricesQuery,
   useSetDealerPricesMutation,
+  useGetAllUsersQuery,
+  useUpdateUserMutation,
+  useDeleteUserMutation,
+  useUpdateBillingSupervisorMutation,
+  useUpdateAdminPasswordMutation,
 } = userApi;
 
 /**

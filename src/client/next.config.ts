@@ -41,6 +41,14 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "",
   },
+
+  webpack: (config, { dev }) => {
+    // Disable eval-based source maps in production to prevent CWE-94 code injection risks
+    if (!dev) {
+      config.devtool = false;
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

@@ -3,8 +3,19 @@ import { pingDB } from "../infra/database/database.config";
 import { pingRedis } from "../infra/cache/redis";
 import { config } from "@/config";
 import { bootState } from "@/bootstrap/state";
+import { isAllowedOrigin } from "@/config";
 
 const router = Router();
+
+// Add CORS headers to health endpoints so they can be called from the browser
+const addHealthCorsHeaders = (req: any, res: any) => {
+  const origin = req.headers.origin;
+  if (isAllowedOrigin(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+};
 
 const buildHealthPayload = async () => {
   // Allow up to 10s for DB ping — Neon free tier has cold-start latency.
@@ -45,17 +56,20 @@ const buildHealthPayload = async () => {
   };
 };
 
-router.get("/health", async (_req, res) => {
+router.get("/health", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, async (req, res) => {
+  addHealthCorsHeaders(req, res);
   const payload = await buildHealthPayload();
   res.status(payload.healthy ? 200 : 503).json(payload);
 });
 
-router.get("/ready", async (_req, res) => {
+router.get("/ready", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, async (req, res) => {
+  addHealthCorsHeaders(req, res);
   const payload = await buildHealthPayload();
   res.status(payload.healthy ? 200 : 503).json(payload);
 });
 
-router.get("/live", (_req, res) => {
+router.get("/live", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, (req, res) => {
+  addHealthCorsHeaders(req, res);
   res.status(200).json({
     status: "alive",
     timestamp: new Date().toISOString(),

@@ -28,6 +28,12 @@ const createMutationKey = () => {
   return `track-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
+const getCsrfToken = (): string | null => {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/csrf-token=([^;]+)/);
+  return match ? match[1] : null;
+};
+
 const queueBatchForRetry = (batch: InteractionEvent[]) => {
   if (!batch.length) {
     return;
@@ -39,12 +45,18 @@ const queueBatchForRetry = (batch: InteractionEvent[]) => {
 const sendInteractionBatch = async (
   batch: InteractionEvent[]
 ): Promise<void> => {
+  const csrfToken = getCsrfToken();
+  if (!csrfToken) {
+    throw new Error("CSRF token not available");
+  }
+
   const response = await fetch(`${API_BASE_URL}/analytics/interactions/bulk`, {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
       "x-idempotency-key": createMutationKey(),
+      "x-csrf-token": csrfToken,
     },
     body: JSON.stringify({ events: batch }),
   });
@@ -58,6 +70,9 @@ const dequeueNextBatch = (maxBatchSize: number): InteractionEvent[] => {
   const safeBatchSize = Math.max(1, maxBatchSize);
   return interactionQueue.splice(0, safeBatchSize);
 };
+
+let retryCount = 0;
+const MAX_RETRIES = 3;
 
 const flushInteractions = async (maxBatchSize: number): Promise<void> => {
   if (isFlushing || interactionQueue.length === 0) {
@@ -74,15 +89,32 @@ const flushInteractions = async (maxBatchSize: number): Promise<void> => {
   const batch = dequeueNextBatch(maxBatchSize);
   try {
     await sendInteractionBatch(batch);
+    retryCount = 0;
   } catch (error) {
-    queueBatchForRetry(batch);
-    console.error("Failed to track interaction batch:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes("403") || errorMessage.includes("CSRF")) {
+      console.warn("Analytics tracking disabled: CSRF token issue");
+      interactionQueue.length = 0;
+      retryCount = 0;
+      return;
+    }
+
+    if (retryCount < MAX_RETRIES) {
+      queueBatchForRetry(batch);
+      retryCount++;
+      console.error(`Failed to track interaction batch (retry ${retryCount}/${MAX_RETRIES}):`, error);
+    } else {
+      console.error("Max retries reached, discarding batch");
+      retryCount = 0;
+    }
   } finally {
     isFlushing = false;
-    if (interactionQueue.length > 0) {
+    if (interactionQueue.length > 0 && retryCount < MAX_RETRIES) {
+      const backoffDelay = 160 * Math.pow(2, retryCount);
       flushTimer = setTimeout(() => {
         void flushInteractions(maxBatchSize);
-      }, 160);
+      }, backoffDelay);
     }
   }
 };

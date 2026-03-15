@@ -26,6 +26,11 @@ export const configureV1Routes = () => {
   router.use(idempotencyGuard);
   router.use(mutationAuditLogger);
 
+  // Lightweight CSRF bootstrap endpoint for clients to prefetch a token.
+  router.get("/csrf", (_req, res) => {
+    res.status(204).end();
+  });
+
   router.use("/users", usersRoutes);
   router.use("/auth", authRoutes);
   router.use("/products", productRoutes);

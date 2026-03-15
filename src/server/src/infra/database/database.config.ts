@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { config } from "@/config";
 import { recordQueryMetric } from "@/shared/observability/requestMetrics";
 
-const prisma = new PrismaClient({
+const baseClient = new PrismaClient({
   datasources: {
     db: {
       url: config.database.url,
@@ -10,19 +10,19 @@ const prisma = new PrismaClient({
   },
 });
 
-// Register query telemetry in all environments.
-prisma.$use(async (params, next) => {
-  const startedAt = performance.now();
-  const result = await next(params);
-  const durationMs = performance.now() - startedAt;
-
-  recordQueryMetric({
-    model: params.model || "raw",
-    action: params.action,
-    durationMs,
-  });
-
-  return result;
+// Register query telemetry using $extends (Prisma 5+ — $use was removed).
+const prisma = baseClient.$extends({
+  query: {
+    $allModels: {
+      async $allOperations({ model, operation, args, query }) {
+        const startedAt = performance.now();
+        const result = await query(args);
+        const durationMs = performance.now() - startedAt;
+        recordQueryMetric({ model: model || "raw", action: operation, durationMs });
+        return result;
+      },
+    },
+  },
 });
 
 // ── Prisma error codes that indicate misconfiguration, not transient
@@ -46,6 +46,10 @@ const isFatalAuthError = (error: unknown): boolean => {
   return /authentication failed|Access denied|password/i.test(msg) &&
     !/timeout/i.test(msg);
 };
+
+// Type-safe transaction client for use with the extended prisma client.
+// Prisma.TransactionClient from @prisma/client is incompatible with $extends.
+export type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 export const connectDB = async (): Promise<void> => {
   // In production give up after ~10 minutes (20 attempts × up-to-30 s each).

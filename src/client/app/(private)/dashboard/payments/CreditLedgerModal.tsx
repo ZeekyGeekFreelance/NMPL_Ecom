@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useGetDealerCreditLedgerQuery } from "@/app/store/apis/PaymentApi";
 import { useGetProfileQuery } from "@/app/store/apis/UserApi";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
-import { toOrderReference } from "@/app/lib/utils/accountReference";
+import useToast from "@/app/hooks/ui/useToast";
+import Link from "next/link";
+import { toOrderReference, toPaymentReference, toTransactionReference } from "@/app/lib/utils/accountReference";
+import { getPaginatedSerialNumber } from "@/app/lib/utils/pagination";
+import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
 import { 
   ArrowDown, 
   ArrowUp, 
@@ -26,6 +30,9 @@ interface CreditLedgerModalProps {
 
 const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps) => {
   const formatPrice = useFormatPrice();
+  const { showToast } = useToast();
+  const pageSize = 10;
+  const [currentPage, setCurrentPage] = useState(1);
 
   // useGetProfileQuery maps to GET /users/profile/:id and returns { user: ... }
   const { data: profileData, isLoading: isLoadingDealer } = useGetProfileQuery(dealerId || "", {
@@ -38,6 +45,26 @@ const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps
 
   const ledgerEntries = ledgerData?.entries || [];
   const dealer = profileData?.user;
+
+  const pageCount = Math.max(1, Math.ceil(ledgerEntries.length / pageSize));
+  const paginatedEntries = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return ledgerEntries.slice(start, start + pageSize);
+  }, [currentPage, ledgerEntries, pageSize]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    setCurrentPage(1);
+  }, [isOpen, dealerId]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    setCurrentPage((prev) => Math.min(prev, pageCount));
+  }, [pageCount, isOpen]);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -95,6 +122,22 @@ const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps
         return "text-blue-700 bg-blue-50 border-blue-200";
       default:
         return "text-gray-700 bg-gray-50 border-gray-200";
+    }
+  };
+
+  const handleInvoiceDownload = async (orderId?: string) => {
+    if (!orderId) {
+      showToast("Invoice is not available for this entry.", "error");
+      return;
+    }
+
+    try {
+      await downloadInvoiceByOrderId(orderId);
+      showToast("Invoice downloaded successfully", "success");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to download invoice";
+      showToast(message, "error");
     }
   };
 
@@ -204,13 +247,15 @@ const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps
                   </div>
                 </div>
               ) : (
-                <div className="h-full overflow-y-auto">
-                  <table className="w-full text-sm">
+                <div className="h-full overflow-auto">
+                  <table className="w-full min-w-[960px] text-sm">
                     <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
                       <tr>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">SN No.</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Date</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Event</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Order</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Invoice</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-700">Debit</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-700">Credit</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-700">Balance</th>
@@ -218,8 +263,11 @@ const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps
                       </tr>
                     </thead>
                     <tbody>
-                      {ledgerEntries.map((entry) => (
+                      {paginatedEntries.map((entry, index) => (
                         <tr key={entry.id} className="border-b border-gray-100 last:border-b-0">
+                          <td className="px-4 py-3 text-gray-700">
+                            {getPaginatedSerialNumber(index, currentPage, pageSize)}
+                          </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <Calendar size={14} className="text-gray-400" />
@@ -239,7 +287,54 @@ const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps
                           </td>
                           <td className="px-4 py-3">
                             {entry.orderId ? (
-                              <span className="text-gray-700">{toOrderReference(entry.orderId)}</span>
+                              <div className="space-y-1">
+                                <p className="text-gray-700">{toOrderReference(entry.orderId)}</p>
+                                {(entry as any).transactionId && (
+                                  <Link
+                                    href={`/dashboard/transactions/${toTransactionReference((entry as any).transactionId)}`}
+                                    className="inline-flex items-center gap-1 text-[11px] text-blue-600 font-mono hover:underline"
+                                    title="Open transaction detail"
+                                  >
+                                    {toTransactionReference((entry as any).transactionId)}
+                                  </Link>
+                                )}
+                                {entry.paymentTxnId && (
+                                  <p className="text-[11px] text-indigo-600 font-mono">
+                                    {toPaymentReference(entry.paymentTxnId)}
+                                  </p>
+                                )}
+                                {(entry as any).paymentTransaction && (
+                                  <div className="mt-1 rounded bg-gray-50 border border-gray-200 px-2 py-1 text-[11px] text-gray-700 space-y-0.5">
+                                    <p><span className="text-gray-500">Method:</span> {(entry as any).paymentTransaction.paymentMethod}</p>
+                                    {(entry as any).paymentTransaction.gatewayPaymentId && (
+                                      <p><span className="text-gray-500">Gateway ID:</span> <span className="font-mono">{(entry as any).paymentTransaction.gatewayPaymentId}</span></p>
+                                    )}
+                                    {(entry as any).paymentTransaction.utrNumber && (
+                                      <p><span className="text-gray-500">UTR:</span> {(entry as any).paymentTransaction.utrNumber}</p>
+                                    )}
+                                    {(entry as any).paymentTransaction.chequeNumber && (
+                                      <p><span className="text-gray-500">Cheque:</span> {(entry as any).paymentTransaction.chequeNumber}{(entry as any).paymentTransaction.bankName ? `  ${(entry as any).paymentTransaction.bankName}` : ""}</p>
+                                    )}
+                                    {(entry as any).paymentTransaction.recordedBy && (
+                                      <p><span className="text-gray-500">Recorded by:</span> {(entry as any).paymentTransaction.recordedBy.name}</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {entry.orderId ? (
+                              <button
+                                type="button"
+                                onClick={() => handleInvoiceDownload(entry.orderId)}
+                                className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              >
+                                <FileText size={12} />
+                                Invoice
+                              </button>
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}
@@ -280,6 +375,42 @@ const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps
                       ))}
                     </tbody>
                   </table>
+                  {ledgerEntries.length > pageSize && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-4 py-3 text-xs text-gray-600">
+                      <p>
+                        Showing{" "}
+                        {ledgerEntries.length === 0
+                          ? 0
+                          : (currentPage - 1) * pageSize + 1}
+                        -
+                        {Math.min(currentPage * pageSize, ledgerEntries.length)} of{" "}
+                        {ledgerEntries.length}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                          disabled={currentPage <= 1}
+                          className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <span className="rounded border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium">
+                          Page {currentPage} of {pageCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCurrentPage((prev) => Math.min(pageCount, prev + 1))
+                          }
+                          disabled={currentPage >= pageCount}
+                          className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -73,6 +73,12 @@ interface OutstandingOrder {
     quantity: number;
     price: number;
   }>;
+  paymentTransactions?: Array<{
+    id: string;
+    status: string;
+    amount: number;
+    paymentMethod: string;
+  }>;
 }
 
 interface AuditLogEntry {
@@ -100,12 +106,47 @@ interface AuditLogEntry {
 
 export const paymentApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
+    createGatewayPaymentOrder: builder.mutation<
+      any,
+      {
+        orderId: string;
+        customerEmail: string;
+        customerName: string;
+        customerPhone?: string;
+      }
+    >({
+      query: (data) => ({
+        url: "/payments/gateway/create-order",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Order"],
+    }),
+    processGatewayPayment: builder.mutation<
+      any,
+      {
+        orderId: string;
+        paymentMethod: string;
+        amount: number;
+        razorpayOrderId: string;
+        razorpayPaymentId: string;
+        razorpaySignature: string;
+        gatewayPayload: any;
+      }
+    >({
+      query: (data) => ({
+        url: "/payments/gateway/verify-payment",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Order"],
+    }),
     getDealerCreditLedger: builder.query<DealerCreditLedger, string>({
       query: (dealerId) => ({
         url: `/payments/credit-ledger/${dealerId}`,
         method: "GET",
       }),
-      providesTags: ["Order"],
+      providesTags: ["OutstandingPayments"],
     }),
     getOutstandingPaymentOrders: builder.query<
       { orders: OutstandingOrder[]; totalCount: number },
@@ -116,7 +157,7 @@ export const paymentApi = apiSlice.injectEndpoints({
         method: "GET",
         params: params || undefined,
       }),
-      providesTags: ["Order"],
+      providesTags: ["OutstandingPayments"],
     }),
     // Alias for backward compatibility
     getOutstandingPayments: builder.query<
@@ -128,14 +169,14 @@ export const paymentApi = apiSlice.injectEndpoints({
         method: "GET",
         params: params || undefined,
       }),
-      providesTags: ["Order"],
+      providesTags: ["OutstandingPayments"],
     }),
     getOrderAuditTrail: builder.query<{ logs: AuditLogEntry[]; totalCount: number }, string>({
       query: (orderId) => ({
         url: `/payments/audit-trail/${orderId}`,
         method: "GET",
       }),
-      providesTags: ["Order"],
+      providesTags: ["OutstandingPayments"],
     }),
     // Alias for backward compatibility
     getPaymentAuditTrail: builder.query<{ logs: AuditLogEntry[]; totalCount: number }, string>({
@@ -143,7 +184,7 @@ export const paymentApi = apiSlice.injectEndpoints({
         url: `/payments/audit-trail/${orderId}`,
         method: "GET",
       }),
-      providesTags: ["Order"],
+      providesTags: ["OutstandingPayments"],
     }),
     recordAdminPayment: builder.mutation<
       { paymentTransaction: PaymentTransaction; message: string },
@@ -190,12 +231,34 @@ export const paymentApi = apiSlice.injectEndpoints({
         method: "POST",
         body: data,
       }),
-      invalidatesTags: ["Order"],
+      invalidatesTags: ["OutstandingPayments"],
+    }),
+    getPaymentSummary: builder.query<
+      {
+        totalOutstanding: number;
+        totalOverdue: number;
+        outstandingOrdersCount: number;
+        overdueOrdersCount: number;
+        recentPayments: Array<{
+          id: string;
+          orderId: string;
+          amount: number;
+          paymentMethod: string;
+          createdAt: string;
+          user: { name: string; email: string };
+        }>;
+      },
+      void
+    >({
+      query: () => "/payments/summary",
+      providesTags: ["OutstandingPayments"],
     }),
   }),
 });
 
 export const {
+  useCreateGatewayPaymentOrderMutation,
+  useProcessGatewayPaymentMutation,
   useGetDealerCreditLedgerQuery,
   useGetOutstandingPaymentOrdersQuery,
   useGetOutstandingPaymentsQuery,
@@ -203,4 +266,5 @@ export const {
   useGetPaymentAuditTrailQuery,
   useRecordAdminPaymentMutation,
   useRecordPaymentMutation,
+  useGetPaymentSummaryQuery,
 } = paymentApi;

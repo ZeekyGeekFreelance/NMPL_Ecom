@@ -104,7 +104,7 @@ services:
       timeout: 8s
       retries: 30         # 30 × 10 s = 300 s window — covers migrate + generate + cold-start
       start_period: 60s   # suppress failures during the initial migrate/generate phase
-    restart: on-failure:5
+    restart: unless-stopped
 
   client:
     build:
@@ -132,7 +132,7 @@ services:
       - ./client:/app
       - /app/node_modules
     command: npm run dev
-    restart: on-failure:5
+    restart: unless-stopped
 
 volumes:
   pgdata:
