@@ -7,11 +7,19 @@ import { isAllowedOrigin } from "@/config";
 
 const router = Router();
 
-// Add CORS headers to health endpoints so they can be called from the browser
+// Add CORS headers to health endpoints only for explicitly allowed browser origins.
+// No wildcard is emitted; non-browser probes (no Origin header) simply get no CORS headers.
 const addHealthCorsHeaders = (req: any, res: any) => {
-  const origin = req.headers.origin;
+  const origin =
+    typeof req.headers?.origin === "string" ? req.headers.origin.trim() : "";
+
+  if (!origin) {
+    return;
+  }
+
   if (isAllowedOrigin(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   }
@@ -56,7 +64,7 @@ const buildHealthPayload = async () => {
   };
 };
 
-router.get("/health", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, async (req, res) => {
+router.get("/health", async (req, res) => {
   addHealthCorsHeaders(req, res);
   try {
     const payload = await buildHealthPayload();
@@ -74,7 +82,7 @@ router.get("/health", (req, res, next) => { res.setHeader("Access-Control-Allow-
   }
 });
 
-router.get("/ready", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, async (req, res) => {
+router.get("/ready", async (req, res) => {
   addHealthCorsHeaders(req, res);
   try {
     const payload = await buildHealthPayload();
@@ -90,7 +98,7 @@ router.get("/ready", (req, res, next) => { res.setHeader("Access-Control-Allow-O
   }
 });
 
-router.get("/live", (req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); next(); }, (req, res) => {
+router.get("/live", (req, res) => {
   addHealthCorsHeaders(req, res);
   res.status(200).json({
     status: "alive",

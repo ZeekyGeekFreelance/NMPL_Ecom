@@ -1,43 +1,39 @@
 # NMPL Ecom
 
-Full-stack ecommerce platform for NMPL with role-based workflows (`SUPERADMIN`, `ADMIN`, `USER`) and dealer lifecycle features.
+Full-stack ecommerce platform for NMPL with role-based workflows (`SUPERADMIN`, `ADMIN`, `USER`, `DEALER`) across a Next.js client and an Express/Apollo/Prisma API.
 
-## 🚀 Production Ready
+## Production Docs
 
-This application is now production-ready with comprehensive security, monitoring, and deployment configurations.
+- [Quick Start Production Guide](QUICK_START_PRODUCTION.md)
+- [Detailed Production Deployment](PRODUCTION_DEPLOYMENT.md)
+- [Security Checklist](SECURITY_CHECKLIST.md)
+- [Production Launch Checklist](PRODUCTION_LAUNCH_CHECKLIST.md)
+- [Monitoring Setup](MONITORING_SETUP.md)
 
-**📚 Production Documentation:**
-- [Quick Start Production Guide](QUICK_START_PRODUCTION.md) - 30-minute deployment
-- [Detailed Production Deployment](PRODUCTION_DEPLOYMENT.md) - Complete guide
-- [Security Checklist](SECURITY_CHECKLIST.md) - Security audit
-- [Production Launch Checklist](PRODUCTION_LAUNCH_CHECKLIST.md) - Final checklist
-- [Monitoring Setup](MONITORING_SETUP.md) - Monitoring & alerting
+## Working Dev Baseline
 
-## 🔧 Development Setup
+This repository is currently locked around the following local development ports:
 
-This project is now configured for **Neon Postgres only** (no local Postgres service).
+- Client: `http://localhost:3000`
+- Server health: `http://localhost:5000/health`
+- REST API: `http://localhost:5000/api/v1`
+- GraphQL: `http://localhost:5000/api/v1/graphql`
+- Postgres (Docker dev): `localhost:5433`
+- Redis (Docker dev): `localhost:6379`
 
-Choose one mode only:
-- `Docker mode` (recommended): runs app containers, uses external Neon DB
-- `Node mode` (no Docker): runs app directly on host, uses external Neon DB
+Use Node.js `22.x` for host-based commands.
 
-## Neon Connection Requirements
+## Recommended Setup: Docker Dev
 
-Use both URLs from your Neon project:
+This is the most reproducible path for a fresh clone on a standalone machine.
+It runs:
 
-```env
-# Pooled endpoint for app runtime
-DATABASE_URL=postgresql://<neon_user>:<neon_password>@<neon_pooler_host>/<db_name>?sslmode=require&pgbouncer=true&connection_limit=20&pool_timeout=20
+- local Postgres 15 in Docker
+- local Redis 7 in Docker
+- server in Docker on port `5000`
+- client in Docker on port `3000`
 
-# Direct endpoint for Prisma migrate/status
-DIRECT_URL=postgresql://<neon_user>:<neon_password>@<neon_direct_host>/<db_name>?sslmode=require
-
-DB_SSL_REQUIRED=true
-```
-
-## 1) Docker Mode (Fastest)
-
-### A. First-time setup
+### 1. Clone and copy env files
 
 ```bash
 git clone https://github.com/ZeekyGeekFreelance/NMPL_Ecom.git
@@ -49,23 +45,13 @@ Copy-Item src/server/.env.example src/server/.env
 Copy-Item src/client/.env.example src/client/.env
 ```
 
-Set required values in `src/server/.env`:
+Notes:
 
-```env
-DATABASE_URL=<your_neon_pooled_url>
-DIRECT_URL=<your_neon_direct_url>
-DB_SSL_REQUIRED=true
-DB_ENV=development
-SESSION_SECRET=change_me
-COOKIE_SECRET=change_me
-ACCESS_TOKEN_SECRET=change_me
-REFRESH_TOKEN_SECRET=change_me
-NODE_ENV=development
-PORT=5000
-SMS_PROVIDER=LOG
-```
+- `src/docker-compose.yml` overrides the server database and redis URLs to the local Docker services.
+- `src/client/.env.example` already points the client to `http://localhost:5000/api/v1`.
+- In development, placeholder secrets from `src/server/.env.example` are acceptable, but replace them before any shared or staging deployment.
 
-### B. Run
+### 2. Start the stack
 
 ```bash
 cd src
@@ -74,99 +60,84 @@ docker compose exec server npx prisma migrate deploy
 docker compose exec server npm run seed
 ```
 
-### C. Verify
+### 3. Verify
 
 ```bash
 curl.exe http://localhost:5000/health
-curl.exe -X POST http://localhost:5000/api/v1/graphql -H "Content-Type: application/json" -d "{\"query\":\"query { products { totalCount } }\"}"
+curl.exe -I http://localhost:3000/
+curl.exe -I http://localhost:3000/sign-in
 ```
 
-## 2) Node Mode (No Docker)
+Expected result:
 
-Prerequisites:
-- Node.js 22+
-- Neon Postgres project (pooled + direct URLs)
-- Redis (local or managed)
+- `/health` returns a JSON payload with `"healthy": true`
+- `/` returns `200`
+- `/sign-in` returns `200`
 
-### A. First-time setup
-
-```bash
-git clone https://github.com/ZeekyGeekFreelance/NMPL_Ecom.git
-cd NMPL_Ecom
-```
-
-```powershell
-Copy-Item src/server/.env.example src/server/.env
-Copy-Item src/client/.env.example src/client/.env
-```
-
-Set `src/server/.env`:
-
-```env
-DATABASE_URL=<your_neon_pooled_url>
-DIRECT_URL=<your_neon_direct_url>
-DB_SSL_REQUIRED=true
-DB_ENV=development
-REDIS_URL=redis://localhost:6379
-NODE_ENV=development
-PORT=5000
-ALLOWED_ORIGINS=http://localhost:3000
-CLIENT_URL_DEV=http://localhost:3000
-SESSION_SECRET=change_me
-COOKIE_SECRET=change_me
-ACCESS_TOKEN_SECRET=change_me
-REFRESH_TOKEN_SECRET=change_me
-SMS_PROVIDER=LOG
-```
-
-Install dependencies:
-
-```bash
-cd src/server
-npm ci
-cd ../client
-npm ci
-```
-
-### B. Run migrations and seed
-
-```bash
-cd src/server
-npx prisma generate
-npx prisma migrate deploy
-npm run seed
-```
-
-### C. Start apps
-
-Terminal 1:
-```bash
-cd src/server
-npm run dev
-```
-
-Terminal 2:
-```bash
-cd src/client
-npm run dev
-```
-
-## URLs
-
-- Client: `http://localhost:3000`
-- REST API: `http://localhost:5000/api/v1`
-- GraphQL: `http://localhost:5000/api/v1/graphql`
-
-## Seeded Login Accounts
+### 4. Seeded login accounts
 
 - `superadmin@example.com` / `password123`
 - `admin@example.com` / `password123`
 - `user@example.com` / `password123`
 
+## Host Dev With Local Node Processes
+
+If you want hot reload on the host but still want reproducible infra, use Docker only for Postgres and Redis:
+
+```bash
+cd src
+docker compose up -d db redis
+```
+
+In another shell:
+
+```bash
+cd src/server
+npm ci
+npx prisma generate
+npx prisma migrate deploy
+npm run seed
+npm run dev
+```
+
+In another shell:
+
+```bash
+cd src/client
+npm ci
+npm run dev
+```
+
+For this mode:
+
+- keep `src/server/.env` on port `5000`
+- keep `src/client/.env` on `http://localhost:5000/api/v1`
+- do not run the Docker client/server and the host client/server on the same ports at the same time
+
+## Reproducibility Notes
+
+- The Docker dev client now stores `.next` in a dedicated container volume instead of the host bind mount.
+- The client dev startup clears stale `.next` contents before `next dev` starts.
+- If you switch branches or recover from an interrupted client build, recreating only the client is enough:
+
+```bash
+cd src
+docker compose up -d --force-recreate --no-deps client
+```
+
+## Common Commands
+
+```bash
+cd src
+docker compose ps
+docker compose logs -f client
+docker compose logs -f server
+docker compose down
+```
+
 ## Run Rules
 
-- Do not run Docker mode and Node mode at the same time on the same ports.
-- Migration must run before seed.
-- Seeding is environment-routed (`prisma/seed.ts`): dev runs `seed-dev`, production runs `import-catalog`.
-- Dev cleanup (`deleteMany`) only runs when `SEED_RESET=true`.
-- Production catalog import requires explicit `ALLOW_PROD_CATALOG_IMPORT=true`.
+- Run migrations before seeding.
+- Do not run Docker mode and host mode simultaneously on the same ports.
+- Development seed behavior is environment-routed in `src/server/seeds/seed.ts`.
+- Production catalog import still requires explicit `ALLOW_PROD_CATALOG_IMPORT=true`.

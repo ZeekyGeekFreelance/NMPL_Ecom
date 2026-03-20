@@ -20,11 +20,10 @@ yarn-error.log
 .vscode
 .idea
 
-# Env files (managed via Docker/runtime env vars)
+# Env files (keep .env.production in build context for deterministic Next.js production builds)
 .env
 .env.local
 .env.development
-.env.production
 .env.test
 
 # Git

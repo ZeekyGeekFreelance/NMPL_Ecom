@@ -64,20 +64,39 @@ const probeTcpPort = (host: string, port: number, timeoutMs: number): Promise<bo
   });
 
 export const assertPortAvailable = async (): Promise<void> => {
-  // In production (containerized or managed), port collision detection via TCP probe
-  // is unreliable: the platform assigns the port, old processes release it before
-  // the new container starts, and probing can race.  Skip in production — if the
-  // port is genuinely in use, httpServer.listen() will throw EADDRINUSE anyway.
-  if (config.isProduction) {
+  // In production and Docker dev containers, port collision detection via TCP
+  // probe is unreliable: the platform/container already owns the port, and
+  // nodemon restarts can briefly observe the previous process still releasing
+  // it. That creates false positives and crash loops. If the port is genuinely
+  // unusable, httpServer.listen() will still surface EADDRINUSE.
+  if (config.isProduction || config.dockerMode) {
     return;
   }
 
-  const inUse = await probeTcpPort("127.0.0.1", config.server.port, 750);
-  if (!inUse) {
-    return;
+  // Retry up to 4 times with a 1-second gap before declaring a real collision.
+  // This handles the common nodemon restart scenario where the previous process
+  // has just crashed and its port is still in TIME_WAIT. A genuine "another
+  // application owns this port" situation is still caught after the retries.
+  const MAX_ATTEMPTS = 4;
+  const RETRY_DELAY_MS = 1_000;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const inUse = await probeTcpPort("127.0.0.1", config.server.port, 750);
+    if (!inUse) {
+      return;
+    }
+
+    if (attempt < MAX_ATTEMPTS) {
+      console.warn(
+        `[preflight] Port ${config.server.port} still in use (attempt ${attempt}/${MAX_ATTEMPTS}). Waiting ${RETRY_DELAY_MS}ms for OS to release it…`
+      );
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
   }
 
-  const message = `[preflight] Port collision detected on ${config.server.port}. Development boot blocked. Stop existing process or change PORT.`;
+  const message =
+    `[preflight] Port collision on ${config.server.port} persists after ${MAX_ATTEMPTS} attempts. ` +
+    `Stop the existing process or change PORT in .env.`;
   throw new Error(message);
 };
 

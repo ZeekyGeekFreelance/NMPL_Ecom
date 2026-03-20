@@ -3,16 +3,40 @@ import { logout } from "./AuthSlice";
 import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
 import { clearPendingAuthIntent } from "@/app/lib/authIntent";
+import {
+  captureCsrfTokenFromHeaders,
+  getCsrfToken,
+  hasCsrfToken,
+} from "@/app/lib/csrfToken";
 import { normalizePayloadTextFields } from "@/app/lib/textNormalization";
 
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const CSRF_BOOTSTRAP_URL = "/csrf";
+const MAX_CSRF_BOOTSTRAP_ATTEMPTS = 4;
+const MAX_RETRIES_FOR_MUTATION = 1;
+const MAX_RETRIES_FOR_QUERY = 2;
+const CSRF_EXEMPT_MUTATION_PATHS = new Set([
+  "/auth/request-registration-otp",
+  "/auth/sign-up",
+  "/auth/sign-in",
+  "/auth/refresh-token",
+  "/auth/change-password",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/superadmin/reset-password",
+]);
 
-const getCsrfToken = (): string | undefined => {
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-  const match = document.cookie.match(/csrf-token=([^;]+)/);
-  return match ? match[1] : undefined;
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const getBackoffDelayMs = (attempt: number) => {
+  const baseMs = 300;
+  const capMs = 5_000;
+  const ceiling = Math.min(capMs, baseMs * Math.pow(2, attempt - 1));
+  return Math.round(ceiling * (0.5 + Math.random() * 0.5));
 };
 
 const getHeaderEntries = (headers: unknown): Array<[string, string]> => {
@@ -100,6 +124,13 @@ const getRequestMeta = (args: any) => {
   };
 };
 
+const isMutationMethod = (method: string) => MUTATION_METHODS.has(method.toUpperCase());
+
+const requiresCsrfBootstrap = (method: string, normalizedUrl: string) =>
+  isMutationMethod(method) &&
+  normalizedUrl !== CSRF_BOOTSTRAP_URL &&
+  !CSRF_EXEMPT_MUTATION_PATHS.has(normalizedUrl);
+
 const normalizeUrlPath = (url: unknown) => {
   if (typeof url !== "string" || !url) {
     return "";
@@ -111,6 +142,20 @@ const normalizeUrlPath = (url: unknown) => {
   }
 
   return path.startsWith("/") ? path : `/${path}`;
+};
+
+const isRetryableError = (error: any): boolean => {
+  const status = error?.status;
+
+  if (typeof status === "number") {
+    return RETRYABLE_STATUS_CODES.has(status);
+  }
+
+  return (
+    status === "FETCH_ERROR" ||
+    status === "TIMEOUT_ERROR" ||
+    status === "PARSING_ERROR"
+  );
 };
 
 const isAuthEndpoint = (normalizedUrl: string) =>
@@ -262,19 +307,84 @@ const baseQuery = fetchBaseQuery({
   credentials: "include",
 });
 
+const executeBaseQueryWithRetry = async (
+  requestArgs: any,
+  api: any,
+  extraOptions: any,
+  maxRetries: number
+) => {
+  let attempt = 0;
+  let result = await baseQuery(requestArgs, api, extraOptions);
+  captureCsrfTokenFromHeaders(result.meta?.response?.headers);
+
+  while (result.error && attempt < maxRetries && isRetryableError(result.error)) {
+    attempt += 1;
+    await sleep(getBackoffDelayMs(attempt));
+    result = await baseQuery(requestArgs, api, extraOptions);
+    captureCsrfTokenFromHeaders(result.meta?.response?.headers);
+  }
+
+  return result;
+};
+
+let csrfBootstrapPromise: Promise<boolean> | null = null;
+
+const bootstrapCsrfToken = async (api: any, extraOptions: any): Promise<boolean> => {
+  if (typeof document === "undefined") {
+    return true;
+  }
+
+  if (hasCsrfToken()) {
+    return true;
+  }
+
+  for (let attempt = 1; attempt <= MAX_CSRF_BOOTSTRAP_ATTEMPTS; attempt++) {
+    const result = await executeBaseQueryWithRetry(
+      { url: CSRF_BOOTSTRAP_URL, method: "GET" },
+      api,
+      extraOptions,
+      0
+    );
+
+    if (!result.error && hasCsrfToken()) {
+      return true;
+    }
+
+    if (attempt < MAX_CSRF_BOOTSTRAP_ATTEMPTS) {
+      await sleep(getBackoffDelayMs(attempt));
+    }
+  }
+
+  return hasCsrfToken();
+};
+
+const ensureCsrfToken = (api: any, extraOptions: any): Promise<boolean> => {
+  if (typeof document === "undefined" || hasCsrfToken()) {
+    return Promise.resolve(true);
+  }
+
+  if (!csrfBootstrapPromise) {
+    csrfBootstrapPromise = bootstrapCsrfToken(api, extraOptions).finally(() => {
+      csrfBootstrapPromise = null;
+    });
+  }
+
+  return csrfBootstrapPromise;
+};
+
 let refreshRequestPromise: Promise<any> | null = null;
 
 const refreshAuthToken = (api: any, extraOptions: any) => {
   if (!refreshRequestPromise) {
-    const csrfToken = getCsrfToken();
-    const headers: Record<string, string> = {};
-    if (csrfToken) headers["x-csrf-token"] = csrfToken;
     refreshRequestPromise = Promise.resolve(
-      baseQuery(
-        { url: "/auth/refresh-token", method: "POST", headers },
-        api,
-        extraOptions
-      )
+      (async () => {
+        return executeBaseQueryWithRetry(
+          { url: "/auth/refresh-token", method: "POST" },
+          api,
+          extraOptions,
+          MAX_RETRIES_FOR_MUTATION
+        );
+      })()
     ).finally(() => {
       refreshRequestPromise = null;
     });
@@ -284,12 +394,38 @@ const refreshAuthToken = (api: any, extraOptions: any) => {
 };
 
 const baseQueryWithReauth = async (args, api, extraOptions) => {
-  const requestArgs = withMutationSafetyHeaders(withNormalizedMutationBody(args));
+  const normalizedBodyArgs = withNormalizedMutationBody(args);
+  const requestMeta = getRequestMeta(normalizedBodyArgs);
+  const normalizedUrl = normalizeUrlPath(requestMeta.url);
 
-  let result = await baseQuery(requestArgs, api, extraOptions);
+  if (requiresCsrfBootstrap(requestMeta.method, normalizedUrl)) {
+    const csrfReady = await ensureCsrfToken(api, extraOptions);
+    if (!csrfReady) {
+      return {
+        error: {
+          status: 503,
+          data: {
+            message:
+              "Security token initialization failed. Please refresh and try again.",
+          },
+        },
+      };
+    }
+  }
+
+  const requestArgs = withMutationSafetyHeaders(normalizedBodyArgs);
+  const maxRetries = isMutationMethod(requestMeta.method)
+    ? MAX_RETRIES_FOR_MUTATION
+    : MAX_RETRIES_FOR_QUERY;
+
+  let result = await executeBaseQueryWithRetry(
+    requestArgs,
+    api,
+    extraOptions,
+    maxRetries
+  );
 
   if (result.error?.status === 401) {
-    const normalizedUrl = normalizeUrlPath(getRequestMeta(requestArgs).url);
     const authUser = getAuthUserFromState(api);
 
     if (!shouldAttemptTokenRefresh(normalizedUrl, authUser)) {
@@ -307,7 +443,12 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
 
     if (refreshResult.data) {
       // If there's data, retry the original req with the new token
-      result = await baseQuery(requestArgs, api, extraOptions);
+      result = await executeBaseQueryWithRetry(
+        requestArgs,
+        api,
+        extraOptions,
+        maxRetries
+      );
       if (
         result.error?.status === 401 &&
         shouldSyncUnauthorizedState(normalizedUrl, authUser)

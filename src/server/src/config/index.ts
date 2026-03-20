@@ -15,7 +15,12 @@ const LOCALHOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const IPV4_PATTERN = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 const NODE_ENVS: ReadonlyArray<NodeEnv> = ["development", "test", "production"];
 const PROJECT_ROOT = process.cwd();
-const ENV_FILE_PATH = path.resolve(PROJECT_ROOT, ".env");
+const ENV_FILE_PATH = path.resolve(
+  PROJECT_ROOT,
+  String(process.env.NODE_ENV || "").trim().toLowerCase() === "production"
+    ? ".env.production"
+    : ".env"
+);
 
 const parseEnvLineMap = (filePath: string): Map<string, number> => {
   const lineMap = new Map<string, number>();
@@ -186,17 +191,18 @@ const parseDatabaseTarget = (
 };
 
 const normalizeOrigins = (csv: string): string[] => {
-  const origins = csv
+  const configuredOrigins = csv
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  if (origins.length === 0) {
+  if (configuredOrigins.length === 0) {
     throwConfigError("ALLOWED_ORIGINS", "At least one origin is required");
   }
 
-  const uniqueOrigins = [...new Set(origins)];
-  for (const origin of uniqueOrigins) {
+  const normalizedOrigins: string[] = [];
+
+  for (const origin of configuredOrigins) {
     if (origin === "*") {
       if (isProduction) {
         throwConfigError(
@@ -204,16 +210,42 @@ const normalizeOrigins = (csv: string): string[] => {
           "Wildcard '*' is not allowed in production"
         );
       }
+      normalizedOrigins.push(origin);
       continue;
     }
 
-    const parsed = z.string().url().safeParse(origin);
-    if (!parsed.success) {
-      throwConfigError("ALLOWED_ORIGINS", `Invalid origin URL: ${origin}`);
+    const parsed = parseUrlOrThrow("ALLOWED_ORIGINS", origin);
+
+    const hasPath = parsed.pathname && parsed.pathname !== "/";
+    if (hasPath || parsed.search || parsed.hash) {
+      throwConfigError(
+        "ALLOWED_ORIGINS",
+        `Origin must not include path/query/hash: ${origin}`
+      );
     }
+
+    normalizedOrigins.push(parsed.origin);
   }
 
-  return uniqueOrigins;
+  return [...new Set(normalizedOrigins)];
+};
+
+const normalizeRuntimeOrigin = (origin: string): string | null => {
+  const trimmed = origin.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const hasPath = parsed.pathname && parsed.pathname !== "/";
+    if (hasPath || parsed.search || parsed.hash) {
+      return null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
 };
 
 const deepFreeze = <T extends Record<string, any>>(obj: T): Frozen<T> => {
@@ -498,10 +530,12 @@ const appConfig = {
     }) as boolean,
     razorpayMockKeyId: parseString("RAZORPAY_MOCK_KEY_ID", {
       devDefault: "rzp_test_mock_key",
-    }) as string,
+      optional: true,
+    }),
     razorpayMockKeySecret: parseString("RAZORPAY_MOCK_KEY_SECRET", {
       devDefault: "mock_secret_for_testing",
-    }) as string,
+      optional: true,
+    }),
   },
   sms: {
     provider: parseEnv(
@@ -663,6 +697,49 @@ const appConfig = {
   raw: Object.freeze({ ...process.env }),
 } as const;
 
+if (isProduction) {
+  const clientProdUrl = parseUrlOrThrow("CLIENT_URL_PROD", appConfig.urls.clientProd);
+  const apiBaseUrl = parseUrlOrThrow(
+    "PUBLIC_API_BASE_URL",
+    appConfig.server.publicApiBaseUrl
+  );
+  const clientProdOrigin = clientProdUrl.origin;
+
+  if (!appConfig.cors.origins.includes(clientProdOrigin)) {
+    throwConfigError(
+      "ALLOWED_ORIGINS",
+      `Production must include CLIENT_URL_PROD origin '${clientProdOrigin}'`
+    );
+  }
+
+  const cookieDomain = (appConfig.security.cookieDomain || "").trim().toLowerCase();
+  if (cookieDomain) {
+    if (!cookieDomain.startsWith(".")) {
+      throwConfigError(
+        "COOKIE_DOMAIN",
+        "Production COOKIE_DOMAIN must start with '.' (e.g. .nmpl.online)"
+      );
+    }
+
+    const cookieSuffix = cookieDomain.slice(1);
+    const hostCoveredByCookieDomain = (host: string) =>
+      host === cookieSuffix || host.endsWith(`.${cookieSuffix}`);
+
+    const apiHost = apiBaseUrl.hostname.toLowerCase();
+    const clientHost = clientProdUrl.hostname.toLowerCase();
+
+    if (
+      !hostCoveredByCookieDomain(apiHost) ||
+      !hostCoveredByCookieDomain(clientHost)
+    ) {
+      throwConfigError(
+        "COOKIE_DOMAIN",
+        `Must cover PUBLIC_API_BASE_URL host '${apiHost}' and CLIENT_URL_PROD host '${clientHost}'`
+      );
+    }
+  }
+}
+
 if (isProduction && appConfig.payment.enableMockPayment) {
   throwConfigError(
     "ENABLE_MOCK_PAYMENT",
@@ -675,6 +752,18 @@ if (appConfig.payment.stripeSecretKey && !appConfig.payment.stripeWebhookSecret)
     "STRIPE_WEBHOOK_SECRET",
     "Required when STRIPE_SECRET_KEY is configured"
   );
+}
+
+if (appConfig.payment.razorpayMockMode || appConfig.payment.enableMockPayment) {
+  if (
+    !appConfig.payment.razorpayMockKeyId ||
+    !appConfig.payment.razorpayMockKeySecret
+  ) {
+    throwConfigError(
+      "RAZORPAY_MOCK_KEY_ID",
+      "RAZORPAY_MOCK_KEY_ID and RAZORPAY_MOCK_KEY_SECRET are required when mock payment is enabled"
+    );
+  }
 }
 
 if (appConfig.sms.provider === "TWILIO") {
@@ -779,11 +868,16 @@ export const isAllowedOrigin = (origin: string | undefined): boolean => {
     return true;
   }
 
+  const normalizedOrigin = normalizeRuntimeOrigin(origin);
+  if (!normalizedOrigin) {
+    return false;
+  }
+
   if (config.cors.origins.includes("*")) {
     return true;
   }
 
-  if (config.cors.origins.includes(origin)) {
+  if (config.cors.origins.includes(normalizedOrigin)) {
     return true;
   }
 
@@ -791,5 +885,5 @@ export const isAllowedOrigin = (origin: string | undefined): boolean => {
     return false;
   }
 
-  return isDevOriginAllowed(origin);
+  return isDevOriginAllowed(normalizedOrigin);
 };

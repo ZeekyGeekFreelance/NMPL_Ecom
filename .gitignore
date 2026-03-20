@@ -21,3 +21,7 @@ src/client/node_modules/
 src/server/node_modules/
 src/server/src/infra/logs/*.log
 src/server/dist/infra/logs/*.log
+.tmp-login-cookies.txt
+src/tmp-cookies.txt
+src/client/.codex-client-dev.err.log
+src/client/.codex-client-dev.out.log

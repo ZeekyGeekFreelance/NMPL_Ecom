@@ -41,10 +41,19 @@ const isFatalDbError = (error: unknown): boolean => {
 
 const isFatalAuthError = (error: unknown): boolean => {
   const msg = error instanceof Error ? error.message : String(error);
-  // "Authentication failed" / "password authentication failed" from Postgres
-  // are configuration errors — retrying will never fix them.
-  return /authentication failed|Access denied|password/i.test(msg) &&
-    !/timeout/i.test(msg);
+  // Match only unambiguous credential / access-denial messages from Postgres.
+  // Be precise: "password authentication failed" is a Postgres auth rejection.
+  // Do NOT match generic messages that merely contain the word "password" or
+  // "Access" in unrelated contexts (e.g. TLS channel binding errors, network
+  // access denied by firewall).
+  // Excluded: timeout-related messages — those are transient and should retry.
+  if (/timeout/i.test(msg)) return false;
+  return (
+    /password authentication failed for user/i.test(msg) ||
+    /role ".+" does not exist/i.test(msg) ||
+    /database ".+" does not exist/i.test(msg) ||
+    /pg_hba\.conf rejects connection/i.test(msg)
+  );
 };
 
 // Type-safe transaction client for use with the extended prisma client.

@@ -1,5 +1,6 @@
 "use client";
 import { API_BASE_URL } from "@/app/lib/constants/config";
+import { getCsrfToken } from "@/app/lib/csrfToken";
 import { useCallback, useEffect } from "react";
 import { useAppSelector } from "../state/useRedux";
 
@@ -26,12 +27,6 @@ const createMutationKey = () => {
   }
 
   return `track-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-};
-
-const getCsrfToken = (): string | null => {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/csrf-token=([^;]+)/);
-  return match ? match[1] : null;
 };
 
 const queueBatchForRetry = (batch: InteractionEvent[]) => {

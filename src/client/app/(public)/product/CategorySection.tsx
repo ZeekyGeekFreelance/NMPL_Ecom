@@ -7,6 +7,7 @@ import { useQuery } from "@apollo/client";
 import { GET_PRODUCTS } from "../../gql/Product";
 import SkeletonLoader from "@/app/components/feedback/SkeletonLoader";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
+import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 
 interface CategorySectionProps {
   categoryId: string;
@@ -20,11 +21,13 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   pageSize,
 }) => {
   const [skip, setSkip] = useState(0);
+  const backendReady = useBackendReady();
   const dealerCatalogPollInterval = useDealerCatalogPollInterval(skip === 0);
   const { data, loading, error, fetchMore } = useQuery(GET_PRODUCTS, {
     variables: { first: pageSize, skip: 0, filters: { categoryId } },
     fetchPolicy: "cache-and-network",
     pollInterval: dealerCatalogPollInterval,
+    skip: !backendReady,
   });
 
   const products = data?.products?.products || [];
@@ -52,15 +55,19 @@ const CategorySection: React.FC<CategorySectionProps> = ({
     }).then(() => setSkip(skip + pageSize));
   };
 
-  if (loading && skip === 0) {
+  if (!backendReady || (loading && skip === 0)) {
     return <SkeletonLoader />;
   }
 
   if (error) {
+    const message = /failed to fetch|fetch failed|network/i.test(String(error.message))
+      ? "Catalog is temporarily unavailable. Please wait while we reconnect."
+      : error.message;
+
     return (
       <div className="text-center py-12">
         <p className="text-lg text-red-500">
-          Error loading {categoryName}: {error.message}
+          Error loading {categoryName}: {message}
         </p>
       </div>
     );

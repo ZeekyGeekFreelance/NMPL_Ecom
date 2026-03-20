@@ -158,6 +158,9 @@ export const createApp = async () => {
           callback(null, true);
           return;
         }
+        logger.warn(
+          `[cors] Rejected request origin: ${String(origin || "undefined")} | allowed=${config.cors.origins.join(",")}`
+        );
         callback(new Error(`Origin not allowed by CORS: ${origin}`));
       },
       credentials: true,

@@ -66,6 +66,24 @@ export const authApi = apiSlice.injectEndpoints({
         }
       },
     }),
+    changePasswordOnFirstLogin: builder.mutation<
+      { message: string; user: User },
+      { email: string; currentPassword: string; newPassword: string }
+    >({
+      query: (payload) => ({
+        url: "/auth/change-password",
+        method: "POST",
+        body: payload,
+      }),
+      onQueryStarted: async (_, { dispatch, queryFulfilled }) => {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(setUser({ user: data.user }));
+        } catch {
+          // Ignore mutation rejection here; components already consume error state.
+        }
+      },
+    }),
     signup: builder.mutation<
       { message: string; user: User; requiresApproval?: boolean },
       {
@@ -171,6 +189,7 @@ export const authApi = apiSlice.injectEndpoints({
 export const {
   useRequestRegistrationOtpMutation,
   useSignInMutation,
+  useChangePasswordOnFirstLoginMutation,
   useSignupMutation,
   useApplyDealerAccessMutation,
   useSignOutMutation,

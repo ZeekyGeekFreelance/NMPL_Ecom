@@ -48,6 +48,10 @@ const ProductDetailsPage = () => {
       fetchPolicy: "cache-and-network",
       nextFetchPolicy: "cache-first",
       pollInterval: dealerCatalogPollInterval,
+      // publicCatalog: true instructs publicCatalogLink (apolloClient.ts) to
+      // inject x-public-catalog: 1 so the server skips session middleware for
+      // this unauthenticated catalog request — saving a Redis round-trip.
+      context: { publicCatalog: true },
     }
   );
 

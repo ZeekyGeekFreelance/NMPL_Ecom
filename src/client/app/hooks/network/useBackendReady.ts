@@ -1,52 +1,54 @@
 /**
  * useBackendReady.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * Polls the backend /health endpoint until it reports {"healthy":true}, then
- * resolves to `true`.  Components that depend on live API data can gate their
- * first fetch behind this hook to avoid the "Failed to fetch products" flash
- * that occurs when the client starts before the server has finished cold-starting.
  *
- * Usage:
- *   const backendReady = useBackendReady();
- *   const { data } = useQuery(GET_PRODUCTS, { skip: !backendReady });
- *
- * The hook is a no-op (immediately ready) when:
- *   • The server already responds healthy on first check (normal case once warm).
- *   • The component is rendered on the server (SSR) — there is no window to poll.
+ * Polls the backend /health endpoint until it reports {"healthy": true},
+ * then resolves to true. Components can gate API calls behind this hook
+ * so product/auth requests are never fired before backend readiness.
  *
  * Configuration (via env):
- *   NEXT_PUBLIC_BACKEND_READY_POLL_MS  — interval between polls (default 3000ms)
- *   NEXT_PUBLIC_BACKEND_READY_TIMEOUT_MS — give up after this long (default 300000ms / 5min)
+ *   NEXT_PUBLIC_BACKEND_READY_POLL_MS       initial poll interval (default 2000ms)
+ *   NEXT_PUBLIC_BACKEND_READY_MAX_POLL_MS   max backoff interval (default 30000ms)
+ *   NEXT_PUBLIC_BACKEND_READY_WARN_AFTER_MS warning threshold (default 300000ms)
+ *
+ * Fix: HEALTH_URL is derived from the raw NEXT_PUBLIC_API_URL env variable,
+ * NOT from the runtime-rewritten API_BASE_URL. runtimeEnv.ts rewrites the
+ * hostname to window.location.hostname for LAN dev access — which is correct
+ * for API calls but breaks the health check URL when the server is bound only
+ * to localhost. Using the raw env value keeps the health URL stable and
+ * consistent with the server's actual listening address.
  */
 
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { API_BASE_URL } from "@/app/lib/constants/config";
 
-const POLL_INTERVAL_MS =
+import { useEffect, useRef, useState } from "react";
+
+const INITIAL_POLL_INTERVAL_MS =
   parseInt(process.env.NEXT_PUBLIC_BACKEND_READY_POLL_MS || "0", 10) || 2_000;
+const MAX_POLL_INTERVAL_MS =
+  parseInt(process.env.NEXT_PUBLIC_BACKEND_READY_MAX_POLL_MS || "0", 10) ||
+  30_000;
+const WARN_AFTER_MS =
+  parseInt(process.env.NEXT_PUBLIC_BACKEND_READY_WARN_AFTER_MS || "0", 10) ||
+  300_000;
 
-const TIMEOUT_MS =
-  parseInt(process.env.NEXT_PUBLIC_BACKEND_READY_TIMEOUT_MS || "0", 10) ||
-  300_000; // 5 minutes — enough for any cold-start scenario
+// Build the health URL from the raw env var, stripping any trailing /api/v1
+// path that normalizeApiBaseUrl may have appended. This avoids the host-
+// rewrite that runtimeEnv.resolveDevApiBaseUrl applies to API_BASE_URL and
+// ensures the health ping always targets the server's real listening address.
+const buildHealthUrl = (): string => {
+  const raw = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+  const base = raw.replace(/\/api\/v1\/?$/i, "");
+  return `${base}/health`;
+};
 
-const HEALTH_URL = API_BASE_URL.replace(/\/api\/v1\/?$/, "") + "/health";
+const HEALTH_URL = buildHealthUrl();
 
-/**
- * Ping the backend health endpoint once.
- * Returns true only if the response contains `"healthy":true`.
- * Never throws — all errors are treated as "not ready yet".
- */
 const pingHealth = async (): Promise<boolean> => {
   try {
     const controller = new AbortController();
-    // 2s per ping — fast enough to detect a live server, short enough that a
-    // hung/slow server doesn't stall the poll loop for more than 2s per cycle.
     const timeoutId = setTimeout(() => controller.abort(), 2_000);
     const response = await fetch(HEALTH_URL, {
       method: "GET",
-      // credentials: 'omit' — /health needs no auth cookie, avoids CORS preflight
-      // on cross-origin requests (e.g. client on :3000 → server on :5000).
       credentials: "omit",
       signal: controller.signal,
       cache: "no-store",
@@ -61,41 +63,45 @@ const pingHealth = async (): Promise<boolean> => {
 };
 
 export const useBackendReady = (): boolean => {
-  // Hooks must always be called unconditionally (Rules of Hooks).
-  // We initialise to true on SSR so the server render never blocks,
-  // and to false on the client so we wait for the first health check.
   const isServer = typeof window === "undefined";
-
   const [ready, setReady] = useState<boolean>(isServer);
-  const timedOutRef = useRef(false);
   const readyRef = useRef(false);
 
   useEffect(() => {
-    // On SSR the effect never runs, so nothing to do.
     if (isServer) return;
-    // If already confirmed ready (e.g. fast server), skip.
     if (readyRef.current) return;
 
     let cancelled = false;
-
-    const timeoutHandle = setTimeout(() => {
-      // After TIMEOUT_MS unblock the UI — the query will fail gracefully.
-      if (!readyRef.current && !cancelled) {
-        timedOutRef.current = true;
-        setReady(true);
-      }
-    }, TIMEOUT_MS);
+    let pollIntervalMs = INITIAL_POLL_INTERVAL_MS;
+    let warningLogged = false;
+    const startedAt = Date.now();
 
     const poll = async () => {
-      while (!cancelled && !timedOutRef.current) {
+      while (!cancelled) {
         const healthy = await pingHealth();
-        if (cancelled) break;
+        if (cancelled) return;
+
         if (healthy) {
           readyRef.current = true;
           setReady(true);
-          break;
+          return;
         }
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+
+        const elapsedMs = Date.now() - startedAt;
+        if (!warningLogged && elapsedMs >= WARN_AFTER_MS) {
+          warningLogged = true;
+          console.error(
+            `[backend-ready] Backend is still not healthy after ${Math.floor(
+              elapsedMs / 1000
+            )}s. Continuing retries.`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        pollIntervalMs = Math.min(
+          MAX_POLL_INTERVAL_MS,
+          Math.round(pollIntervalMs * 1.6)
+        );
       }
     };
 
@@ -103,9 +109,8 @@ export const useBackendReady = (): boolean => {
 
     return () => {
       cancelled = true;
-      clearTimeout(timeoutHandle);
     };
-  }, []);
+  }, [isServer]);
 
   return ready;
 };

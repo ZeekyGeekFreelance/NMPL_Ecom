@@ -10,6 +10,7 @@ import { useQuery } from "@apollo/client";
 import { GET_PRODUCTS } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 
 type SearchFormValues = {
   searchQuery: string;
@@ -106,6 +107,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
   const searchQuery = watch("searchQuery");
   const router = useRouter();
   const formatPrice = useFormatPrice();
+  const backendReady = useBackendReady();
 
   const normalizedSearchQuery = searchQuery.trim();
 
@@ -129,9 +131,13 @@ const SearchBar: React.FC<SearchBarProps> = ({
           search: debouncedQuery || undefined,
         },
       },
-      skip: !shouldSearch,
+      skip: !shouldSearch || !backendReady,
       fetchPolicy: "no-cache",
       nextFetchPolicy: "cache-first",
+      // publicCatalog: true instructs publicCatalogLink (apolloClient.ts) to
+      // inject x-public-catalog: 1 so the server skips session middleware for
+      // this unauthenticated search request — saving a Redis round-trip.
+      context: { publicCatalog: true },
     }
   );
 

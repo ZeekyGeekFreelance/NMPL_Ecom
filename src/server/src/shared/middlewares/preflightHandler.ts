@@ -7,8 +7,14 @@ export const preflightHandler = (
 ) => {
   // Handle preflight requests
   if (req.method === "OPTIONS") {
+    const origin =
+      typeof req.headers.origin === "string" ? req.headers.origin.trim() : "";
+    if (origin) {
+      res.header("Access-Control-Allow-Origin", origin);
+      res.header("Vary", "Origin");
+    }
+
     // Set CORS headers for preflight
-    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.header(
       "Access-Control-Allow-Methods",
       "GET, POST, PUT, DELETE, PATCH, OPTIONS"

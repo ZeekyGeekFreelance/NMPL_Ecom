@@ -1,4 +1,9 @@
-import { ApolloClient, InMemoryCache, from } from "@apollo/client";
+import {
+  ApolloClient,
+  ApolloLink,
+  InMemoryCache,
+  from,
+} from "@apollo/client";
 import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { onError } from "@apollo/client/link/error";
 import { RetryLink } from "@apollo/client/link/retry";
@@ -82,6 +87,45 @@ const errorLink = onError(({ graphQLErrors, networkError }) => {
   }
 });
 
+/**
+ * publicCatalogLink
+ *
+ * Fix: the x-public-catalog header was previously hardcoded on the
+ * BatchHttpLink, which meant every GraphQL request — including auth-required
+ * queries and mutations — carried it. On the server, app.ts uses this header
+ * as a signal to skip session + passport middleware entirely:
+ *
+ *   if (isPublicCatalog(req)) { next(); return; }  // skips session hydration
+ *
+ * Sending it on authenticated mutations caused req.session to be undefined
+ * in those handlers, and could silently suppress session-backed auth state.
+ *
+ * The fix uses an ApolloLink middleware to inject the header only when the
+ * calling code explicitly opts in via Apollo operation context:
+ *
+ *   useQuery(GET_PRODUCTS, { context: { publicCatalog: true } })
+ *
+ * All public catalog queries (product listing, product detail, categories,
+ * home page data) already pass this context. Auth queries, mutations, and
+ * admin operations do not, so they receive normal session handling.
+ *
+ * Backward compatibility: any operation that does NOT set publicCatalog in
+ * context will simply not send the header — the server will apply full session
+ * middleware, which is correct and safe.
+ */
+const publicCatalogLink = new ApolloLink((operation, forward) => {
+  const { publicCatalog } = operation.getContext();
+  if (publicCatalog) {
+    operation.setContext(({ headers = {} }: { headers?: Record<string, string> }) => ({
+      headers: {
+        ...headers,
+        "x-public-catalog": "1",
+      },
+    }));
+  }
+  return forward(operation);
+});
+
 // Singleton — reused across renders on the client so the cache persists.
 // On the server a fresh instance is always created (no module-level state
 // between requests).
@@ -99,9 +143,8 @@ const createApolloClient = (initialState: any = null) => {
     credentials: "include",
     batchInterval: 10,
     batchMax: 5,
-    headers: {
-      "x-public-catalog": "1",
-    },
+    // No default headers here — publicCatalogLink injects x-public-catalog
+    // only for operations that explicitly opt in via context: { publicCatalog: true }.
   });
 
   const retryLink = new RetryLink({
@@ -155,7 +198,7 @@ const createApolloClient = (initialState: any = null) => {
     // SSR mode prevents the client from being stored as a singleton so each
     // server render gets a clean instance.
     ssrMode: typeof window === "undefined",
-    link: from([errorLink, retryLink, httpLink]),
+    link: from([errorLink, publicCatalogLink, retryLink, httpLink]),
     cache: new InMemoryCache({
       typePolicies: {
         // ProductConnection is not normalised by id — it's a query-level

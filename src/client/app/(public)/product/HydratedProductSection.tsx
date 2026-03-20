@@ -7,6 +7,7 @@ import { Product } from "@/app/types/productTypes";
 import ProductSection from "@/app/(public)/product/ProductSection";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 import { useAuth } from "@/app/hooks/useAuth";
+import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 
 interface HydratedProductSectionProps {
   title: string;
@@ -24,6 +25,7 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
   const apolloClient = useApolloClient();
   const pollInterval = useDealerCatalogPollInterval();
   const { user, isLoading: isAuthLoading } = useAuth();
+  const backendReady = useBackendReady();
   const refreshedUserIdRef = useRef<string | null>(null);
 
   // Seed the Apollo cache with SSR data (or empty data) before the first render
@@ -86,13 +88,20 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
     // Don't re-render for intermediate network states (loading, refetch, poll
     // in-progress). Only re-render when a result (data or error) is final.
     notifyOnNetworkStatusChange: false,
-    skip: false,
+    skip: !backendReady,
+    // publicCatalog: true instructs publicCatalogLink (apolloClient.ts) to
+    // inject x-public-catalog: 1 so the server skips session middleware for
+    // this unauthenticated catalog request — saving a Redis round-trip.
+    // Note: when a logged-in dealer triggers refetch() below, Apollo sends a
+    // fresh request with this context, which is correct — dealer pricing is
+    // resolved server-side via the JWT cookie, not via session middleware.
+    context: { publicCatalog: true },
   });
 
   // After auth resolves, refetch once per user so dealer-specific prices
   // replace the anonymous catalog data that was seeded from SSR.
   useEffect(() => {
-    if (isAuthLoading || !user?.id) {
+    if (!backendReady || isAuthLoading || !user?.id) {
       return;
     }
 
@@ -129,7 +138,11 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
   const isRealNetworkError = networkStatus === NetworkStatus.error;
 
   const displayError =
-    error && products.length === 0 && isRealNetworkError && hasEverLoadedRef.current
+    backendReady &&
+    error &&
+    products.length === 0 &&
+    isRealNetworkError &&
+    hasEverLoadedRef.current
       ? error
       : undefined;
 
@@ -137,7 +150,7 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
   // only when we have no SSR data and have never loaded anything before.
   // This covers the edge case where SSR failed AND the cache is cold.
   const isInitialLoad =
-    networkStatus === NetworkStatus.loading &&
+    (!backendReady || networkStatus === NetworkStatus.loading) &&
     products.length === 0 &&
     !hasEverLoadedRef.current;
 

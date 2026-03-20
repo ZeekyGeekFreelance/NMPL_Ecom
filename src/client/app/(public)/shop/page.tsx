@@ -20,6 +20,7 @@ import ProductFilters, {
 } from "./ProductFilters";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 import { useMediaQuery } from "@/app/hooks/useMediaQuery";
+import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 
 const DEFAULT_SORT: SortByOption = "RELEVANCE";
 const BASE_PAGE_SIZE = 12;
@@ -134,6 +135,7 @@ const ShopPage: React.FC = () => {
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const backendReady = useBackendReady();
 
   const requestPageSize = filters.search?.trim()
     ? SEARCH_PAGE_SIZE
@@ -186,10 +188,18 @@ const ShopPage: React.FC = () => {
     nextFetchPolicy: "cache-first",
     pollInterval: dealerCatalogPollInterval,
     notifyOnNetworkStatusChange: false,
+    skip: !backendReady,
+    // publicCatalog: true instructs publicCatalogLink (apolloClient.ts) to
+    // inject x-public-catalog: 1 so the server skips session middleware for
+    // this unauthenticated catalog request — saving a Redis round-trip.
+    context: { publicCatalog: true },
   });
 
   const isRealNetworkError = networkStatus === NetworkStatus.error;
-  const displayError = error && isRealNetworkError && displayedProducts.length === 0 ? error : undefined;
+  const displayError =
+    backendReady && error && isRealNetworkError && displayedProducts.length === 0
+      ? error
+      : undefined;
 
   // Sync query results into display state.  Using a useEffect instead of
   // onCompleted avoids stale-closure issues when filters change rapidly and
@@ -372,6 +382,7 @@ const ShopPage: React.FC = () => {
   }, [currentSortBy, displayedProducts, filters.search]);
 
   const noProductsFound =
+    backendReady &&
     rankedAndSortedProducts.length === 0 &&
     !loading &&
     !displayError;
@@ -439,7 +450,7 @@ const ShopPage: React.FC = () => {
                 </div>
               </div>
 
-              {(loading && !displayedProducts.length) && (
+              {((!backendReady || loading) && !displayedProducts.length) && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-3 lg:gap-8">
                   {[...Array(8)].map((_, index) => (
                     <div
@@ -468,9 +479,15 @@ const ShopPage: React.FC = () => {
                   <p className="mb-2 text-gray-600">
                     {(() => {
                       const err = displayError as any;
-                      if (err?.message) return err.message;
-                      if (err?.networkError?.message) return err.networkError.message;
-                      if (err?.graphQLErrors?.[0]?.message) return err.graphQLErrors[0].message;
+                      const message =
+                        err?.networkError?.message ||
+                        err?.graphQLErrors?.[0]?.message ||
+                        err?.message ||
+                        "";
+                      if (/failed to fetch|fetch failed|network/i.test(String(message))) {
+                        return "Catalog is temporarily unavailable. Retrying automatically.";
+                      }
+                      if (message) return message;
                       return "Unable to load products";
                     })()}
                   </p>
@@ -478,7 +495,11 @@ const ShopPage: React.FC = () => {
                     Please try again or adjust your filters.
                   </p>
                   <button
-                    onClick={() => void refetch()}
+                    onClick={() => {
+                      if (backendReady) {
+                        void refetch();
+                      }
+                    }}
                     className="btn-primary"
                   >
                     Try Again

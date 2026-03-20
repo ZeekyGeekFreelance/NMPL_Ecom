@@ -7,7 +7,7 @@ import { runtimeEnv } from "./runtimeEnv";
  * Priority for the GraphQL endpoint:
  *   INTERNAL_API_URL   — direct service-to-service URL, never reaches the
  *                        browser bundle.  Set this to the backend's internal
- *                        address in production (e.g. http://api:5001/api/v1).
+ *                        address in production (e.g. http://api:5000/api/v1).
  *   NEXT_PUBLIC_API_URL — public fallback used in development when both
  *                        services run on localhost.
  */

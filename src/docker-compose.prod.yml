@@ -4,7 +4,7 @@ version: '3.8'
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Prerequisites:
-#   1. Place SSL certificates at ./nginx/certs/nmpl.in.crt and nmpl.in.key
+#   1. Place SSL certificates at ./nginx/certs/nmpl.online.crt and nmpl.online.key
 #      (or use Let's Encrypt / Certbot — see nginx/README.md)
 #   2. Populate src/server/.env.production with real REDIS_URL and payment keys
 #   3. Populate src/client/.env.production with correct NEXT_PUBLIC_API_URL

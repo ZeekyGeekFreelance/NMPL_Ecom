@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node ./scripts/clean-build.js && next dev",
     "repo:sanity": "node ./scripts/repo-sanity-proxy.js",
     "env:check": "node ./scripts/validate-env.js",
     "build": "npm run repo:sanity && npm run env:check -- --production && node ./scripts/clean-build.js && node ./scripts/assert-determinism.js pre && next build && node ./scripts/assert-determinism.js post",

@@ -1,11 +1,9 @@
 import axios, { AxiosInstance } from "axios";
 import { API_BASE_URL } from "@/app/lib/constants/config";
-
-const getCookie = (name: string): string | undefined => {
-  if (typeof document === "undefined") return undefined;
-  const match = document.cookie.match(new RegExp(`(^|;\\s*)${name}=([^;]+)`));
-  return match ? match[2] : undefined;
-};
+import {
+  captureCsrfTokenFromHeaders,
+  getCsrfToken,
+} from "@/app/lib/csrfToken";
 
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -20,13 +18,24 @@ const axiosInstance: AxiosInstance = axios.create({
 // Request interceptor to add CSRF token
 axiosInstance.interceptors.request.use(
   (config) => {
-    const csrfToken = getCookie("csrf-token");
+    const csrfToken = getCsrfToken();
     if (csrfToken && config.method && ["post", "put", "patch", "delete"].includes(config.method.toLowerCase())) {
       config.headers["x-csrf-token"] = csrfToken;
     }
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+axiosInstance.interceptors.response.use(
+  (response) => {
+    captureCsrfTokenFromHeaders(response.headers as Record<string, unknown>);
+    return response;
+  },
+  (error) => {
+    captureCsrfTokenFromHeaders(error?.response?.headers as Record<string, unknown> | undefined);
+    return Promise.reject(error);
+  }
 );
 
 export default axiosInstance;

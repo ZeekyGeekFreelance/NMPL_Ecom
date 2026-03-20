@@ -1,7 +1,7 @@
 export interface BootState {
   migrationsApplied: boolean;
   configValidated: boolean;
-  /** True once createApp() has completed: DB connected, Redis connected, all middleware mounted. */
+  /** True once DB connected, Redis connected, all middleware mounted. */
   serverReady: boolean;
 }
 
