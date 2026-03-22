@@ -5,11 +5,14 @@ const { cleanBuildDir } = require("./clean-build");
 
 const mode = process.argv[2];
 const extraArgs = process.argv.slice(3);
+const isVercelRuntime =
+  String(process.env.VERCEL || "").trim() === "1" ||
+  String(process.env.VERCEL || "").trim().toLowerCase() === "true";
 
 const distDirByMode = {
   dev: ".next-dev",
-  build: ".next-prod",
-  start: ".next-prod",
+  build: isVercelRuntime ? ".next" : ".next-prod",
+  start: isVercelRuntime ? ".next" : ".next-prod",
 };
 
 if (!mode || !distDirByMode[mode]) {
