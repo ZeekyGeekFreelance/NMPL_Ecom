@@ -23,6 +23,9 @@ const statusToPrismaEnum: Record<OrderLifecycleStatus, TRANSACTION_STATUS> = {
   DELIVERED: TRANSACTION_STATUS.DELIVERED,
 };
 
+const createManualFollowUpReservationExpiry = (): Date =>
+  new Date("2099-12-31T23:59:59.000Z");
+
 type OrderItemSnapshot = {
   id: string;
   variantId: string;
@@ -76,7 +79,19 @@ export type UpdateTransactionResult = {
   promotedOrderIds: string[];
 };
 
+export type TransactionSummary = {
+  pendingVerificationCount: number;
+  awaitingPaymentCount: number;
+  waitlistedCount: number;
+  paymentFollowupCount: number;
+};
+
 export class TransactionRepository {
+  private static readonly UPDATE_TRANSACTION_TIMEOUT_MS = 20_000;
+  private static readonly UPDATE_TRANSACTION_MAX_WAIT_MS = 5_000;
+  private static readonly DEFAULT_LIST_TAKE = 25;
+  private static readonly MAX_LIST_TAKE = 100;
+
   constructor() {}
 
   private extractReferenceChecksum(reference: string): string | null {
@@ -120,34 +135,11 @@ export class TransactionRepository {
   }
 
   async findMany(params?: { skip?: number; take?: number }) {
-    if (!params) {
-      return prisma.transaction.findMany({
-        include: {
-          order: {
-            select: {
-              id: true,
-              isPayLater: true,
-              paymentDueDate: true,
-              payment: {
-                select: {
-                  status: true,
-                },
-              },
-              paymentTransactions: {
-                select: {
-                  status: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          transactionDate: "desc",
-        },
-      });
-    }
-
-    const { skip = 0, take = 16 } = params;
+    const skip = params?.skip ?? 0;
+    const take = Math.min(
+      Math.max(1, params?.take ?? TransactionRepository.DEFAULT_LIST_TAKE),
+      TransactionRepository.MAX_LIST_TAKE
+    );
 
     return prisma.transaction.findMany({
       skip,
@@ -270,30 +262,8 @@ export class TransactionRepository {
     });
   }
 
-  async findExpiredAwaitingPaymentTransactionIds(now: Date): Promise<string[]> {
-    const rows = await prisma.transaction.findMany({
-      where: {
-        status: TRANSACTION_STATUS.AWAITING_PAYMENT,
-        order: {
-          reservation: {
-            is: {
-              status: RESERVATION_STATUS.ACTIVE,
-              expiresAt: {
-                lte: now,
-              },
-            },
-          },
-        },
-      },
-      select: {
-        id: true,
-      },
-      orderBy: {
-        transactionDate: "asc",
-      },
-    });
-
-    return rows.map((row) => row.id);
+  async findExpiredAwaitingPaymentTransactionIds(_now: Date): Promise<string[]> {
+    return [];
   }
 
   private sanitizeQuotationItemUpdate(
@@ -452,7 +422,7 @@ export class TransactionRepository {
     tx: TransactionClient;
     order: OrderSnapshot;
     quotationItems: TransactionQuotationItemUpdate[];
-  }): Promise<void> {
+  }): Promise<OrderSnapshot> {
     const { tx, order, quotationItems } = params;
 
     if (!quotationItems.length) {
@@ -524,6 +494,7 @@ export class TransactionRepository {
       );
     }
 
+    const updatedOrderItems: OrderItemSnapshot[] = [];
     let quotedSubtotal = 0;
 
     for (const item of order.orderItems) {
@@ -538,6 +509,12 @@ export class TransactionRepository {
           quantity: update.quantity,
           price: update.price,
         },
+      });
+
+      updatedOrderItems.push({
+        ...item,
+        quantity: update.quantity,
+        price: update.price,
       });
     }
 
@@ -568,6 +545,19 @@ export class TransactionRepository {
         },
       });
     }
+
+    return {
+      ...order,
+      subtotalAmount: normalizedSubtotal,
+      amount: finalAmount,
+      orderItems: updatedOrderItems,
+      payment: order.payment
+        ? {
+            ...order.payment,
+            status: PAYMENT_STATUS.PENDING,
+          }
+        : null,
+    };
   }
 
   private buildQuotationLineItems(orderItems: OrderItemSnapshot[]) {
@@ -650,38 +640,61 @@ export class TransactionRepository {
     orderId: string;
     expiresAt: Date;
   }) {
-    const existing = await params.tx.orderReservation.findUnique({
+    await params.tx.orderReservation.upsert({
       where: {
         orderId: params.orderId,
       },
-      select: {
-        id: true,
+      update: {
+        status: RESERVATION_STATUS.ACTIVE,
+        expiresAt: params.expiresAt,
+        releasedAt: null,
+        consumedAt: null,
+        reason: null,
       },
-    });
-
-    if (existing) {
-      await params.tx.orderReservation.update({
-        where: {
-          id: existing.id,
-        },
-        data: {
-          status: RESERVATION_STATUS.ACTIVE,
-          expiresAt: params.expiresAt,
-          releasedAt: null,
-          consumedAt: null,
-          reason: null,
-        },
-      });
-      return;
-    }
-
-    await params.tx.orderReservation.create({
-      data: {
+      create: {
         orderId: params.orderId,
         status: RESERVATION_STATUS.ACTIVE,
         expiresAt: params.expiresAt,
       },
     });
+  }
+
+  async getTransactionSummary(): Promise<TransactionSummary> {
+    const statuses = [
+      TRANSACTION_STATUS.PENDING_VERIFICATION,
+      TRANSACTION_STATUS.AWAITING_PAYMENT,
+      TRANSACTION_STATUS.WAITLISTED,
+    ] as const;
+
+    const grouped = await prisma.transaction.groupBy({
+      by: ["status"],
+      where: {
+        status: {
+          in: [...statuses],
+        },
+      },
+      _count: {
+        _all: true,
+      },
+    });
+
+    const counts = new Map<string, number>();
+    grouped.forEach((row) => {
+      counts.set(String(row.status), row._count._all);
+    });
+
+    const pendingVerificationCount =
+      counts.get(TRANSACTION_STATUS.PENDING_VERIFICATION) ?? 0;
+    const awaitingPaymentCount =
+      counts.get(TRANSACTION_STATUS.AWAITING_PAYMENT) ?? 0;
+    const waitlistedCount = counts.get(TRANSACTION_STATUS.WAITLISTED) ?? 0;
+
+    return {
+      pendingVerificationCount,
+      awaitingPaymentCount,
+      waitlistedCount,
+      paymentFollowupCount: awaitingPaymentCount + waitlistedCount,
+    };
   }
 
   private async releaseReservationStock(params: {
@@ -867,7 +880,6 @@ export class TransactionRepository {
   private async promoteWaitlistedOrders(params: {
     tx: TransactionClient;
     variantIds: string[];
-    reservationExpiryHours: number;
   }): Promise<string[]> {
     if (!params.variantIds.length) {
       return [];
@@ -937,9 +949,7 @@ export class TransactionRepository {
       }
 
       const now = new Date();
-      const expiresAt = new Date(
-        now.getTime() + params.reservationExpiryHours * 60 * 60 * 1000
-      );
+      const expiresAt = createManualFollowUpReservationExpiry();
 
       await this.upsertActiveReservation({
         tx: params.tx,
@@ -966,7 +976,7 @@ export class TransactionRepository {
           status: ORDER_LIFECYCLE_STATUS.AWAITING_PAYMENT,
           quotationSentAt: now,
           paymentRequestedAt: now,
-          reservationExpiresAt: expiresAt,
+          reservationExpiresAt: null,
         },
       });
 
@@ -989,13 +999,12 @@ export class TransactionRepository {
     id: string,
     data: {
       status: OrderLifecycleStatus;
-      reservationExpiryHours: number;
       quotationItems?: TransactionQuotationItemUpdate[];
       actorUserId?: string;
       actorRole?: string;
     }
   ): Promise<UpdateTransactionResult> {
-    return prisma.$transaction(async (tx) => {
+    const committedUpdate = await prisma.$transaction(async (tx) => {
       const existingTransaction = await tx.transaction.findUnique({
         where: { id },
         select: {
@@ -1027,12 +1036,11 @@ export class TransactionRepository {
       const previousOrderAmount = Number(order.amount);
 
       if (data.quotationItems?.length) {
-        await this.applyQuotationAdjustments({
+        order = await this.applyQuotationAdjustments({
           tx,
           order,
           quotationItems: data.quotationItems,
         });
-        order = await this.getOrderSnapshot(tx, order.id);
       }
 
       let effectiveStatus = data.status;
@@ -1043,9 +1051,7 @@ export class TransactionRepository {
         const reserved = await this.reserveStockForOrder(tx, order.orderItems);
 
         if (reserved) {
-          const expiresAt = new Date(
-            now.getTime() + data.reservationExpiryHours * 60 * 60 * 1000
-          );
+          const expiresAt = createManualFollowUpReservationExpiry();
           await this.upsertActiveReservation({
             tx,
             orderId: order.id,
@@ -1068,7 +1074,7 @@ export class TransactionRepository {
               verificationQueuedAt: order.verificationQueuedAt || now,
               quotationSentAt: now,
               paymentRequestedAt: now,
-              reservationExpiresAt: expiresAt,
+              reservationExpiresAt: null,
             },
           });
 
@@ -1082,7 +1088,7 @@ export class TransactionRepository {
               actorUserId: data.actorUserId,
               actorRole: data.actorRole,
               message:
-                "Admin revised quotation and reserved stock. Awaiting customer payment.",
+                "Admin revised quotation and marked the order ready for payment with manual follow-up.",
               lineItems: this.buildQuotationLineItems(order.orderItems),
             });
           }
@@ -1176,17 +1182,16 @@ export class TransactionRepository {
           actorRole: data.actorRole,
           message:
             effectiveStatus === ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED
-              ? "Quotation expired before payment. Reservation released."
+              ? "Quotation was closed under the legacy automatic-expiry policy. Stock hold released."
               : data.actorRole
-              ? `Quotation rejected by ${data.actorRole}. Reservation released.`
-              : "Quotation rejected. Reservation released.",
+              ? `Quotation rejected by ${data.actorRole}. Stock hold released.`
+              : "Quotation rejected. Stock hold released.",
           lineItems: this.buildQuotationLineItems(order.orderItems),
         });
 
         promotedOrderIds = await this.promoteWaitlistedOrders({
           tx,
           variantIds: affectedVariantIds,
-          reservationExpiryHours: data.reservationExpiryHours,
         });
         } else if (effectiveStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED) {
           const isPayLaterBypass = order.isPayLater;
@@ -1301,83 +1306,43 @@ export class TransactionRepository {
           }
 
           await tx.order.update({
-          where: { id: order.id },
-          data: statusUpdateData as any,
-        });
-      }
+            where: { id: order.id },
+            data: statusUpdateData as any,
+          });
+        }
 
         const updatedTransaction = await tx.transaction.update({
           where: { id },
           data: {
             status: statusToPrismaEnum[effectiveStatus],
           },
-          include: {
-            order: {
-              include: {
-                payment: true,
-                paymentTransactions: {
-                  orderBy: {
-                    paymentReceivedAt: "desc",
-                  },
-                  include: {
-                    recordedBy: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        role: true,
-                      },
-                    },
-                  },
-                },
-                reservation: true,
-                address: true,
-                quotationLogs: {
-                  orderBy: {
-                    createdAt: "desc",
-                },
-              },
-              orderItems: {
-                include: {
-                  variant: {
-                    include: {
-                      product: {
-                        select: {
-                          id: true,
-                          name: true,
-                          slug: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  phone: true,
-                  role: true,
-                  dealerProfile: {
-                    select: {
-                      status: true,
-                    },
-                  },
-                },
-              },
-            },
+          select: {
+            id: true,
           },
-        },
-      });
+        });
 
       return {
-        transaction: updatedTransaction,
+        transactionId: updatedTransaction.id,
         previousStatus,
         effectiveStatus,
         promotedOrderIds,
       };
+    }, {
+      maxWait: TransactionRepository.UPDATE_TRANSACTION_MAX_WAIT_MS,
+      timeout: TransactionRepository.UPDATE_TRANSACTION_TIMEOUT_MS,
     });
+
+    const transaction = await this.findById(committedUpdate.transactionId);
+    if (!transaction) {
+      throw new AppError(404, "Transaction not found after update");
+    }
+
+    return {
+      transaction,
+      previousStatus: committedUpdate.previousStatus,
+      effectiveStatus: committedUpdate.effectiveStatus,
+      promotedOrderIds: committedUpdate.promotedOrderIds,
+    };
   }
 
   async deleteTransaction(id: string) {

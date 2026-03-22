@@ -42,6 +42,7 @@ if (!clientRedirectUrl) {
 router.post(
   "/request-registration-otp",
   otpRateLimiter,
+  csrfProtection,
   validateDto(RequestRegistrationOtpDto),
   authController.requestRegistrationOtp
 );
@@ -49,6 +50,7 @@ router.post(
 router.post(
   "/sign-up",
   registrationLimiter,
+  csrfProtection,
   validateDto(RegisterDto),
   authController.signup
 );
@@ -65,15 +67,18 @@ router.post(
 router.post(
   "/sign-in",
   authRateLimiter,
+  csrfProtection,
   validateDto(SigninDto),
   authController.signin
 );
 
+router.post("/sign-out", optionalAuth, csrfProtection, authController.signout);
 router.get("/sign-out", optionalAuth, authController.signout);
 
 router.post(
   "/refresh-token",
   refreshTokenLimiter,
+  csrfProtection,
   authController.refreshToken
 );
 
@@ -82,12 +87,13 @@ router.post(
 router.post(
   "/change-password",
   authRateLimiter,
+  csrfProtection,
   validateDto(ChangePasswordOnFirstLoginDto),
   authController.changePasswordOnFirstLogin
 );
 
 // ── Authenticated self-service password change (ALL roles) ───────────────
-// Requires a valid session. Works for USER, DEALER, ADMIN, and SUPERADMIN.
+// Requires valid auth cookies. Works for USER, DEALER, ADMIN, and SUPERADMIN.
 // This is the ONLY self-service password change path for admin accounts.
 router.post(
   "/change-own-password",
@@ -102,6 +108,7 @@ router.post(
 router.post(
   "/forgot-password",
   passwordResetLimiter,
+  csrfProtection,
   validateDto(ForgotPasswordDto),
   authController.forgotPassword
 );
@@ -109,6 +116,7 @@ router.post(
 router.post(
   "/reset-password",
   passwordResetLimiter,
+  csrfProtection,
   validateDto(ResetPasswordDto),
   authController.resetPassword
 );
@@ -116,11 +124,12 @@ router.post(
 // ── SuperAdmin out-of-band emergency reset ────────────────────────────────
 // Unauthenticated but protected by SUPERADMIN_RESET_SECRET (shared secret).
 // Used ONLY when a SuperAdmin cannot sign in (compromised / forgotten password).
-// Rate-limited to 5 req/hour per IP. In production, restrict this path to
-// known IPs in nginx for an additional layer of protection.
+// Rate-limited to 5 req/hour per IP. In production, restrict this path at the
+// platform edge or behind an allowlisted admin ingress.
 router.post(
   "/superadmin/reset-password",
   superAdminResetLimiter,
+  csrfProtection,
   validateDto(SuperAdminResetPasswordDto),
   authController.resetSuperAdminPassword
 );

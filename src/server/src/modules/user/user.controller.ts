@@ -206,6 +206,8 @@ export class UserController {
 
   getDealers = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 200;
       const rawStatus =
         typeof req.query.status === "string"
           ? req.query.status.toUpperCase()
@@ -215,11 +217,22 @@ export class UserController {
         ? (rawStatus as "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED")
         : undefined;
 
-      const dealers = await this.userService.getDealers(status);
+      const dealers = await this.userService.getDealers({ status, page, limit });
 
       sendResponse(res, 200, {
         data: { dealers },
         message: "Dealers fetched successfully",
+      });
+    }
+  );
+
+  getDealerSummary = asyncHandler(
+    async (_req: Request, res: Response): Promise<void> => {
+      const summary = await this.userService.getDealerSummary();
+
+      sendResponse(res, 200, {
+        data: { summary },
+        message: "Dealer summary fetched successfully",
       });
     }
   );

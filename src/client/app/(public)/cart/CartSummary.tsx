@@ -236,6 +236,36 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     isCalculatingSummary ||
     isCreatingAddress ||
     isSettingDefaultAddress;
+  const checkoutBlockReason = useMemo(() => {
+    if (totalItems === 0) {
+      return "Add at least one item to your cart to continue.";
+    }
+
+    if (deliveryMode === "DELIVERY" && !selectedAddressId) {
+      return "Select a delivery address before checkout.";
+    }
+
+    if (summaryError) {
+      return summaryError;
+    }
+
+    if (!checkoutSummary) {
+      return "Final charges are still being calculated. Please wait a moment.";
+    }
+
+    if (!hasReviewedPriceBreakup) {
+      return "Review the subtotal, delivery, and total before continuing.";
+    }
+
+    return null;
+  }, [
+    checkoutSummary,
+    deliveryMode,
+    hasReviewedPriceBreakup,
+    selectedAddressId,
+    summaryError,
+    totalItems,
+  ]);
   const canReviewPriceBreakup =
     !!checkoutSummary &&
     !summaryError &&
@@ -1187,20 +1217,28 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
           ) : isAuthenticated ? (
             <button
               disabled={
-                isBusy ||
-                totalItems === 0 ||
-                (deliveryMode === "DELIVERY" && !selectedAddressId) ||
-                !checkoutSummary ||
-                !!summaryError ||
-                !hasReviewedPriceBreakup
+                isBusy || totalItems === 0
               }
               onClick={handleCheckoutClick}
-              className="w-full rounded-md bg-indigo-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              className={`w-full rounded-md py-2.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:bg-gray-300 ${
+                checkoutBlockReason && !isBusy && totalItems > 0
+                  ? "bg-amber-500 hover:bg-amber-600"
+                  : "bg-indigo-600 hover:bg-indigo-700"
+              }`}
+              aria-disabled={isBusy || totalItems === 0}
             >
               {isBusy
                 ? "Processing..."
+                : totalItems === 0
+                ? "Cart is Empty"
                 : !hasReviewedPriceBreakup
                 ? "Review Price Breakup to Continue"
+                : deliveryMode === "DELIVERY" && !selectedAddressId
+                ? "Select Address to Continue"
+                : summaryError
+                ? "Resolve Checkout Issue"
+                : !checkoutSummary
+                ? "Waiting for Final Total"
                 : "Proceed to Checkout"}
             </button>
           ) : (
@@ -1211,6 +1249,9 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
               Sign in to Checkout
             </Link>
           )}
+          {isAuthenticated && checkoutBlockReason && totalItems > 0 && !isBusy ? (
+            <p className="mt-2 text-xs text-gray-600">{checkoutBlockReason}</p>
+          ) : null}
         </div>
         </div>
       </motion.div>
@@ -1267,7 +1308,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
             : "Pending"
         }, Final total ${formatPrice(
           summaryFinalTotal
-        )}. Stock will be verified first, and payment is requested only after approval.`}
+        )}. Stock will be verified first. Approved pricing will be shared, and our team will follow up manually if payment is still pending.`}
         onConfirm={handleConfirmCheckout}
         onCancel={() => setIsCheckoutConfirmOpen(false)}
         confirmLabel="Submit Order"

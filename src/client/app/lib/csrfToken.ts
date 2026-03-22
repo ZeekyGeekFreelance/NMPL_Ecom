@@ -1,6 +1,5 @@
 "use client";
 
-const CSRF_COOKIE_NAME = "csrf-token";
 const CSRF_HEADER_NAME = "x-csrf-token";
 
 let inMemoryCsrfToken: string | undefined;

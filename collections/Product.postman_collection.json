@@ -84,7 +84,7 @@
 						{
 							"key": "file",
 							"type": "file",
-							"src": "/home/abdelrahman-aboalkhair/Projects/WEB/code/full-stack-ecommerce/recommender/products.xlsx"
+							"src": "/path/to/products.csv"
 						}
 					]
 				},

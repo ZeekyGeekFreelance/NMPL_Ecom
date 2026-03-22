@@ -95,16 +95,12 @@ const OrderInformation = ({ order, className = "" }) => {
           <p>{formatDate(order.updatedAt)}</p>
         </div>
         <div>
-          <p className="text-sm text-gray-500">Reservation Status</p>
+          <p className="text-sm text-gray-500">Stock Hold Status</p>
           <p>{order.reservation?.status || "NONE"}</p>
         </div>
         <div>
-          <p className="text-sm text-gray-500">Reservation Expires</p>
-          <p>
-            {order.reservation?.expiresAt || order.reservationExpiresAt
-              ? formatDate(order.reservation?.expiresAt || order.reservationExpiresAt)
-              : "N/A"}
-          </p>
+          <p className="text-sm text-gray-500">Follow-up Policy</p>
+          <p>Manual review</p>
         </div>
       </div>
 

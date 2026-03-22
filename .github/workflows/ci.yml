@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      HUSKY: "0"
+      NEXT_TELEMETRY_DISABLED: "1"
+      SCARF_ANALYTICS: "false"
+      NEXT_PUBLIC_API_URL: "https://api.example.com/api/v1"
+      INTERNAL_API_URL: "https://api.example.com/api/v1"
+      NEXT_PUBLIC_PLATFORM_NAME: "NMPL"
+      NEXT_PUBLIC_SUPPORT_EMAIL: "support@nmpl.online"
+      NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/client/package-lock.json
+            src/server/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Prepare server env
+        run: cp src/server/.env.example src/server/.env
+
+      - name: Install server dependencies
+        run: npm --prefix ./src/server ci
+
+      - name: Install client dependencies
+        run: npm --prefix ./src/client ci
+
+      - name: Repository sanity
+        run: npm run repo:sanity
+
+      - name: Validate server env
+        run: npm --prefix ./src/server run env:check
+
+      - name: Validate client production env
+        run: npm --prefix ./src/client run env:check -- --production
+
+      - name: Build server
+        run: npm --prefix ./src/server run build
+
+      - name: Build client
+        run: npm --prefix ./src/client run build
+        env:
+          NODE_ENV: production
+
+      - name: Check dependency licenses and install scripts
+        run: npm run licenses:check
+
+      - name: Check install-state exceptions
+        run: npm run deps:check
+
+      - name: Audit dependencies
+        run: npm run audit:all

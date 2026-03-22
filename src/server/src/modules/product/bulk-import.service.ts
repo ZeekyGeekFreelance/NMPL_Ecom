@@ -1,13 +1,12 @@
 /**
  * BulkImportService
  * ──────────────────────────────────────────────────────────────────────────
- * CSV/XLSX bulk product import logic extracted from ProductService.
+ * CSV bulk product import logic extracted from ProductService.
  * Handles file parsing, row validation (including SKU format), and the
  * batched Prisma transaction that creates products + variants.
  */
 import AppError from "@/shared/errors/AppError";
 import { parse } from "csv-parse/sync";
-import * as XLSX from "xlsx";
 import prisma from "@/infra/database/database.config";
 import { normalizeHumanTextForField } from "@/shared/utils/textNormalization";
 import slugify from "@/shared/utils/slugify";
@@ -41,7 +40,7 @@ export class BulkImportService {
   }
 
   /**
-   * Parse a CSV or XLSX file buffer into raw record objects.
+   * Parse a CSV file buffer into raw record objects.
    */
   private parseFile(file: Express.Multer.File): unknown[] {
     if (file.mimetype === "text/csv") {
@@ -52,16 +51,7 @@ export class BulkImportService {
       });
     }
 
-    if (
-      file.mimetype ===
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    ) {
-      const workbook = XLSX.read(file.buffer, { type: "buffer" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      return XLSX.utils.sheet_to_json(sheet);
-    }
-
-    throw new AppError(400, "Unsupported file format. Use CSV or XLSX");
+    throw new AppError(400, "Unsupported file format. Use CSV");
   }
 
   /**

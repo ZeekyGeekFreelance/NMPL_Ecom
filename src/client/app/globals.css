@@ -67,7 +67,7 @@
   --foreground: var(--color-text);
 
   /* Font */
-  --font-poppins: "Poppins", sans-serif;
+  --font-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 body {
@@ -75,7 +75,7 @@ body {
   color: var(--color-text);
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
-  font-family: var(--font-poppins);
+  font-family: var(--font-sans);
 }
 
 a[href],

@@ -1,54 +1,31 @@
-# GitHub Actions Secrets Reference
+# GitHub Secrets Reference
 
-Go to: **GitHub → Your Repo → Settings → Secrets and variables → Actions → New repository secret**
+This repository no longer uses GitHub Actions to deploy production.
 
-## Required Secrets
+Current GitHub Actions scope:
 
-| Secret Name                    | Value                                               |
-|-------------------------------|-----------------------------------------------------|
-| `PRODUCTION_DATABASE_URL`      | Neon pooled URL (same as `.env.production` value)   |
-| `PRODUCTION_DIRECT_URL`        | Neon direct URL                                     |
-| `PRODUCTION_REDIS_URL`         | Upstash Redis URL                                   |
-| `ACCESS_TOKEN_SECRET`          | From `.env.production`                              |
-| `REFRESH_TOKEN_SECRET`         | From `.env.production`                              |
-| `SESSION_SECRET`               | From `.env.production`                              |
-| `COOKIE_SECRET`                | From `.env.production`                              |
-| `COOKIE_DOMAIN`                | `.nmpl.in`                                          |
-| `PRODUCTION_API_URL`           | `https://api.nmpl.in`                               |
-| `PRODUCTION_FRONTEND_URL`      | `https://nmpl.in`                                   |
-| `STAGING_API_URL`              | `https://staging-api.nmpl.in` (or Railway preview)  |
-| `STAGING_FRONTEND_URL`         | `https://staging.nmpl.in` (or Vercel preview)       |
-| `SUPPORT_EMAIL`                | `support@nmpl.in`                                   |
-| `BILLING_NOTIFICATION_EMAILS`  | `billing@nmpl.in`                                   |
-| `EMAIL_FROM`                   | `noreply@nmpl.in`                                   |
-| `SMTP_PASS`                    | SendGrid API key or Gmail app password              |
+- install verification
+- env validation
+- build verification
+- dependency audit
+- dependency license and install-script policy checks
 
-## Railway Secrets (for CI/CD deployment)
+## Repository secrets
 
-| Secret Name                       | Where to find                                   |
-|----------------------------------|-------------------------------------------------|
-| `RAILWAY_TOKEN`                   | Railway → Account Settings → Tokens            |
-| `RAILWAY_PRODUCTION_PROJECT_ID`   | Railway → Project → Settings → Project ID      |
-| `RAILWAY_STAGING_PROJECT_ID`      | Railway → Staging Project → Settings           |
+No GitHub repository secrets are required for the default `ci.yml` workflow.
 
-## Vercel Secrets (for client deployment)
+The workflow uses:
 
-| Secret Name         | Where to find                                          |
-|--------------------|--------------------------------------------------------|
-| `VERCEL_TOKEN`      | Vercel → Account Settings → Tokens                    |
-| `VERCEL_ORG_ID`     | Vercel → Team Settings → General → Team ID            |
-| `VERCEL_PROJECT_ID` | Vercel → Project → Settings → General → Project ID    |
+- `src/server/.env.example` for server validation in CI
+- inline production-safe client env values for client build verification
 
-## Optional Secrets
+## Local deployment credentials
 
-| Secret Name      | Value                                        |
-|-----------------|----------------------------------------------|
-| `SLACK_WEBHOOK`  | Slack incoming webhook URL for notifications |
+Production deployment is executed locally with `npm run deploy`, using:
 
-## GitHub Environment Protection Rules (recommended)
+- Railway CLI authentication
+- Vercel CLI authentication
+- platform-managed environment variables
 
-1. Go to Settings → Environments → `production`
-2. Enable **Required reviewers** and add yourself
-3. This forces a manual approval before any production deploy
-
-This means: push to `main` → staging deploys automatically → you review → click "Approve" → production deploys.
+Do not store production deploy tokens in GitHub unless you intentionally add a
+separate reviewed deployment workflow.

@@ -4,8 +4,16 @@ Full-stack ecommerce platform for NMPL with role-based workflows (`SUPERADMIN`, 
 
 ## Production Docs
 
+Supported production topology:
+
+- API on Railway
+- Client on Vercel
+- Docker Compose for development only
+- Managed TLS on Railway and Vercel only
+
 - [Quick Start Production Guide](QUICK_START_PRODUCTION.md)
 - [Detailed Production Deployment](PRODUCTION_DEPLOYMENT.md)
+- [Environment Source Of Truth](ENVIRONMENT_SOURCE_OF_TRUTH.md)
 - [Security Checklist](SECURITY_CHECKLIST.md)
 - [Production Launch Checklist](PRODUCTION_LAUNCH_CHECKLIST.md)
 - [Monitoring Setup](MONITORING_SETUP.md)

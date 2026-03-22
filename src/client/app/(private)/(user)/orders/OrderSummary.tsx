@@ -336,13 +336,7 @@ const OrderSummary = ({
             Quotation approved. Complete payment to confirm your order.
           </p>
           <p className="mt-1 text-xs text-blue-800">
-            Reservation expires at{" "}
-            {order?.reservation?.expiresAt || order?.reservationExpiresAt
-              ? formatDate(
-                  order?.reservation?.expiresAt || order?.reservationExpiresAt
-                )
-              : "N/A"}
-            .
+            Manual follow-up will be handled by our team if payment is still pending.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button

@@ -24,6 +24,13 @@ const transactionController = makeTransactionController();
  *         description: Forbidden. User does not have the required role.
  */
 router.get(
+  "/summary",
+  protect,
+  authorizeRole("ADMIN", "SUPERADMIN"),
+  transactionController.getTransactionSummary
+);
+
+router.get(
   "/",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),

@@ -11,14 +11,14 @@ export const logRequest = async (
   const start = Date.now();
   const { method, url, ip } = req;
 
-  res.on("finish", async () => {
+  res.on("finish", () => {
     const duration = Date.now() - start;
     const status = res.statusCode;
     const userId = req.user?.id || "anonymous";
     const traceId = req.traceId || "unknown";
 
-    try {
-      await logsService.info(`API Request`, {
+    void logsService
+      .info(`API Request`, {
         method,
         url,
         status,
@@ -26,11 +26,11 @@ export const logRequest = async (
         ip,
         userId,
         traceId,
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[logRequest] Failed to persist request log: ${message}`);
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[logRequest] Failed to persist request log: ${message}`);
-    }
   });
 
   next();

@@ -26,7 +26,15 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
   const pollInterval = useDealerCatalogPollInterval();
   const { user, isLoading: isAuthLoading } = useAuth();
   const backendReady = useBackendReady();
-  const refreshedUserIdRef = useRef<string | null>(null);
+  const refreshedViewerKeyRef = useRef<string | null>(null);
+  const viewerRefetchKey = user?.id
+    ? [
+        user.id,
+        user.role,
+        user.effectiveRole || "no-effective-role",
+        user.dealerStatus || "no-dealer-status",
+      ].join("|")
+    : null;
 
   // Seed the Apollo cache with SSR data (or empty data) before the first render
   // so that useQuery("cache-first") finds an entry immediately and never fires
@@ -89,29 +97,29 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
     // in-progress). Only re-render when a result (data or error) is final.
     notifyOnNetworkStatusChange: false,
     skip: !backendReady,
-    // publicCatalog: true instructs publicCatalogLink (apolloClient.ts) to
-    // inject x-public-catalog: 1 so the server skips session middleware for
-    // this unauthenticated catalog request — saving a Redis round-trip.
-    // Note: when a logged-in dealer triggers refetch() below, Apollo sends a
-    // fresh request with this context, which is correct — dealer pricing is
-    // resolved server-side via the JWT cookie, not via session middleware.
-    context: { publicCatalog: true },
   });
 
-  // After auth resolves, refetch once per user so dealer-specific prices
-  // replace the anonymous catalog data that was seeded from SSR.
   useEffect(() => {
-    if (!backendReady || isAuthLoading || !user?.id) {
+    if (!viewerRefetchKey) {
+      refreshedViewerKeyRef.current = null;
+    }
+  }, [viewerRefetchKey]);
+
+  // After auth resolves and the backend health gate opens, refetch once per
+  // viewer signature so dealer-specific prices replace the anonymous catalog
+  // data that was seeded from SSR.
+  useEffect(() => {
+    if (!backendReady || isAuthLoading || !viewerRefetchKey) {
       return;
     }
 
-    if (refreshedUserIdRef.current === user.id) {
+    if (refreshedViewerKeyRef.current === viewerRefetchKey) {
       return;
     }
 
-    refreshedUserIdRef.current = user.id;
+    refreshedViewerKeyRef.current = viewerRefetchKey;
     void refetch();
-  }, [isAuthLoading, user?.id, refetch]);
+  }, [backendReady, isAuthLoading, viewerRefetchKey, refetch]);
 
   // Promote fresh network data into display state but never regress to empty.
   useEffect(() => {

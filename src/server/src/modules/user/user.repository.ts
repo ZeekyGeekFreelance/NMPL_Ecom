@@ -21,6 +21,9 @@ export interface DealerPriceInput {
 }
 
 export class UserRepository {
+  private static readonly DEFAULT_DEALER_LIST_TAKE = 200;
+  private static readonly MAX_DEALER_LIST_TAKE = 200;
+
   // ── Internal helpers (retained for DealerPriceMapping queries) ──────────
   private isDealerTableMissing(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
@@ -75,6 +78,36 @@ export class UserRepository {
       ...user,
       dealerProfile: dealerProfilesByUserId.get(user.id) ?? null,
     }));
+  }
+
+  async getDealerSummary() {
+    const grouped = await prisma.dealerProfile.groupBy({
+      by: ["status"],
+      _count: {
+        _all: true,
+      },
+    });
+
+    const counts = new Map<string, number>();
+    grouped.forEach((row) => {
+      counts.set(String(row.status), row._count._all);
+    });
+
+    const pendingCount = counts.get("PENDING") ?? 0;
+    const approvedCount = counts.get("APPROVED") ?? 0;
+    const legacyCount = counts.get("LEGACY") ?? 0;
+    const rejectedCount = counts.get("REJECTED") ?? 0;
+    const suspendedCount = counts.get("SUSPENDED") ?? 0;
+
+    return {
+      totalCount: pendingCount + approvedCount + legacyCount + rejectedCount + suspendedCount,
+      pendingCount,
+      approvedCount,
+      legacyCount,
+      rejectedCount,
+      suspendedCount,
+      activeCount: approvedCount + legacyCount,
+    };
   }
 
   async findUserById(id: string | undefined) {
@@ -291,10 +324,20 @@ export class UserRepository {
     return sharedUpsertDealerProfile(data);
   }
 
-  async getDealers(status?: DealerStatus) {
-    const statusFilter = status
+  async getDealers(options?: {
+    status?: DealerStatus;
+    skip?: number;
+    take?: number;
+  }) {
+    const status = options?.status;
+    const statusFilter = options?.status
       ? Prisma.sql`WHERE dp."status" = ${status}::"DEALER_STATUS"`
       : Prisma.empty;
+    const skip = Math.max(0, options?.skip ?? 0);
+    const take = Math.min(
+      Math.max(1, options?.take ?? UserRepository.DEFAULT_DEALER_LIST_TAKE),
+      UserRepository.MAX_DEALER_LIST_TAKE
+    );
 
     try {
       return prisma.$queryRaw<
@@ -339,6 +382,8 @@ export class UserRepository {
           INNER JOIN "DealerProfile" dp ON dp."userId" = u."id"
           ${statusFilter}
           ORDER BY dp."updatedAt" DESC
+          LIMIT ${take}
+          OFFSET ${skip}
         `
       );
     } catch (error) {

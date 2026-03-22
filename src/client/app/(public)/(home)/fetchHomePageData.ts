@@ -1,5 +1,5 @@
-import { cache } from "react";
 import { createServerApolloClient } from "@/app/lib/apolloServerClient";
+import { runtimeEnv } from "@/app/lib/runtimeEnv";
 import { GET_HOME_PAGE_DATA } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 
@@ -13,27 +13,51 @@ export interface HomePageData {
   categories: { id: string; slug: string; name: string; description?: string }[];
 }
 
+const EMPTY_HOME_PAGE_DATA: HomePageData = {
+  featured: [],
+  trending: [],
+  newArrivals: [],
+  bestSellers: [],
+  categories: [],
+};
+
 /**
  * Fetches all home page data in a SINGLE GraphQL query during SSR.
  * One network round-trip instead of five.
- * Wrapped with React cache() so the result is shared across the render tree.
+ *
+ * Do not memoize failures across requests. A cold-start miss or transient
+ * upstream error would otherwise poison the home page until the Next process
+ * restarts, leaving featured/trending sections empty long after the API is
+ * healthy again.
  */
-export const fetchHomePageData = cache(async (): Promise<HomePageData> => {
+export const fetchHomePageData = async (): Promise<HomePageData> => {
   try {
-    const client = createServerApolloClient();
-    const { data } = await client.query({
+    const client = await createServerApolloClient();
+    const { data, errors } = await client.query({
       query: GET_HOME_PAGE_DATA,
       variables: { pageSize: SECTION_PAGE_SIZE },
+      errorPolicy: "all",
+      fetchPolicy: "no-cache",
     });
 
+    if (errors && errors.length > 0 && runtimeEnv.isDevelopment) {
+      console.error(
+        "[home-data] GraphQL returned partial errors while loading the home page.",
+        errors.map((error) => error.message)
+      );
+    }
+
     return {
-      featured:    data?.featured?.products    ?? [],
-      trending:    data?.trending?.products    ?? [],
-      newArrivals: data?.newArrivals?.products ?? [],
-      bestSellers: data?.bestSellers?.products ?? [],
-      categories:  data?.categories            ?? [],
+      featured: data?.homePageCatalog?.featured ?? [],
+      trending: data?.homePageCatalog?.trending ?? [],
+      newArrivals: data?.homePageCatalog?.newArrivals ?? [],
+      bestSellers: data?.homePageCatalog?.bestSellers ?? [],
+      categories: data?.homePageCatalog?.categories ?? [],
     };
-  } catch {
-    return { featured: [], trending: [], newArrivals: [], bestSellers: [], categories: [] };
+  } catch (error) {
+    if (runtimeEnv.isDevelopment) {
+      console.error("[home-data] Failed to load home page data.", error);
+    }
+    return { ...EMPTY_HOME_PAGE_DATA };
   }
-});
+};

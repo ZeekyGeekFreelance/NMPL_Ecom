@@ -3,16 +3,22 @@
     "node": ">=22 <23"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19.8.1",
-    "@commitlint/config-conventional": "^19.8.1",
-    "husky": "^9.1.7"
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1",
+    "husky": "9.1.7"
   },
   "overrides": {
-    "ajv": "^8.18.0"
+    "ajv": "8.18.0"
   },
   "scripts": {
     "prepare": "husky",
     "repo:sanity": "node ./scripts/repo-sanity.js",
+    "audit": "npm audit --audit-level=high",
+    "audit:all": "npm audit --audit-level=high && npm --prefix ./src/client audit --audit-level=high && npm --prefix ./src/server audit --audit-level=high",
+    "deps:check": "node ./scripts/check-install-state.js",
+    "licenses:check": "node ./scripts/check-licenses.js",
+    "build:all": "npm --prefix ./src/server run build && npm --prefix ./src/client run build",
+    "ci:verify": "npm run repo:sanity && npm --prefix ./src/server run env:check && npm --prefix ./src/client run env:check -- --production && npm run build:all && npm run audit:all && npm run deps:check && npm run licenses:check",
     "deploy": "node ./scripts/deploy.js",
     "setup:prod": "node ./scripts/setup-production-env.js"
   }

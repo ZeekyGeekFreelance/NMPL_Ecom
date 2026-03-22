@@ -4,6 +4,14 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const packageDirs = [root, path.join(root, "src", "server"), path.join(root, "src", "client")];
+const dependencyFields = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
+const EXACT_VERSION_PATTERN =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 const exists = (filePath) => fs.existsSync(filePath);
 
@@ -43,6 +51,21 @@ for (const dir of packageDirs) {
     throw new Error(
       `[repo-sanity] ${path.relative(root, dir)} must use only package-lock.json (found: ${lockfiles.join(", ") || "none"})`
     );
+  }
+
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.join(dir, "package.json"), "utf8")
+  );
+
+  for (const field of dependencyFields) {
+    const dependencies = packageJson[field] || {};
+    for (const [name, version] of Object.entries(dependencies)) {
+      if (!EXACT_VERSION_PATTERN.test(String(version))) {
+        throw new Error(
+          `[repo-sanity] ${path.relative(root, dir) || "."} ${field}.${name} must use an exact version (found: ${version})`
+        );
+      }
+    }
   }
 }
 

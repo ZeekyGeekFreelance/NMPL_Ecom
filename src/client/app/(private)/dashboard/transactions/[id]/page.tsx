@@ -82,8 +82,8 @@ const TransactionDetailsPage = () => {
     skip: !id || !isAdmin,
     // Always refetch on mount so a fresh navigation never serves stale cache
     refetchOnMountOrArgChange: true,
-    // Short poll so cold-start 503s self-recover within a few seconds
-    pollingInterval: 5000,
+    pollingInterval: 15000,
+    skipPollingIfUnfocused: true,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
@@ -156,7 +156,6 @@ const TransactionDetailsPage = () => {
     availableNextStatuses.length > 0 && availableNextStatuses.includes(selectedStatus);
   const isIrreversibleStatusTransition =
     selectedStatus === "QUOTATION_REJECTED" ||
-    selectedStatus === "QUOTATION_EXPIRED" ||
     selectedStatus === "DELIVERED";
   const canEditQuotation =
     currentStatus === "PENDING_VERIFICATION" || currentStatus === "WAITLISTED";
@@ -503,7 +502,7 @@ const TransactionDetailsPage = () => {
         <div className="flex h-full min-h-0 flex-col">
           <div className="shrink-0 border-b border-gray-200 px-6 pb-4 pt-6">
             <h2 className="pr-12 text-lg font-semibold text-gray-900">
-              Edit Quotation and Reserve Stock
+              Edit Quotation
             </h2>
             <p className="mt-2 text-sm text-gray-600">
               Update final quantity and unit price for each line item before issuing
@@ -646,7 +645,7 @@ const TransactionDetailsPage = () => {
         isOpen={isQuotationConfirmOpen}
         title="Send Quotation to Customer?"
         type="warning"
-        message={`You are about to send a quotation for ${quotationRows.length} item(s). This will reserve stock and update the customer-facing quotation amount.`}
+        message={`You are about to send a quotation for ${quotationRows.length} item(s). This will update the customer-facing quotation amount and place the order into manual follow-up payment flow.`}
         confirmLabel="Send Quotation"
         onConfirm={handleConfirmIssueQuotation}
         onCancel={() => {

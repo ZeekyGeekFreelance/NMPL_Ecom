@@ -169,11 +169,10 @@ export const ORDER_STATUS_OPTIONS: Array<{
   label: string;
   value: OrderLifecycleStatus;
 }> = [
-  { label: "Approve Quotation & Reserve", value: "AWAITING_PAYMENT" },
+  { label: "Approve Quotation", value: "AWAITING_PAYMENT" },
   { label: "Move to Waitlist", value: "WAITLISTED" },
   { label: "Mark as Delivered", value: "DELIVERED" },
   { label: "Reject Quotation", value: "QUOTATION_REJECTED" },
-  { label: "Mark Quotation Expired", value: "QUOTATION_EXPIRED" },
 ];
 
 const allowedStatusTransitions: Record<
@@ -182,7 +181,7 @@ const allowedStatusTransitions: Record<
 > = {
   PENDING_VERIFICATION: ["AWAITING_PAYMENT", "WAITLISTED"],
   WAITLISTED: ["AWAITING_PAYMENT"],
-  AWAITING_PAYMENT: ["QUOTATION_REJECTED", "QUOTATION_EXPIRED"],
+  AWAITING_PAYMENT: ["QUOTATION_REJECTED"],
   QUOTATION_REJECTED: [],
   QUOTATION_EXPIRED: [],
   CONFIRMED: ["DELIVERED"],

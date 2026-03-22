@@ -17,6 +17,8 @@ src/server/.env
 src/server/.env.*
 !src/server/.env.example
 src/client/.next/
+src/client/.next-dev/
+src/client/.next-prod/
 src/client/node_modules/
 src/server/node_modules/
 src/server/src/infra/logs/*.log
@@ -25,3 +27,4 @@ src/server/dist/infra/logs/*.log
 src/tmp-cookies.txt
 src/client/.codex-client-dev.err.log
 src/client/.codex-client-dev.out.log
+tmp/

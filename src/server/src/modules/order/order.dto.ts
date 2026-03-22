@@ -9,13 +9,12 @@ export class UpdateTrackingStatusDto {
       "WAITLISTED",
       "AWAITING_PAYMENT",
       "QUOTATION_REJECTED",
-      "QUOTATION_EXPIRED",
       "CONFIRMED",
       "DELIVERED",
     ],
     {
       message:
-        "Status must be one of: PENDING_VERIFICATION, WAITLISTED, AWAITING_PAYMENT, QUOTATION_REJECTED, QUOTATION_EXPIRED, CONFIRMED, DELIVERED",
+        "Status must be one of: PENDING_VERIFICATION, WAITLISTED, AWAITING_PAYMENT, QUOTATION_REJECTED, CONFIRMED, DELIVERED",
     }
   )
   status!: string;

@@ -61,15 +61,13 @@ services:
     # Startup sequence:
     #   1. Override URLs so Prisma CLI uses db:5432 (Docker network), not .env localhost.
     #   2. prisma migrate deploy — apply all pending migrations (idempotent, safe to re-run).
-    #   3. prisma generate      — regenerate the TypeScript client from schema.
-    #   4. nodemon              — start the dev server with hot-reload.
+    #   3. npm run start:docker — compile the server and run the built dist entrypoint.
     command: >-
       sh -c "
         export DATABASE_URL='postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable&connection_limit=20&pool_timeout=20' &&
         export DIRECT_URL='postgresql://jhaecom:jhaecom27@db:5432/b2c_ecommerce?schema=public&sslmode=disable' &&
         npx prisma migrate deploy &&
-        npx prisma generate &&
-        npx nodemon
+        npm run start:docker
       "
     # ── Readiness probe ──────────────────────────────────────────────────────
     # Uses Node.js built-in http module — more reliable than wget on Alpine
@@ -103,7 +101,7 @@ services:
       interval: 10s
       timeout: 8s
       retries: 30         # 30 × 10 s = 300 s window — covers migrate + generate + cold-start
-      start_period: 60s   # suppress failures during the initial migrate/generate phase
+      start_period: 120s  # suppress failures during migrate + compile on cold dev boots
     restart: unless-stopped
 
   client:
@@ -118,7 +116,7 @@ services:
       NEXT_PUBLIC_API_URL: http://${HOST_MACHINE_IP:-localhost}:5000/api/v1
       INTERNAL_API_URL: http://server:5000/api/v1
       NEXT_PUBLIC_PLATFORM_NAME: NMPL
-      NEXT_PUBLIC_SUPPORT_EMAIL: support@example.com
+      NEXT_PUBLIC_SUPPORT_EMAIL: support@nmpl.online
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     ports:

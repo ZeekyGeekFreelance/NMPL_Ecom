@@ -11,6 +11,7 @@ import { GET_PRODUCTS } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { useBackendReady } from "@/app/hooks/network/useBackendReady";
+import { getProductListingPriceSummary } from "@/app/lib/productPricing";
 
 type SearchFormValues = {
   searchQuery: string;
@@ -64,22 +65,30 @@ const getSearchScore = (product: Product, rawQuery: string) => {
 };
 
 const getVariantMinPrice = (product: Product) => {
-  const listingMinPrice = Number(product.minPrice);
-  if (Number.isFinite(listingMinPrice) && listingMinPrice > 0) {
-    return listingMinPrice;
+  const { effectivePrice } = getProductListingPriceSummary(product);
+  return effectivePrice > 0 ? effectivePrice : Number.POSITIVE_INFINITY;
+};
+
+const getSearchResultPriceLabel = (
+  product: Product,
+  formatPrice: (value: number) => string
+) => {
+  const { dealerPrice, effectivePrice, shouldLabelAsFrom } =
+    getProductListingPriceSummary(product);
+  const resolvedPrice = dealerPrice ?? effectivePrice;
+  if (!Number.isFinite(resolvedPrice) || resolvedPrice <= 0) {
+    return "";
   }
 
-  const listingPrice = Number(product.price);
-  if (Number.isFinite(listingPrice) && listingPrice > 0) {
-    return listingPrice;
+  if (dealerPrice !== null) {
+    return shouldLabelAsFrom
+      ? `Dealer from ${formatPrice(dealerPrice)}`
+      : `Dealer ${formatPrice(dealerPrice)}`;
   }
 
-  const prices = product.variants?.map((variant) => Number(variant.price)) || [];
-  if (!prices.length) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  return Math.min(...prices);
+  return shouldLabelAsFrom
+    ? `From ${formatPrice(effectivePrice)}`
+    : formatPrice(effectivePrice);
 };
 
 const SearchBar: React.FC<SearchBarProps> = ({
@@ -132,12 +141,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
         },
       },
       skip: !shouldSearch || !backendReady,
-      fetchPolicy: "no-cache",
+      fetchPolicy: "cache-first",
       nextFetchPolicy: "cache-first",
-      // publicCatalog: true instructs publicCatalogLink (apolloClient.ts) to
-      // inject x-public-catalog: 1 so the server skips session middleware for
-      // this unauthenticated search request — saving a Redis round-trip.
-      context: { publicCatalog: true },
     }
   );
 
@@ -304,6 +309,10 @@ const SearchBar: React.FC<SearchBarProps> = ({
                   <ul className="space-y-1 max-h-80 overflow-y-auto">
                     {rankedProducts.map((product) => {
                       const minPrice = getVariantMinPrice(product);
+                      const priceLabel = getSearchResultPriceLabel(
+                        product,
+                        formatPrice
+                      );
                       return (
                         <li key={product.id}>
                           <button
@@ -317,7 +326,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                             <p className="text-xs text-gray-500 truncate">
                               {product.category?.name || "Uncategorized"}{" "}
                               {Number.isFinite(minPrice)
-                                ? `- ${formatPrice(minPrice)}`
+                                ? `- ${priceLabel || formatPrice(minPrice)}`
                                 : ""}
                             </p>
                           </button>

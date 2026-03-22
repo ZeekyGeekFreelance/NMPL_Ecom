@@ -73,10 +73,10 @@ export class CheckoutController {
         deliveryMode: order.deliveryMode,
         finalTotal: order.amount,
         nextStep:
-          "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
+          "Stock will be verified. You will receive approved pricing, and our team will follow up manually if payment is still pending.",
       },
       message:
-        "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
+        "Stock will be verified. You will receive approved pricing, and our team will follow up manually if payment is still pending.",
     });
 
     this.logsService.info("Order placed from checkout", {

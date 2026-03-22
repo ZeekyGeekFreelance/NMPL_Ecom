@@ -3,9 +3,10 @@ const fs = require("fs");
 const path = require("path");
 
 const mode = process.argv[2] || "pre";
+const distDirName = (process.argv[3] || process.env.NEXT_DIST_DIR || ".next").trim() || ".next";
 const clientRoot = path.resolve(__dirname, "..");
 const appRoot = path.join(clientRoot, "app");
-const buildRoot = path.join(clientRoot, ".next");
+const buildRoot = path.join(clientRoot, distDirName);
 
 const PROCESS_ENV_PATTERN = /\bprocess\.env\b/;
 const FORBIDDEN_ARTIFACT_PATTERNS = [
@@ -105,6 +106,11 @@ if (mode === "pre") {
 }
 
 if (mode === "post") {
+  if (!fs.existsSync(buildRoot)) {
+    throw new Error(
+      `[client-determinism] Build directory not found: ${distDirName}`
+    );
+  }
   assertNoForbiddenArtifactValues();
   console.log("[client-determinism] Post-build checks passed.");
   process.exit(0);

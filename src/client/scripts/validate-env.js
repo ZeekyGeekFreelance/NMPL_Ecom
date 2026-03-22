@@ -25,6 +25,15 @@ const normalizeApiBaseUrl = (value) => {
 const schema = z.object({
   NODE_ENV: z.enum(NODE_ENV_OPTIONS),
   NEXT_PUBLIC_API_URL: z.string().min(1).transform(normalizeApiBaseUrl),
+  INTERNAL_API_URL: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (value === undefined || value.trim() === "") {
+        return undefined;
+      }
+      return normalizeApiBaseUrl(value);
+    }),
   NEXT_PUBLIC_PLATFORM_NAME: z.string().min(1),
   NEXT_PUBLIC_SUPPORT_EMAIL: z.string().email(),
   NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: z.enum(["true", "false"]).optional(),
@@ -48,6 +57,7 @@ const schema = z.object({
 const env = schema.parse({
   NODE_ENV: forceProduction ? "production" : process.env.NODE_ENV,
   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  INTERNAL_API_URL: process.env.INTERNAL_API_URL,
   NEXT_PUBLIC_PLATFORM_NAME: process.env.NEXT_PUBLIC_PLATFORM_NAME,
   NEXT_PUBLIC_SUPPORT_EMAIL: process.env.NEXT_PUBLIC_SUPPORT_EMAIL,
   NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: process.env.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,
@@ -58,6 +68,12 @@ const env = schema.parse({
 if (env.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(env.NEXT_PUBLIC_API_URL)) {
   throw new Error(
     "[client-env] Production build blocked: NEXT_PUBLIC_API_URL cannot target localhost/127.0.0.1"
+  );
+}
+
+if (env.NODE_ENV === "production" && !env.INTERNAL_API_URL) {
+  throw new Error(
+    "[client-env] Production build blocked: INTERNAL_API_URL is required for SSR/server-side API access"
   );
 }
 

@@ -18,7 +18,7 @@ interface ProductFileUploadProps {
 
 const ProductFileUpload = ({
   onUploadSuccess,
-  acceptedFormats = [".xlsx", ".csv"],
+  acceptedFormats = [".csv"],
 }: ProductFileUploadProps) => {
   const [uploadProductsFile, { isLoading }] = useBulkProductsMutation();
   const { showToast } = useToast();
@@ -195,8 +195,9 @@ const ProductFileUpload = ({
       <div className="mt-3 flex items-center text-xs text-gray-500">
         <AlertCircle className="h-3 w-3 mr-1" />
         <span>
-          Make sure your file has the correct columns: name, price, discount,
-          stock, categoryId, description, and images (comma-separated URLs)
+          Upload CSV only. Required columns: name, sku, price, stock,
+          categoryId, description, isNew, isTrending, isBestSeller, isFeatured,
+          and optional lowStockThreshold.
         </span>
       </div>
     </div>

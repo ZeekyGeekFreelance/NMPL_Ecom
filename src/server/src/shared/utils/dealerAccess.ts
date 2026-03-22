@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type prismaClient from "@/infra/database/database.config";
+import { buildPublicVariantSignature } from "@/shared/utils/publicVariantGrouping";
 
 export const isDealerTableMissing = (error: unknown): boolean => {
   if (!(error instanceof Error)) {
@@ -13,15 +14,11 @@ export const isDealerTableMissing = (error: unknown): boolean => {
 };
 
 /**
- * Resolves effective dealer prices for a batch of variants in a single query.
+ * Resolves effective dealer prices for a batch of variants.
  *
- * Strategy:
- *  1. Verify the user has an APPROVED or LEGACY dealer profile — O(1) indexed lookup.
- *  2. Use a single LEFT JOIN between ProductVariant and DealerPriceMapping.
- *  3. COALESCE: customPrice (per-dealer override) → defaultDealerPrice (platform default).
- *  4. Variants with no resolved price are excluded from the returned map.
- *
- * No separate mapping query. No N+1. No table scans.
+ * Dealer pricing is normalized by buyer-visible variant signature so legacy
+ * duplicate rows with identical public attributes cannot disagree on price
+ * across catalog, detail, cart, and order flows.
  */
 export const getDealerPriceMap = async (
   prisma: typeof prismaClient,
@@ -33,10 +30,6 @@ export const getDealerPriceMap = async (
   }
 
   try {
-    // First check dealer eligibility with a single indexed lookup.
-    // Returns empty map immediately for guests, regular users, and ineligible dealers —
-    // this prevents the price-resolution query from running unnecessarily and
-    // ensures non-dealer product fetches are never affected.
     const dealerRows = await prisma.$queryRaw<Array<{ status: string }>>(
       Prisma.sql`
         SELECT "status"
@@ -53,7 +46,71 @@ export const getDealerPriceMap = async (
       return new Map();
     }
 
-    // Dealer is eligible — resolve prices via single LEFT JOIN + COALESCE.
+    const requestedVariants = await prisma.productVariant.findMany({
+      where: {
+        id: {
+          in: variantIds,
+        },
+      },
+      select: {
+        id: true,
+        productId: true,
+        attributes: {
+          select: {
+            attribute: {
+              select: {
+                name: true,
+              },
+            },
+            value: {
+              select: {
+                value: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!requestedVariants.length) {
+      return new Map();
+    }
+
+    const productIds = Array.from(
+      new Set(requestedVariants.map((variant) => variant.productId))
+    );
+
+    const candidateVariants = await prisma.productVariant.findMany({
+      where: {
+        productId: {
+          in: productIds,
+        },
+      },
+      select: {
+        id: true,
+        productId: true,
+        attributes: {
+          select: {
+            attribute: {
+              select: {
+                name: true,
+              },
+            },
+            value: {
+              select: {
+                value: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!candidateVariants.length) {
+      return new Map();
+    }
+
+    const candidateVariantIds = candidateVariants.map((variant) => variant.id);
     const rows = await prisma.$queryRaw<
       Array<{ variantId: string; resolvedPrice: number }>
     >(
@@ -65,12 +122,49 @@ export const getDealerPriceMap = async (
         LEFT JOIN "DealerPriceMapping" m
           ON m."variantId" = pv."id"
          AND m."dealerId"  = ${userId}
-        WHERE pv."id" IN (${Prisma.join(variantIds)})
+        WHERE pv."id" IN (${Prisma.join(candidateVariantIds)})
           AND COALESCE(m."customPrice", pv."defaultDealerPrice") IS NOT NULL
       `
     );
 
-    return new Map(rows.map((row) => [row.variantId, Number(row.resolvedPrice)]));
+    if (!rows.length) {
+      return new Map();
+    }
+
+    const rawDealerPriceByVariantId = new Map(
+      rows.map((row) => [row.variantId, Number(row.resolvedPrice)])
+    );
+    const lowestDealerPriceByVisibleGroup = new Map<string, number>();
+
+    for (const variant of candidateVariants) {
+      const resolvedPrice = rawDealerPriceByVariantId.get(variant.id);
+      if (resolvedPrice === undefined) {
+        continue;
+      }
+
+      const visibleGroupKey = `${variant.productId}::${buildPublicVariantSignature(
+        variant
+      )}`;
+      const existingPrice = lowestDealerPriceByVisibleGroup.get(visibleGroupKey);
+
+      if (existingPrice === undefined || resolvedPrice < existingPrice) {
+        lowestDealerPriceByVisibleGroup.set(visibleGroupKey, resolvedPrice);
+      }
+    }
+
+    return new Map(
+      requestedVariants.flatMap((variant) => {
+        const visibleGroupKey = `${variant.productId}::${buildPublicVariantSignature(
+          variant
+        )}`;
+        const resolvedPrice =
+          lowestDealerPriceByVisibleGroup.get(visibleGroupKey);
+
+        return resolvedPrice === undefined
+          ? []
+          : [[variant.id, resolvedPrice] as const];
+      })
+    );
   } catch (error) {
     if (isDealerTableMissing(error)) {
       return new Map();

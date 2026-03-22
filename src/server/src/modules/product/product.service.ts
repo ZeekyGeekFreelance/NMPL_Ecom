@@ -14,6 +14,8 @@ import { BulkImportService } from "./bulk-import.service";
 export class ProductService {
   private static readonly BASE_VARIANT_DELETE_MESSAGE =
     "Base variant cannot be deleted. Add another variant first or delete the product instead.";
+  private static readonly PRODUCT_MUTATION_TRANSACTION_TIMEOUT_MS = 20_000;
+  private static readonly PRODUCT_MUTATION_TRANSACTION_MAX_WAIT_MS = 5_000;
 
   private readonly variantValidator = new VariantValidationService();
   private readonly bulkImporter = new BulkImportService();
@@ -885,16 +887,16 @@ export class ProductService {
     }
 
     const updatedProduct = await prisma.$transaction(async (tx) => {
-      await this.productRepository.updateProduct(
-        productId,
-        {
+      await tx.product.update({
+        where: { id: productId },
+        data: {
           ...normalizedProductData,
           ...(normalizedProductData.name && {
             slug: slugify(normalizedProductData.name),
           }),
         },
-        tx
-      );
+        select: { id: true },
+      });
 
       if (variants) {
         const existingVariants = await tx.productVariant.findMany({
@@ -909,6 +911,12 @@ export class ProductService {
           existingVariants.map((variant) => [variant.sku, variant])
         );
         const retainedVariantIds = new Set<string>();
+        const attributeRowsToCreate: Array<{
+          variantId: string;
+          attributeId: string;
+          valueId: string;
+        }> = [];
+        const updatedVariantIds: string[] = [];
 
         for (const variant of variants) {
           const hasExplicitId =
@@ -946,46 +954,65 @@ export class ProductService {
             await tx.productVariant.update({
               where: { id: existingVariant.id },
               data: updateData,
+              select: { id: true },
             });
 
-            await tx.productVariantAttribute.deleteMany({
-              where: { variantId: existingVariant.id },
-            });
+            updatedVariantIds.push(existingVariant.id);
 
             if (variant.attributes.length > 0) {
-              // Build attribute data explicitly to avoid dynamic object construction
-              const attributeData = variant.attributes.map((attribute) => {
-                return {
+              attributeRowsToCreate.push(
+                ...variant.attributes.map((attribute) => ({
                   variantId: existingVariant.id,
                   attributeId: attribute.attributeId,
                   valueId: attribute.valueId,
-                };
-              });
-              
-              await tx.productVariantAttribute.createMany({
-                data: attributeData,
-              });
+                }))
+              );
             }
 
             continue;
           }
 
-          const createdVariant = await this.variantRepository.createVariant(
-            {
+          const createdVariant = await tx.productVariant.create({
+            data: {
               productId,
               sku: variant.sku,
               price: variant.price,
               defaultDealerPrice: variant.defaultDealerPrice ?? null,
               stock: variant.stock,
               lowStockThreshold: variant.lowStockThreshold || 10,
-              barcode: variant.barcode,
-              attributes: variant.attributes,
+              barcode: variant.barcode || null,
               images: variant.images || [],
+              ...(variant.attributes.length > 0
+                ? {
+                    attributes: {
+                      create: variant.attributes.map((attribute) => ({
+                        attributeId: attribute.attributeId,
+                        valueId: attribute.valueId,
+                      })),
+                    },
+                  }
+                : {}),
             },
-            tx
-          );
+            select: { id: true },
+          });
 
           retainedVariantIds.add(createdVariant.id);
+        }
+
+        if (updatedVariantIds.length > 0) {
+          await tx.productVariantAttribute.deleteMany({
+            where: {
+              variantId: {
+                in: updatedVariantIds,
+              },
+            },
+          });
+
+          if (attributeRowsToCreate.length > 0) {
+            await tx.productVariantAttribute.createMany({
+              data: attributeRowsToCreate,
+            });
+          }
         }
 
         const removedVariantIds = existingVariants
@@ -1044,6 +1071,9 @@ export class ProductService {
           },
         },
       });
+    }, {
+      maxWait: ProductService.PRODUCT_MUTATION_TRANSACTION_MAX_WAIT_MS,
+      timeout: ProductService.PRODUCT_MUTATION_TRANSACTION_TIMEOUT_MS,
     });
 
     await clearCatalogListingCache();

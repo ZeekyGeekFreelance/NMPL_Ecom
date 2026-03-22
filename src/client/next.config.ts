@@ -13,12 +13,17 @@ const ALLOWED_IMAGE_HOSTNAMES = [
   "store.storeimages.cdn-apple.com",
 ];
 
+const distDir = (process.env.NEXT_DIST_DIR || ".next").trim() || ".next";
+
 const nextConfig: NextConfig = {
-  // Produce a self-contained build under .next/standalone — required for the
+  // Separate dev and production artifacts so a build/clean cannot corrupt a
+  // live dev server by mutating the same .next directory.
+  distDir,
+  // Produce a self-contained build under distDir/standalone — required for the
   // multi-stage Dockerfile (copies only the standalone folder, not node_modules).
   output: "standalone",
   // Keep the standalone output rooted at the client app directory even in a
-  // monorepo, so the runtime expects .next/static under the same root.
+  // monorepo, so the runtime expects distDir/static under the same root.
   outputFileTracingRoot: process.cwd(),
 
   // Gzip/Brotli compress all responses (HTML, JSON, JS chunks).
@@ -30,13 +35,6 @@ const nextConfig: NextConfig = {
       protocol: "https",
       hostname,
     })),
-  },
-
-  // Expose INTERNAL_API_URL to the Next.js server runtime (SSR) only.
-  // This is NOT exposed to the browser — it is used by server-side fetch calls
-  // so SSR can use a private/internal network instead of the public API URL.
-  serverRuntimeConfig: {
-    internalApiUrl: process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "",
   },
 
   // Expose the public API URL as a build-time environment variable so it is

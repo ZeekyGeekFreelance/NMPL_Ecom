@@ -1,5 +1,3 @@
-import { config } from "@/config";
-
 export const ORDER_LIFECYCLE_STATUS = {
   PENDING_VERIFICATION: "PENDING_VERIFICATION",
   WAITLISTED: "WAITLISTED",
@@ -25,7 +23,6 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   AWAITING_PAYMENT: [
     ORDER_LIFECYCLE_STATUS.CONFIRMED,
     ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
-    ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
   ],
   CONFIRMED: [ORDER_LIFECYCLE_STATUS.DELIVERED],
   QUOTATION_REJECTED: [],
@@ -51,9 +48,3 @@ export const TERMINAL_ORDER_STATUSES: OrderLifecycleStatus[] = [
   ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
   ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
 ];
-
-export const getReservationExpiryHours = (): number =>
-  config.orderLifecycle.reservationExpiryHours;
-
-export const getReservationSweepSeconds = (): number =>
-  config.orderLifecycle.reservationSweepSeconds;

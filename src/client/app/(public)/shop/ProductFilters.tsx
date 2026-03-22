@@ -7,24 +7,7 @@ import { GET_CATEGORIES_SEARCH } from "@/app/gql/Product";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import CheckBox from "@/app/components/atoms/CheckBox";
 import { debounce } from "lodash";
-
-export type SortByOption =
-  | "RELEVANCE"
-  | "PRICE_ASC"
-  | "PRICE_DESC"
-  | "NAME_ASC";
-
-export interface FilterValues {
-  search: string;
-  sortBy?: SortByOption;
-  categoryId?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  isNew?: boolean;
-  isFeatured?: boolean;
-  isTrending?: boolean;
-  isBestSeller?: boolean;
-}
+import type { FilterValues, SortByOption } from "./shopShared";
 
 interface ProductFiltersProps {
   initialFilters: FilterValues;
@@ -58,7 +41,7 @@ const CategorySearchDropdown: React.FC<CategorySearchDropdownProps> = ({
 
   const [fetchCategories, { data, loading }] = useLazyQuery(
     GET_CATEGORIES_SEARCH,
-    { fetchPolicy: "cache-and-network" }
+    { fetchPolicy: "cache-first", nextFetchPolicy: "cache-first" }
   );
 
   const debouncedFetch = useMemo(

@@ -2,12 +2,17 @@
 const fs = require("fs");
 const path = require("path");
 
-const nextPath = path.resolve(__dirname, "..", ".next");
 const RM_OPTIONS = {
   recursive: true,
   force: true,
   maxRetries: 20,
   retryDelay: 250,
+};
+
+const resolveDistDirName = (explicitDir) => {
+  const rawValue = explicitDir ?? process.env.NEXT_DIST_DIR ?? ".next";
+  const trimmedValue = String(rawValue || "").trim();
+  return trimmedValue || ".next";
 };
 
 const removeDirectoryContents = (directoryPath) => {
@@ -18,25 +23,39 @@ const removeDirectoryContents = (directoryPath) => {
   });
 };
 
-if (!fs.existsSync(nextPath)) {
-  console.log("[build-clean] No client .next directory to clear.");
-  process.exit(0);
-}
+const cleanBuildDir = (explicitDir) => {
+  const distDirName = resolveDistDirName(explicitDir);
+  const nextPath = path.resolve(__dirname, "..", distDirName);
 
-try {
-  const nextStats = fs.lstatSync(nextPath);
-  if (!nextStats.isDirectory()) {
-    throw new Error("[build-clean] Expected .next to be a directory.");
+  if (!fs.existsSync(nextPath)) {
+    console.log(`[build-clean] No client ${distDirName} directory to clear.`);
+    return;
   }
 
-  removeDirectoryContents(nextPath);
-  console.log("[build-clean] Cleared client .next directory contents.");
-} catch (error) {
-  const errorCode =
-    error && typeof error === "object" && "code" in error ? ` (${error.code})` : "";
-  console.error(`[build-clean] Failed to clear client .next directory${errorCode}.`);
-  console.error(
-    "[build-clean] Stop any running Next.js process that is still using `.next`, then retry."
-  );
-  throw error;
+  try {
+    const nextStats = fs.lstatSync(nextPath);
+    if (!nextStats.isDirectory()) {
+      throw new Error(`[build-clean] Expected ${distDirName} to be a directory.`);
+    }
+
+    removeDirectoryContents(nextPath);
+    console.log(`[build-clean] Cleared client ${distDirName} directory contents.`);
+  } catch (error) {
+    const errorCode =
+      error && typeof error === "object" && "code" in error ? ` (${error.code})` : "";
+    console.error(`[build-clean] Failed to clear client ${distDirName}${errorCode}.`);
+    console.error(
+      `[build-clean] Stop any running Next.js process that is still using \`${distDirName}\`, then retry.`
+    );
+    throw error;
+  }
+};
+
+if (require.main === module) {
+  cleanBuildDir(process.argv[2]);
 }
+
+module.exports = {
+  cleanBuildDir,
+  resolveDistDirName,
+};

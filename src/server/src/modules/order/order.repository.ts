@@ -14,6 +14,9 @@ import { toOrderReference } from "@/shared/utils/accountReference";
 import { ORDER_LIFECYCLE_STATUS } from "@/shared/utils/orderLifecycle";
 
 export class OrderRepository {
+  private static readonly ORDER_CREATE_TRANSACTION_TIMEOUT_MS = 20_000;
+  private static readonly ORDER_CREATE_TRANSACTION_MAX_WAIT_MS = 5_000;
+
   private extractReferenceChecksum(reference: string): string | null {
     const normalizedReference = (reference || "").trim().toUpperCase();
     const [, token = ""] = normalizedReference.split("-");
@@ -212,21 +215,40 @@ export class OrderRepository {
 
       const deliveryCharge = Number(data.pricing.deliveryCharge.toFixed(2));
       const computedAmount = Number((normalizedSubtotal + deliveryCharge).toFixed(2));
+      const uniqueVariantIds = [...new Set(data.orderItems.map((item) => item.variantId))];
 
-      // Validate variants and quantities, but do not deduct stock at placement time.
+      // Validate quantities and variant existence, but do not deduct stock at
+      // placement time. Use one batched lookup instead of N round-trips.
       for (const item of data.orderItems) {
         if (item.quantity <= 0) {
           throw new AppError(400, "Order item quantity must be greater than 0");
         }
+      }
 
-        const variant = await tx.productVariant.findUnique({
-          where: { id: item.variantId },
-          select: { id: true },
-        });
+      const variants = await tx.productVariant.findMany({
+        where: {
+          id: {
+            in: uniqueVariantIds,
+          },
+        },
+        select: {
+          id: true,
+          sku: true,
+          product: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
 
-        if (!variant) {
-          throw new AppError(404, `Variant not found: ${item.variantId}`);
-        }
+      const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+      const missingVariantIds = uniqueVariantIds.filter(
+        (variantId) => !variantById.has(variantId)
+      );
+
+      if (missingVariantIds.length > 0) {
+        throw new AppError(404, `Variant not found: ${missingVariantIds[0]}`);
       }
 
       // Create order in verification queue. Stock is reserved only after admin verification.
@@ -280,38 +302,29 @@ export class OrderRepository {
             },
           },
         },
-        include: {
-          orderItems: {
-            include: {
-              variant: {
-                include: {
-                  product: {
-                    select: {
-                      id: true,
-                      name: true,
-                      slug: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          payment: true,
-          transaction: true,
-          reservation: true,
-          address: true,
+        select: {
+          id: true,
+          status: true,
+          subtotalAmount: true,
+          deliveryCharge: true,
+          deliveryMode: true,
+          amount: true,
         },
       });
 
-      const initialLineItems = order.orderItems.map((item) => ({
-        orderItemId: item.id,
-        variantId: item.variantId,
-        sku: item.variant?.sku || null,
-        productName: item.variant?.product?.name || "Product",
-        quantity: item.quantity,
-        unitPrice: Number(item.price),
-        lineTotal: Number((item.quantity * item.price).toFixed(2)),
-      }));
+      const initialLineItems = data.orderItems.map((item) => {
+        const variant = variantById.get(item.variantId);
+
+        return {
+          orderItemId: null,
+          variantId: item.variantId,
+          sku: variant?.sku || null,
+          productName: variant?.product?.name || "Product",
+          quantity: item.quantity,
+          unitPrice: Number(item.price),
+          lineTotal: Number((item.quantity * item.price).toFixed(2)),
+        };
+      });
 
       await tx.orderQuotationLog.create({
         data: {
@@ -339,6 +352,9 @@ export class OrderRepository {
       }
 
       return order;
+    }, {
+      maxWait: OrderRepository.ORDER_CREATE_TRANSACTION_MAX_WAIT_MS,
+      timeout: OrderRepository.ORDER_CREATE_TRANSACTION_TIMEOUT_MS,
     });
   }
 }

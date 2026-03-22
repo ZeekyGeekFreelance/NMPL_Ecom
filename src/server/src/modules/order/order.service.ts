@@ -220,20 +220,7 @@ export class OrderService {
       );
     }
 
-    const reservationExpiry =
-      order.reservation?.expiresAt || order.reservationExpiresAt || null;
-    if (reservationExpiry && new Date(reservationExpiry).getTime() <= Date.now()) {
-      await this.transactionService
-        .updateTransactionStatus(order.transaction.id, {
-          status: ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
-        })
-        .catch(() => null);
-
-      throw new AppError(
-        409,
-        "Quotation has expired. Please contact support for next steps."
-      );
-    }
+    const reservationExpiry = null;
 
     if (!Array.isArray(order.orderItems) || order.orderItems.length === 0) {
       throw new AppError(409, "Order has no line items to bill.");
@@ -391,18 +378,6 @@ export class OrderService {
 
     const portalUrl = this.resolvePortalUrl();
     const orderReference = toOrderReference(order.id);
-    const now = Date.now();
-    const reservationExpiryTimestamp = reservationExpiry
-      ? new Date(reservationExpiry).getTime()
-      : null;
-    const maxStripeCheckoutExpiry = now + 23 * 60 * 60 * 1000;
-    const checkoutSessionExpiry =
-      reservationExpiryTimestamp && reservationExpiryTimestamp > now + 5 * 60 * 1000
-        ? Math.floor(
-            Math.min(reservationExpiryTimestamp, maxStripeCheckoutExpiry) / 1000
-          )
-        : undefined;
-
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: order.user?.email || undefined,
@@ -414,7 +389,6 @@ export class OrderService {
       },
       success_url: `${portalUrl}/payment-success?orderId=${orderReference}`,
       cancel_url: `${portalUrl}/cancel?orderId=${orderReference}`,
-      ...(checkoutSessionExpiry ? { expires_at: checkoutSessionExpiry } : {}),
     });
 
     if (!checkoutSession.url) {
@@ -814,7 +788,7 @@ export class OrderService {
             )}`,
             `Final Total: ${formatCurrency(order.amount)}`,
             "",
-            "Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.",
+            "Stock will be verified. You will receive approved pricing, and our team will follow up manually if payment is still pending.",
             `Need help? Contact ${supportEmail}.`,
           ].join("\n"),
           html: `
@@ -832,7 +806,7 @@ export class OrderService {
                 )}<br />
                 <strong>Final Total:</strong> ${formatCurrency(order.amount)}
               </p>
-              <p>Stock will be verified. You will receive a quotation. Complete payment after approval to confirm your order.</p>
+              <p>Stock will be verified. You will receive approved pricing, and our team will follow up manually if payment is still pending.</p>
               <p>
                 Need help? Contact
                 <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.

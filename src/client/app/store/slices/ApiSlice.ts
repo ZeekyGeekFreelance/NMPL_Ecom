@@ -16,16 +16,6 @@ const CSRF_BOOTSTRAP_URL = "/csrf";
 const MAX_CSRF_BOOTSTRAP_ATTEMPTS = 4;
 const MAX_RETRIES_FOR_MUTATION = 1;
 const MAX_RETRIES_FOR_QUERY = 2;
-const CSRF_EXEMPT_MUTATION_PATHS = new Set([
-  "/auth/request-registration-otp",
-  "/auth/sign-up",
-  "/auth/sign-in",
-  "/auth/refresh-token",
-  "/auth/change-password",
-  "/auth/forgot-password",
-  "/auth/reset-password",
-  "/auth/superadmin/reset-password",
-]);
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
@@ -129,7 +119,7 @@ const isMutationMethod = (method: string) => MUTATION_METHODS.has(method.toUpper
 const requiresCsrfBootstrap = (method: string, normalizedUrl: string) =>
   isMutationMethod(method) &&
   normalizedUrl !== CSRF_BOOTSTRAP_URL &&
-  !CSRF_EXEMPT_MUTATION_PATHS.has(normalizedUrl);
+  normalizedUrl.length > 0;
 
 const normalizeUrlPath = (url: unknown) => {
   if (typeof url !== "string" || !url) {

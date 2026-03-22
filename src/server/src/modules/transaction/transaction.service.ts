@@ -4,6 +4,7 @@ import { makeLogsService } from "../logs/logs.factory";
 import {
   TransactionRepository,
   type TransactionQuotationItemUpdate,
+  type TransactionSummary,
 } from "./transaction.repository";
 import {
   toAccountReference,
@@ -22,7 +23,6 @@ import {
   resolveEffectiveRoleFromUser,
 } from "@/shared/utils/userRole";
 import {
-  getReservationExpiryHours,
   ORDER_LIFECYCLE_STATUS,
   ORDER_STATUS_TRANSITIONS,
   type OrderLifecycleStatus,
@@ -55,11 +55,11 @@ const statusInstruction: Partial<Record<OrderLifecycleStatus, string>> = {
   WAITLISTED:
     "This order is currently waitlisted because stock is fully reserved.",
   AWAITING_PAYMENT:
-    "Your quotation is approved and stock is reserved. Complete payment before reservation expiry.",
+    "Your quotation is approved. Complete payment when ready. Our team will follow up manually if needed.",
   QUOTATION_REJECTED:
     "The quotation has been rejected and any reserved stock has been released.",
   QUOTATION_EXPIRED:
-    "The quotation expired before payment and reserved stock has been released.",
+    "This quotation was closed under the previous automatic-expiry policy and is no longer active.",
   CONFIRMED:
     "Payment has been received and your order is now confirmed.",
   DELIVERED:
@@ -67,6 +67,8 @@ const statusInstruction: Partial<Record<OrderLifecycleStatus, string>> = {
 };
 
 export class TransactionService {
+  private static readonly DEFAULT_RESULTS_PER_PAGE = 25;
+  private static readonly MAX_RESULTS_PER_PAGE = 100;
   private logsService = makeLogsService();
   private invoiceService = makeInvoiceService();
 
@@ -205,7 +207,6 @@ export class TransactionService {
     customerType: "USER" | "DEALER";
     accountReference: string;
     orderId: string;
-    reservationExpiresAt?: Date | string | null;
     quotationItems: Array<{
       productName: string;
       sku: string;
@@ -236,9 +237,6 @@ export class TransactionService {
     const payActionUrl = `${orderUrl}?quotationAction=pay`;
     const rejectActionUrl = `${orderUrl}?quotationAction=reject`;
     const actionTime = formatDateTimeInIST(new Date());
-    const expiresAt = params.reservationExpiresAt
-      ? formatDateTimeInIST(new Date(params.reservationExpiresAt))
-      : "Not available";
 
     const normalizeItems = (
       rows: Array<{
@@ -383,7 +381,6 @@ export class TransactionService {
         `Account Reference: ${params.accountReference}`,
         `Customer Type: ${params.customerType}`,
         `Action Time (IST): ${actionTime}`,
-        `Reservation Expires (IST): ${expiresAt}`,
         "",
         "Original Order (Placed):",
         originalRowsText || "No line items available.",
@@ -395,6 +392,7 @@ export class TransactionService {
         "",
         `Proceed to payment: ${payActionUrl}`,
         `Cancel quotation: ${rejectActionUrl}`,
+        "Manual follow-up will be handled by our team if payment is still pending.",
         "",
         `Need help? Contact ${supportEmail}.`,
       ].join("\n"),
@@ -406,8 +404,7 @@ export class TransactionService {
             <strong>Order ID:</strong> ${orderReference}<br />
             <strong>Account Reference:</strong> ${params.accountReference}<br />
             <strong>Customer Type:</strong> ${params.customerType}<br />
-            <strong>Action Time (IST):</strong> ${actionTime}<br />
-            <strong>Reservation Expires (IST):</strong> ${expiresAt}
+            <strong>Action Time (IST):</strong> ${actionTime}
           </p>
           ${originalSectionHtml}
           ${revisedSectionHtml}
@@ -415,6 +412,7 @@ export class TransactionService {
             <a href="${payActionUrl}" style="display:inline-block;padding:10px 14px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;margin-right:10px;">Proceed to Payment</a>
             <a href="${rejectActionUrl}" style="display:inline-block;padding:10px 14px;background:#dc2626;color:#ffffff;text-decoration:none;border-radius:6px;">Cancel Quotation</a>
           </p>
+          <p>Manual follow-up will be handled by our team if payment is still pending.</p>
           <p>
             Need help? Contact
             <a href="mailto:${supportEmail}" style="color:#2563eb;">${supportEmail}</a>.
@@ -679,79 +677,26 @@ export class TransactionService {
   }
 
   async processExpiredQuotations(): Promise<number> {
-    const expiredTransactionIds =
-      await this.transactionRepository.findExpiredAwaitingPaymentTransactionIds(
-        new Date()
-      );
+    return 0;
+  }
 
-    for (const transactionId of expiredTransactionIds) {
-      try {
-        const updated = await this.transactionRepository.updateTransaction(
-          transactionId,
-          {
-            status: ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
-            reservationExpiryHours: getReservationExpiryHours(),
-          }
-        );
-
-        const recipientEmail = updated.transaction.order?.user?.email || null;
-        const recipientName = updated.transaction.order?.user?.name || "Customer";
-        const recipientUserId = updated.transaction.order?.user?.id;
-        const customerType =
-          updated.transaction.order?.customerRoleSnapshot ||
-          resolveCustomerTypeFromUser(updated.transaction.order?.user);
-        const accountReference = recipientUserId
-          ? toAccountReference(recipientUserId)
-          : "N/A";
-
-        await this.notifyOrderStatusChange({
-          recipientEmail,
-          recipientName,
-          customerType,
-          accountReference,
-          orderId: updated.transaction.orderId,
-          previousStatus: updated.previousStatus,
-          nextStatus: ORDER_LIFECYCLE_STATUS.QUOTATION_EXPIRED,
-        });
-
-        await this.notifyPromotedWaitlistedOrders(updated.promotedOrderIds);
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown expiry processing error";
-        await this.logsService.error("Failed to expire overdue quotation", {
-          transactionId,
-          error: errorMessage,
-        });
-      }
-    }
-
-    return expiredTransactionIds.length;
+  async getTransactionSummary(): Promise<TransactionSummary> {
+    return this.transactionRepository.getTransactionSummary();
   }
 
   async getAllTransactions(queryString: Record<string, any> = {}) {
-    const hasExplicitPagination =
-      queryString.page !== undefined || queryString.limit !== undefined;
-
-    if (!hasExplicitPagination) {
-      const transactions = await this.transactionRepository.findMany();
-      const totalResults = transactions.length;
-      return {
-        transactions,
-        totalResults,
-        totalPages: totalResults > 0 ? 1 : 0,
-        currentPage: 1,
-        resultsPerPage: totalResults,
-      };
-    }
-
     const parsedPage = Number(queryString.page);
     const parsedLimit = Number(queryString.limit);
     const currentPage =
       Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1;
-    const resultsPerPage =
+    const requestedLimit =
       Number.isFinite(parsedLimit) && parsedLimit > 0
         ? Math.floor(parsedLimit)
-        : 16;
+        : TransactionService.DEFAULT_RESULTS_PER_PAGE;
+    const resultsPerPage = Math.min(
+      requestedLimit,
+      TransactionService.MAX_RESULTS_PER_PAGE
+    );
     const skip = (currentPage - 1) * resultsPerPage;
 
     const [transactions, totalResults] = await Promise.all([
@@ -879,7 +824,6 @@ export class TransactionService {
       resolvedId,
       {
         status: requestedStatus,
-        reservationExpiryHours: getReservationExpiryHours(),
         actorUserId: data.actorUserId,
         actorRole: data.actorRole,
         ...(hasQuotationItems ? { quotationItems: data.quotationItems } : {}),
@@ -929,9 +873,6 @@ export class TransactionService {
         customerType,
         accountReference,
         orderId: transaction.orderId,
-        reservationExpiresAt:
-          transaction.order?.reservation?.expiresAt ||
-          transaction.order?.reservationExpiresAt,
         quotationItems,
         originalOrderItems:
           originalOrderItems.length > 0 ? originalOrderItems : quotationItems,

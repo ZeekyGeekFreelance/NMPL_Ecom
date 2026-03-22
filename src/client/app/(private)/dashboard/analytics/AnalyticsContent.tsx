@@ -86,7 +86,6 @@ const AnalyticsContent = () => {
   //       const mimeTypes = {
   //         csv: "text/csv",
   //         pdf: "application/pdf",
-  //         xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   //       };
   //       const blob = new Blob([exportData], { type: mimeTypes[exportFormat] });
   //       const link = document.createElement("a");
@@ -166,7 +165,6 @@ const AnalyticsContent = () => {
   const exportFormatOptions = [
     { label: "CSV", value: "csv" },
     { label: "PDF", value: "pdf" },
-    { label: "XLSX", value: "xlsx" },
   ];
 
   return (

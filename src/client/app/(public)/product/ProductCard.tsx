@@ -8,6 +8,7 @@ import useTrackInteraction from "@/app/hooks/miscellaneous/useTrackInteraction";
 import { useRouter } from "next/navigation";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import { getProductListingPriceSummary } from "@/app/lib/productPricing";
 
 interface ProductCardProps {
   product: Product;
@@ -26,22 +27,27 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const displayImage =
     product.thumbnail ||
     generateProductPlaceholder(product.name);
-  const retailPrice = Number(product.minPrice ?? product.price ?? 0);
-  const maxPriceRaw = Number(product.maxPrice);
-  const dealerPriceRaw = Number(product.dealerMinPrice);
-  const hasDealerPrice =
-    Number.isFinite(dealerPriceRaw) &&
-    dealerPriceRaw > 0 &&
-    dealerPriceRaw !== retailPrice;
-  const dealerPrice = hasDealerPrice ? dealerPriceRaw : null;
-  const effectivePrice = dealerPrice ?? retailPrice;
-  const hasPriceRange =
-    Number.isFinite(maxPriceRaw) &&
-    maxPriceRaw > 0 &&
-    maxPriceRaw > effectivePrice;
-  const mobileBasePrice = dealerPrice !== null ? retailPrice : hasPriceRange ? maxPriceRaw : null;
+  const {
+    retailPrice,
+    dealerPrice,
+    effectivePrice,
+    maxPrice,
+    hasPriceRange,
+    shouldLabelAsFrom,
+    hasRetailPriceRange,
+    hasDealerPriceRange,
+  } = getProductListingPriceSummary(product);
+  const mobileBasePrice =
+    dealerPrice !== null ? retailPrice : hasPriceRange ? maxPrice : null;
   const showMobileStrikePrice =
     mobileBasePrice !== null && mobileBasePrice > effectivePrice;
+  const retailLabelPrefix =
+    shouldLabelAsFrom || hasRetailPriceRange ? "Retail from:" : "Retail:";
+  const dealerLabelPrefix =
+    shouldLabelAsFrom || hasDealerPriceRange ? "Dealer from:" : "Dealer:";
+  const primaryPriceLabel = shouldLabelAsFrom
+    ? `From ${formatPrice(effectivePrice)}`
+    : formatPrice(effectivePrice);
 
   return (
     <div
@@ -108,15 +114,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   {showMobileStrikePrice ? (
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-gray-500 line-through">
-                        {formatPrice(mobileBasePrice)}
+                        {shouldLabelAsFrom
+                          ? `From ${formatPrice(mobileBasePrice)}`
+                          : formatPrice(mobileBasePrice)}
                       </span>
                       <span className="text-sm text-gray-700">
-                        {formatPrice(effectivePrice)}
+                        {primaryPriceLabel}
                       </span>
                     </div>
                   ) : (
                     <span className="text-sm text-gray-700">
-                      {formatPrice(effectivePrice)}
+                      {primaryPriceLabel}
                     </span>
                   )}
                 </div>
@@ -124,15 +132,15 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   {dealerPrice !== null ? (
                     <>
                       <span className="text-xs sm:text-sm text-gray-500 line-through">
-                        Retail: {formatPrice(retailPrice)}
+                        {retailLabelPrefix} {formatPrice(retailPrice)}
                       </span>
                       <span className="text-base sm:text-lg text-gray-700 font-semibold">
-                        Dealer: {formatPrice(dealerPrice)}
+                        {dealerLabelPrefix} {formatPrice(dealerPrice)}
                       </span>
                     </>
                   ) : (
                     <span className="text-sm sm:text-base text-gray-700 font-medium">
-                      {formatPrice(effectivePrice)}
+                      {primaryPriceLabel}
                     </span>
                   )}
                 </div>

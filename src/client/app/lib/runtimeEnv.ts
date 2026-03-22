@@ -112,6 +112,12 @@ if (parsed.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(parsed.NEXT_PUBL
   );
 }
 
+if (parsed.NODE_ENV === "production" && !parsed.INTERNAL_API_URL) {
+  throw new Error(
+    "[client-config] Production boot blocked: INTERNAL_API_URL is required in production"
+  );
+}
+
 const resolvedApiBaseUrl = resolveDevApiBaseUrl(
   parsed.NEXT_PUBLIC_API_URL,
   parsed.NODE_ENV

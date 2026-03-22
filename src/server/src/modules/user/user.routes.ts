@@ -153,6 +153,13 @@ router.patch(
 router.get("/", protect, authorizeRole("SUPERADMIN"), userController.getAllUsers);
 
 router.get(
+  "/dealers/summary",
+  protect,
+  authorizeRole("ADMIN", "SUPERADMIN"),
+  userController.getDealerSummary
+);
+
+router.get(
   "/dealers",
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),

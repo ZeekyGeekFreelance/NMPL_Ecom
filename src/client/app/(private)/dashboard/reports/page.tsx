@@ -48,7 +48,6 @@ const ReportsDashboard: React.FC = () => {
   const formatOptions: DropdownOption[] = [
     { label: "CSV", value: "csv" },
     { label: "PDF", value: "pdf" },
-    { label: "XLSX", value: "xlsx" },
   ];
 
   const timePeriodOptions: DropdownOption[] = [

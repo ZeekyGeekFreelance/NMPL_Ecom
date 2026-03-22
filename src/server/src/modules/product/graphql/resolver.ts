@@ -2,9 +2,11 @@ import AppError from "@/shared/errors/AppError";
 import { getCurrentRequestMetricStore } from "@/shared/observability/requestMetrics";
 import { config } from "@/config";
 import { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import redisClient from "@/infra/cache/redis";
 import { cacheKey } from "@/shared/utils/cacheKey";
-import { getDealerPriceMap } from "@/shared/utils/dealerAccess";
+import { getDealerPriceMap, isDealerTableMissing } from "@/shared/utils/dealerAccess";
+import { collapseVisibleVariants } from "@/shared/utils/publicVariantGrouping";
 import type prismaClient from "@/infra/database/database.config";
 // Re-export from the canonical shared module — keeps any existing imports
 // pointing at resolver.ts working, and avoids duplicating the implementation.
@@ -49,6 +51,31 @@ type ProductConnection = {
   products: ProductCard[];
   hasMore: boolean;
   totalCount: number | null;
+};
+
+type HomePageCatalog = {
+  featured: ProductCard[];
+  trending: ProductCard[];
+  newArrivals: ProductCard[];
+  bestSellers: ProductCard[];
+  categories: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+  }>;
+};
+
+type ProductCardRow = {
+  id: string;
+  slug: string;
+  name: string;
+  category: {
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+  } | null;
 };
 
 type ListingAggregate = {
@@ -114,6 +141,33 @@ const setCachedListingConnection = async (
     );
   } catch {
     // Best-effort — a write failure just means the next request re-queries.
+  }
+};
+
+const getCachedHomePageCatalog = async (
+  rawKey: string
+): Promise<HomePageCatalog | null> => {
+  try {
+    const json = await redisClient.get(buildRedisCatalogKey(rawKey));
+    if (!json) return null;
+    return JSON.parse(json) as HomePageCatalog;
+  } catch {
+    return null;
+  }
+};
+
+const setCachedHomePageCatalog = async (
+  rawKey: string,
+  value: HomePageCatalog
+): Promise<void> => {
+  try {
+    await redisClient.setex(
+      buildRedisCatalogKey(rawKey),
+      config.cache.catalogTtlSeconds,
+      JSON.stringify(value)
+    );
+  } catch {
+    // Best-effort only.
   }
 };
 
@@ -306,18 +360,82 @@ const buildProductWhere = (filters: ProductFilters) => {
     where.categoryId = filters.categoryId;
   }
 
-  if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
-    where.variants = {
-      some: {
-        price: {
-          ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
-          ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
-        },
+  return where;
+};
+
+const fetchRetailPriceMatchedProductIds = async (
+  context: Context,
+  filters: ProductFilters
+): Promise<string[]> => {
+  const rows = await context.prisma.productVariant.findMany({
+    where: {
+      price: {
+        ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
+        ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
       },
-    };
+    },
+    select: {
+      productId: true,
+    },
+    distinct: ["productId"],
+  });
+
+  return rows.map((row) => row.productId);
+};
+
+const fetchEffectivePriceMatchedProductIds = async (
+  context: Context,
+  filters: ProductFilters
+): Promise<string[] | null> => {
+  if (filters.minPrice === undefined && filters.maxPrice === undefined) {
+    return null;
   }
 
-  return where;
+  const viewerRole = String(
+    context.req.user?.effectiveRole || context.req.user?.role || ""
+  ).toUpperCase();
+  const dealerUserId =
+    viewerRole === "DEALER" ? context.req.user?.id || undefined : undefined;
+
+  if (!dealerUserId) {
+    return fetchRetailPriceMatchedProductIds(context, filters);
+  }
+
+  try {
+    const effectivePriceExpression = Prisma.sql`COALESCE(m."customPrice", pv."defaultDealerPrice", pv."price")`;
+    const predicates: Prisma.Sql[] = [];
+
+    if (filters.minPrice !== undefined) {
+      predicates.push(
+        Prisma.sql`${effectivePriceExpression} >= ${filters.minPrice}`
+      );
+    }
+
+    if (filters.maxPrice !== undefined) {
+      predicates.push(
+        Prisma.sql`${effectivePriceExpression} <= ${filters.maxPrice}`
+      );
+    }
+
+    const rows = await context.prisma.$queryRaw<Array<{ productId: string }>>(
+      Prisma.sql`
+        SELECT DISTINCT pv."productId" AS "productId"
+        FROM "ProductVariant" pv
+        LEFT JOIN "DealerPriceMapping" m
+          ON m."variantId" = pv."id"
+         AND m."dealerId" = ${dealerUserId}
+        WHERE ${Prisma.join(predicates, " AND ")}
+      `
+    );
+
+    return rows.map((row) => row.productId);
+  } catch (error) {
+    if (isDealerTableMissing(error)) {
+      return fetchRetailPriceMatchedProductIds(context, filters);
+    }
+
+    throw error;
+  }
 };
 
 const fetchListingAggregateByProductId = async (
@@ -337,6 +455,20 @@ const fetchListingAggregateByProductId = async (
       price: true,
       images: true,
       createdAt: true,
+      attributes: {
+        select: {
+          attribute: {
+            select: {
+              name: true,
+            },
+          },
+          value: {
+            select: {
+              value: true,
+            },
+          },
+        },
+      },
     },
     orderBy: [{ productId: "asc" }, { createdAt: "asc" }],
   });
@@ -344,6 +476,14 @@ const fetchListingAggregateByProductId = async (
     context.prisma,
     viewerUserId,
     variantRows.map((variant) => variant.id)
+  );
+
+  const canonicalVariantRows = collapseVisibleVariants(
+    variantRows.map((variant) => ({
+      ...variant,
+      retailPrice: Number(variant.price ?? 0),
+      price: dealerPriceMap.get(variant.id) ?? Number(variant.price ?? 0),
+    }))
   );
 
   const aggregatesByProductId = new Map<string, ListingAggregate>();
@@ -358,16 +498,14 @@ const fetchListingAggregateByProductId = async (
     });
   }
 
-  for (const variant of variantRows) {
+  for (const variant of canonicalVariantRows) {
     const aggregate = aggregatesByProductId.get(variant.productId);
     if (!aggregate) {
       continue;
     }
 
-    const basePrice = Number(variant.price ?? 0);
-    const dealerPrice = dealerPriceMap.get(variant.id);
-    const effectivePrice =
-      typeof dealerPrice === "number" ? dealerPrice : basePrice;
+    const basePrice = Number(variant.retailPrice ?? variant.price ?? 0);
+    const effectivePrice = Number(variant.price ?? basePrice);
 
     if (aggregate.minPrice === 0 || basePrice < aggregate.minPrice) {
       aggregate.minPrice = basePrice;
@@ -383,7 +521,7 @@ const fetchListingAggregateByProductId = async (
       aggregate.dealerMaxPrice = effectivePrice;
     }
 
-    if (typeof dealerPrice === "number") {
+    if (Math.abs(effectivePrice - basePrice) > 0.0001) {
       aggregate.hasDealerPricing = true;
     }
 
@@ -488,31 +626,7 @@ const resolveProductConnection = async (
         context.req.user?.id
       );
 
-      const mappedProducts: ProductCard[] = pageProducts
-        .filter((product) => {
-          // Exclude products with no variants — they have no price to display
-          // and would render as broken cards on the frontend.
-          const aggregate = aggregateByProductId.get(product.id);
-          return aggregate !== undefined && aggregate.minPrice > 0;
-        })
-        .map((product) => {
-          const aggregate = aggregateByProductId.get(product.id)!;
-          return {
-            id: product.id,
-            name: product.name,
-            slug: product.slug,
-            thumbnail: aggregate.thumbnail || null,
-            minPrice: aggregate.minPrice,
-            maxPrice: aggregate.maxPrice,
-            dealerMinPrice: aggregate.hasDealerPricing
-              ? aggregate.dealerMinPrice
-              : null,
-            dealerMaxPrice: aggregate.hasDealerPricing
-              ? aggregate.dealerMaxPrice
-              : null,
-            category: product.category || null,
-          };
-        });
+      const mappedProducts = mapProductRowsToCards(pageProducts, aggregateByProductId);
 
       const payload: ProductConnection = {
         products: mappedProducts,
@@ -546,8 +660,153 @@ const resolveProductConnection = async (
   return result;
 };
 
+const mapProductRowsToCards = (
+  products: ProductCardRow[],
+  aggregateByProductId: Map<string, ListingAggregate>
+): ProductCard[] =>
+  products
+    .filter((product) => {
+      const aggregate = aggregateByProductId.get(product.id);
+      return aggregate !== undefined && aggregate.minPrice > 0;
+    })
+    .map((product) => {
+      const aggregate = aggregateByProductId.get(product.id)!;
+      return {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        thumbnail: aggregate.thumbnail || null,
+        minPrice: aggregate.minPrice,
+        maxPrice: aggregate.maxPrice,
+        dealerMinPrice: aggregate.hasDealerPricing
+          ? aggregate.dealerMinPrice
+          : null,
+        dealerMaxPrice: aggregate.hasDealerPricing
+          ? aggregate.dealerMaxPrice
+          : null,
+        category: product.category || null,
+      };
+    });
+
+const fetchHomePageCatalog = async (
+  context: Context,
+  pageSize?: number | null
+): Promise<HomePageCatalog> => {
+  const pagination = parsePagination(pageSize, 0, {
+    defaultFirst: DEFAULT_PAGE_SIZE,
+    maxFirst: MAX_PAGE_SIZE,
+    label: "homePageCatalog",
+  });
+
+  const homeCatalogCacheKey = buildCatalogCacheKey({
+    scope: "homePageCatalog",
+    first: pagination.first,
+    skip: 0,
+    filters: {},
+    viewerKey: resolveViewerCacheKey(context.req),
+  });
+
+  const cached = await getCachedHomePageCatalog(homeCatalogCacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const productSelect = {
+    id: true,
+    slug: true,
+    name: true,
+    category: {
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        description: true,
+      },
+    },
+  } as const;
+
+  const [featuredRows, trendingRows, newArrivalRows, bestSellerRows, categories] =
+    await Promise.all([
+      context.prisma.product.findMany({
+        where: { isFeatured: true, isDeleted: false },
+        take: pagination.first,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: productSelect,
+      }),
+      context.prisma.product.findMany({
+        where: { isTrending: true, isDeleted: false },
+        take: pagination.first,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: productSelect,
+      }),
+      context.prisma.product.findMany({
+        where: { isNew: true, isDeleted: false },
+        take: pagination.first,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: productSelect,
+      }),
+      context.prisma.product.findMany({
+        where: { isBestSeller: true, isDeleted: false },
+        take: pagination.first,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: productSelect,
+      }),
+      context.prisma.category.findMany({
+        take: 20,
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          description: true,
+        },
+      }),
+    ]);
+
+  const uniqueProductIds = Array.from(
+    new Set(
+      [
+        ...featuredRows,
+        ...trendingRows,
+        ...newArrivalRows,
+        ...bestSellerRows,
+      ].map((product) => product.id)
+    )
+  );
+
+  const aggregateByProductId = await fetchListingAggregateByProductId(
+    context,
+    uniqueProductIds,
+    context.req.user?.id
+  );
+
+  const payload: HomePageCatalog = {
+    featured: mapProductRowsToCards(featuredRows as ProductCardRow[], aggregateByProductId),
+    trending: mapProductRowsToCards(trendingRows as ProductCardRow[], aggregateByProductId),
+    newArrivals: mapProductRowsToCards(
+      newArrivalRows as ProductCardRow[],
+      aggregateByProductId
+    ),
+    bestSellers: mapProductRowsToCards(
+      bestSellerRows as ProductCardRow[],
+      aggregateByProductId
+    ),
+    categories,
+  };
+
+  await setCachedHomePageCatalog(homeCatalogCacheKey, payload);
+  return payload;
+};
+
 export const productResolvers = {
   Query: {
+    homePageCatalog: async (
+      _: unknown,
+      { pageSize }: { pageSize?: number | null },
+      context: Context
+    ) => {
+      return fetchHomePageCatalog(context, pageSize);
+    },
     products: async (
       _: unknown,
       {
@@ -563,7 +822,20 @@ export const productResolvers = {
       info: any
     ) => {
       const normalizedFilters = normalizeProductFilters(filters);
-      const where = buildProductWhere(normalizedFilters);
+      const baseWhere = buildProductWhere(normalizedFilters);
+      const priceMatchedProductIds = await fetchEffectivePriceMatchedProductIds(
+        context,
+        normalizedFilters
+      );
+      const where =
+        priceMatchedProductIds === null
+          ? baseWhere
+          : {
+              ...baseWhere,
+              id: {
+                in: priceMatchedProductIds,
+              },
+            };
       return resolveProductConnection(context, {
         scope: "products",
         where,
@@ -603,6 +875,7 @@ export const productResolvers = {
               sku: true,
               images: true,
               price: true,
+              createdAt: true,
               stock: true,
               lowStockThreshold: true,
               barcode: true,
@@ -644,12 +917,13 @@ export const productResolvers = {
         retailPrice: variant.price,
         price: dealerPriceMap.get(variant.id) ?? variant.price,
       }));
+      const visibleVariants = collapseVisibleVariants(pricedVariants);
 
       const thumbnail =
-        pricedVariants.find((variant) => variant.images[0])?.images[0] || null;
+        visibleVariants.find((variant) => variant.images[0])?.images[0] || null;
       const price =
-        pricedVariants.length > 0
-          ? Math.min(...pricedVariants.map((variant) => Number(variant.price)))
+        visibleVariants.length > 0
+          ? Math.min(...visibleVariants.map((variant) => Number(variant.price)))
           : 0;
 
       return {

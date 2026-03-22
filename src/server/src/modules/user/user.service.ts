@@ -16,6 +16,8 @@ import { ROLE } from "@prisma/client";
 export class UserService {
   private static readonly UUID_PATTERN =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  private static readonly DEFAULT_DEALER_RESULTS_PER_PAGE = 200;
+  private static readonly MAX_DEALER_RESULTS_PER_PAGE = 200;
   private logsService = makeLogsService();
 
   constructor(
@@ -777,8 +779,27 @@ export class UserService {
     return this.withAccountReference(refreshedUser || targetUser);
   }
 
-  async getDealers(status?: DealerStatus) {
-    const dealers = await this.userRepository.getDealers(status);
+  async getDealers(options?: {
+    status?: DealerStatus;
+    page?: number;
+    limit?: number;
+  }) {
+    const requestedLimit = Math.max(
+      1,
+      Math.floor(options?.limit ?? UserService.DEFAULT_DEALER_RESULTS_PER_PAGE)
+    );
+    const limit = Math.min(
+      requestedLimit,
+      UserService.MAX_DEALER_RESULTS_PER_PAGE
+    );
+    const page = Math.max(1, Math.floor(options?.page ?? 1));
+    const skip = (page - 1) * limit;
+
+    const dealers = await this.userRepository.getDealers({
+      status: options?.status,
+      skip,
+      take: limit,
+    });
     return dealers.map((dealer) => ({
       id: dealer.id,
       accountReference: toAccountReference(dealer.id),
@@ -804,6 +825,10 @@ export class UserService {
         updatedAt: dealer.dealerUpdatedAt,
       },
     }));
+  }
+
+  async getDealerSummary() {
+    return this.userRepository.getDealerSummary();
   }
 
   async createDealer(

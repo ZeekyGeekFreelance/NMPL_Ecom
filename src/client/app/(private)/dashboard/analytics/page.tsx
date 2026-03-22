@@ -66,7 +66,6 @@ const exportTypeOptions = [
 const exportFormatOptions = [
   { label: "CSV", value: "csv" },
   { label: "PDF", value: "pdf" },
-  { label: "XLSX", value: "xlsx" },
 ];
 
 const parseDateInput = (value?: string) => {

@@ -3,34 +3,26 @@ import { gql } from "@apollo/client";
 // ── Home page — single batched query for all sections ────────────────────────
 export const GET_HOME_PAGE_DATA = gql`
   query GetHomePageData($pageSize: Int) {
-    featured: products(first: $pageSize, filters: { isFeatured: true }) {
-      products {
+    homePageCatalog(pageSize: $pageSize) {
+      featured {
         id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
-    }
-    trending: products(first: $pageSize, filters: { isTrending: true }) {
-      products {
+      trending {
         id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
-    }
-    newArrivals: products(first: $pageSize, filters: { isNew: true }) {
-      products {
+      newArrivals {
         id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
-    }
-    bestSellers: products(first: $pageSize, filters: { isBestSeller: true }) {
-      products {
+      bestSellers {
         id slug name thumbnail minPrice maxPrice dealerMinPrice dealerMaxPrice
         category { id slug name }
       }
-    }
-    # Home page shows a curated sample — 20 categories is plenty for the bar.
-    # Users who want to browse all categories go to the shop filter.
-    categories(first: 20) {
-      id slug name description
+      categories {
+        id slug name description
+      }
     }
   }
 `;

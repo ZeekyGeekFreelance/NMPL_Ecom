@@ -11,9 +11,8 @@ import DashboardSearchBar from "@/app/components/molecules/DashboardSearchbar";
 import UserMenu from "@/app/components/molecules/UserMenu";
 import { useAuth } from "@/app/hooks/useAuth";
 import useClickOutside from "@/app/hooks/dom/useClickOutside";
-import { useGetDealersQuery } from "@/app/store/apis/UserApi";
-import { useGetAllTransactionsQuery } from "@/app/store/apis/TransactionApi";
-import { normalizeOrderStatus } from "@/app/lib/orderLifecycle";
+import { useGetDealerSummaryQuery } from "@/app/store/apis/UserApi";
+import { useGetTransactionSummaryQuery } from "@/app/store/apis/TransactionApi";
 import { resolveDisplayRole } from "@/app/lib/userRole";
 
 type ActionMessage = {
@@ -43,48 +42,30 @@ export default function DashboardLayout({
   const resolvedRole = resolveDisplayRole(user);
   const isDashboardUser = resolvedRole === "ADMIN" || resolvedRole === "SUPERADMIN";
 
-  const { data: pendingDealersData } = useGetDealersQuery(
-    { status: "PENDING" },
+  const { data: dealerSummaryData } = useGetDealerSummaryQuery(
+    undefined,
     {
       skip: !isDashboardUser,
-      pollingInterval: 15000,
+      pollingInterval: 30000,
+      skipPollingIfUnfocused: true,
       refetchOnFocus: true,
       refetchOnReconnect: true,
     }
   );
 
-  const { data: transactionsData } = useGetAllTransactionsQuery(undefined, {
+  const { data: transactionSummaryData } = useGetTransactionSummaryQuery(undefined, {
     skip: !isDashboardUser,
-    pollingInterval: 15000,
+    pollingInterval: 30000,
+    skipPollingIfUnfocused: true,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
 
-  const pendingDealerCount = pendingDealersData?.dealers?.length || 0;
-  const transactionStatuses = useMemo(
-    () =>
-      ((transactionsData?.transactions || []) as Array<{ status?: string }>).map(
-        (transaction) =>
-          normalizeOrderStatus(transaction.status || "PENDING_VERIFICATION")
-      ),
-    [transactionsData?.transactions]
-  );
-
-  const pendingVerificationCount = useMemo(
-    () =>
-      transactionStatuses.filter((status) => status === "PENDING_VERIFICATION")
-        .length,
-    [transactionStatuses]
-  );
-
-  const paymentFollowupCount = useMemo(
-    () =>
-      transactionStatuses.filter(
-        (status) =>
-          status === "AWAITING_PAYMENT" || status === "WAITLISTED"
-      ).length,
-    [transactionStatuses]
-  );
+  const pendingDealerCount = dealerSummaryData?.summary?.pendingCount || 0;
+  const pendingVerificationCount =
+    transactionSummaryData?.summary?.pendingVerificationCount || 0;
+  const paymentFollowupCount =
+    transactionSummaryData?.summary?.paymentFollowupCount || 0;
 
   const actionableTransactionCount =
     pendingVerificationCount + paymentFollowupCount;

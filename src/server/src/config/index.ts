@@ -315,12 +315,14 @@ if (isProduction && LOCALHOSTS.has(dbTarget.host)) {
   );
 }
 
-// DIRECT_URL is only required when DATABASE_URL is a pgbouncer-pooled connection
-// (Neon free tier uses pgbouncer).
-// We no longer enforce DIRECT_URL in production — the schema.prisma no longer
-// declares directUrl, so Prisma uses DATABASE_URL for both queries and migrations.
+// Managed Postgres production deployments must provide both a pooled runtime URL
+// and a direct Prisma maintenance URL. Runtime queries stay on DATABASE_URL;
+// migrations and operational commands use DIRECT_URL via schema.prisma directUrl.
 if (isProduction && directDbTarget === undefined) {
-  console.log("[config] DIRECT_URL not set — using DATABASE_URL for all Prisma operations (direct connection mode).");
+  throwConfigError(
+    "DIRECT_URL",
+    "Production requires DIRECT_URL so Prisma maintenance operations bypass pooled connections."
+  );
 }
 
 if (isProduction && directDbTarget && LOCALHOSTS.has(directDbTarget.host)) {
@@ -574,11 +576,11 @@ const appConfig = {
     fromName: emailFromName,
   },
   security: {
-    sessionSecret: parseString("SESSION_SECRET", {
-      devDefault: "dev-session-secret",
-    }) as string,
     cookieSecret: parseString("COOKIE_SECRET", {
       devDefault: "dev-cookie-secret",
+    }) as string,
+    superAdminResetSecret: parseString("SUPERADMIN_RESET_SECRET", {
+      devDefault: "dev-superadmin-reset-secret-change-me-please",
     }) as string,
     cookieDomain: parseString("COOKIE_DOMAIN", {
       optional: true,
@@ -623,14 +625,6 @@ const appConfig = {
     phoneOtpEnabled: parseBoolean("REGISTRATION_PHONE_OTP_ENABLED", {
       devDefault: false,
     }) as boolean,
-  },
-  orderLifecycle: {
-    reservationExpiryHours: parsePositiveInt("ORDER_RESERVATION_EXPIRY_HOURS", {
-      devDefault: 48,
-    }) as number,
-    reservationSweepSeconds: parsePositiveInt("ORDER_RESERVATION_SWEEP_SECONDS", {
-      devDefault: 60,
-    }) as number,
   },
   rateLimit: {
     enabled: parseBoolean("RATE_LIMIT_ENABLED", { devDefault: true }) as boolean,
@@ -789,6 +783,7 @@ if (isProduction) {
     "dev-session-secret",
     "dev_cookie_secret_change_me",
     "dev-cookie-secret",
+    "dev-superadmin-reset-secret-change-me-please",
     "replace_me",
     "change_me",
   ]);
@@ -796,8 +791,8 @@ if (isProduction) {
   const secretChecks: Array<[string, string | undefined]> = [
     ["ACCESS_TOKEN_SECRET", appConfig.auth.accessTokenSecret],
     ["REFRESH_TOKEN_SECRET", appConfig.auth.refreshTokenSecret],
-    ["SESSION_SECRET", appConfig.security.sessionSecret],
     ["COOKIE_SECRET", appConfig.security.cookieSecret],
+    ["SUPERADMIN_RESET_SECRET", appConfig.security.superAdminResetSecret],
   ];
 
   for (const [key, value] of secretChecks) {
@@ -805,6 +800,13 @@ if (isProduction) {
       throwConfigError(
         key,
         "Production boot blocked: this key still uses a known dev/placeholder secret. Set a strong unique value."
+      );
+    }
+
+    if (key === "SUPERADMIN_RESET_SECRET" && value && value.trim().length < 32) {
+      throwConfigError(
+        key,
+        "Production boot blocked: SUPERADMIN_RESET_SECRET must be at least 32 characters."
       );
     }
   }

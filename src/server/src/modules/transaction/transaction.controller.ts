@@ -7,6 +7,15 @@ import sendResponse from "@/shared/utils/sendResponse";
 export class TransactionController {
   constructor(private transactionService: TransactionService) {}
 
+  getTransactionSummary = asyncHandler(async (_req: Request, res: Response) => {
+    const summary = await this.transactionService.getTransactionSummary();
+
+    sendResponse(res, 200, {
+      data: { summary },
+      message: "Fetched transaction summary successfully",
+    });
+  });
+
   getAllTransactions = asyncHandler(async (req: Request, res: Response) => {
     const {
       transactions,

@@ -61,9 +61,10 @@ const TransactionsDashboard = () => {
   } | null>(null);
 
   const { data, error, isLoading, refetch } = useGetAllTransactionsQuery(
-    { page },
+    { page, limit: 16 },
     {
-      pollingInterval: 8000,
+      pollingInterval: 15000,
+      skipPollingIfUnfocused: true,
       refetchOnFocus: true,
       refetchOnReconnect: true,
     }
@@ -199,7 +200,6 @@ const TransactionsDashboard = () => {
       : [];
   const isIrreversiblePendingStatus =
     pendingStatusUpdate?.nextStatus === "QUOTATION_REJECTED" ||
-    pendingStatusUpdate?.nextStatus === "QUOTATION_EXPIRED" ||
     pendingStatusUpdate?.nextStatus === "DELIVERED";
 
   const columns = [

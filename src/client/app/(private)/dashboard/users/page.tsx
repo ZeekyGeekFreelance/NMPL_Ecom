@@ -78,7 +78,6 @@ const UsersDashboard = () => {
     skip: !shouldFetchUsers,
     refetchOnFocus: true,
     refetchOnReconnect: true,
-    pollingInterval: 7000,
   });
 
   const [updateUser, { isLoading: isUpdating }] = useUpdateUserMutation();

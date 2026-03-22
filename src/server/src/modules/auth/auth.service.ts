@@ -360,7 +360,10 @@ export class AuthService {
     }
 
     if (!user.password || !this.isBcryptHash(user.password)) {
-      throw new AppError(400, "Password authentication is not configured for this account. Use OAuth sign-in.");
+      throw new AppError(
+        400,
+        "Password authentication is not configured for this account. Contact support to restore password access."
+      );
     }
 
     const isCurrentPasswordValid = await this.verifyPassword({ userId: user.id, inputPassword: params.currentPassword, storedPassword: user.password });
@@ -399,7 +402,7 @@ export class AuthService {
   // ─────────────────────────────────────────────────────────────────────────
 
   async resetSuperAdminPassword(params: { resetSecret: string; targetEmail: string; newPassword: string }): Promise<{ message: string }> {
-    const configuredSecret = config.raw.SUPERADMIN_RESET_SECRET;
+    const configuredSecret = config.security.superAdminResetSecret;
     if (!configuredSecret || configuredSecret.trim().length < 32) {
       throw new AppError(503, "SuperAdmin password reset is not configured. Set SUPERADMIN_RESET_SECRET in your environment.");
     }

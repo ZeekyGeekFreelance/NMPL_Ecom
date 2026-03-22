@@ -6,7 +6,6 @@ import { DateRangeQuery, ReportData } from "./reports.types";
 import { makeLogsService } from "../logs/logs.factory";
 import generateCSV from "@/shared/utils/export/generateCsv";
 import generatePDF from "@/shared/utils/export/generatePdf";
-import generateXLSX from "@/shared/utils/export/generateXlsx";
 
 export class ReportsController {
   private logsService = makeLogsService();
@@ -47,9 +46,9 @@ export class ReportsController {
     const currentYear = now.getFullYear();
 
     // Validate format
-    const validFormats = ["csv", "pdf", "xlsx"];
+    const validFormats = ["csv", "pdf"];
     if (!format || !validFormats.includes(format as string)) {
-      throw new AppError(400, "Invalid format. Use: csv, pdf, or xlsx");
+      throw new AppError(400, "Invalid format. Use: csv or pdf");
     }
 
     // Validate type
@@ -179,11 +178,6 @@ export class ReportsController {
       case "pdf":
         result = await generatePDF(data);
         contentType = "application/pdf";
-        break;
-      case "xlsx":
-        result = await generateXLSX(data);
-        contentType =
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
         break;
       default:
         throw new AppError(400, "Invalid format");

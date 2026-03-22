@@ -8,11 +8,6 @@ import hpp from "hpp";
 import morgan from "morgan";
 import logger from "./infra/winston/logger";
 import compression from "compression";
-import passport from "passport";
-import session from "express-session";
-import { RedisStore } from "connect-redis";
-import redisClient from "./infra/cache/redis";
-import configurePassport from "./infra/passport/passport";
 import { cookieParserOptions } from "./shared/constants";
 import globalError from "./shared/errors/globalError";
 import { logRequest } from "./shared/middlewares/logRequest";
@@ -22,11 +17,11 @@ import { configureGraphQL } from "./graphql";
 import webhookRoutes from "./modules/webhook/webhook.routes";
 import healthRoutes from "./routes/health.routes";
 import { Server as HTTPServer } from "http";
-import { setupSwagger } from "./docs/swagger";
 import { config, isAllowedOrigin } from "@/config";
 import { bootState } from "@/bootstrap/state";
 import { randomUUID } from "crypto";
 import { createRequestMetricsMiddleware } from "@/shared/observability/requestMetrics";
+import attachRequestSession from "@/shared/middlewares/requestSession";
 
 const parseCspDirectives = (value: string): Record<string, string[]> => {
   const directives = value
@@ -58,7 +53,6 @@ export const createApp = async () => {
   // ensures API routes return 503 until the DB + Redis are fully connected.
   const httpServer = new HTTPServer(app);
 
-  setupSwagger(app);
   app.disable("x-powered-by");
   app.set("trust proxy", config.server.trustProxy ? 1 : 0);
 
@@ -73,7 +67,7 @@ export const createApp = async () => {
   app.use(createRequestMetricsMiddleware());
 
   // ── Health / liveness endpoints ──────────────────────────────────────────
-  // Registered FIRST — before session, passport, CORS, and the readiness gate —
+  // Registered FIRST — before cookies, CORS, and the readiness gate —
   // so Docker healthchecks and the frontend useBackendReady poll always get a
   // response, even during the DB connection phase (bootState.serverReady=false).
   app.use("/", healthRoutes);
@@ -95,54 +89,7 @@ export const createApp = async () => {
   );
   app.use(normalizeTextPayload);
   app.use(cookieParser(config.security.cookieSecret, cookieParserOptions));
-
-  const sessionConfig: session.SessionOptions = {
-    secret: config.security.sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    proxy: config.server.trustProxy,
-    name: "sessionId",
-    rolling: true,
-    cookie: {
-      httpOnly: true,
-      secure: config.isProduction,
-      sameSite: config.security.cookieSameSite,
-      domain: config.security.cookieDomain,
-      maxAge: 1000 * 60 * 60 * 24 * 7,
-      path: "/",
-    },
-  };
-
-  if (config.redis.enabled) {
-    // RedisStore is created here; the underlying ioredis client connects
-    // asynchronously in the bootstrap.  connect-redis gracefully queues
-    // session ops until the client is ready, so this is safe to create now.
-    sessionConfig.store = new RedisStore({ client: redisClient as any });
-  } else if (config.isDevelopment) {
-    console.warn(
-      "[session] Redis is disabled in development. Using in-memory session store."
-    );
-  }
-
-  const sessionMiddleware = session(sessionConfig);
-
-  const isPublicCatalog = (req: express.Request) =>
-    req.method === "POST" &&
-    req.path === "/api/v1/graphql" &&
-    req.headers["x-public-catalog"] === "1";
-
-  // Skip session + passport for public catalog — saves Redis round-trip per request.
-  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (isPublicCatalog(req)) { next(); return; }
-    sessionMiddleware(req, res, next);
-  });
-
-  app.use(passport.initialize());
-  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (isPublicCatalog(req)) { next(); return; }
-    passport.session()(req, res, next);
-  });
-  configurePassport();
+  app.use(attachRequestSession);
 
   app.use((req, res, next) => {
     if (req.headers["access-control-request-private-network"] === "true") {
@@ -172,7 +119,6 @@ export const createApp = async () => {
         "x-confirmation-handled",
         "x-idempotency-key",
         "Apollo-Require-Preflight",
-        "x-public-catalog",
         "x-csrf-token",
       ],
       exposedHeaders: ["x-csrf-token"],

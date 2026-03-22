@@ -2,10 +2,29 @@ import { apiSlice } from "../slices/ApiSlice";
 
 export const transactionApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
+    getTransactionSummary: builder.query<
+      {
+        summary: {
+          pendingVerificationCount: number;
+          awaitingPaymentCount: number;
+          waitlistedCount: number;
+          paymentFollowupCount: number;
+        };
+      },
+      void
+    >({
+      query: () => ({
+        url: "/transactions/summary",
+      }),
+      providesTags: ["Transactions"],
+    }),
     getAllTransactions: builder.query({
       query: (params?: { page?: number; limit?: number }) => ({
         url: "/transactions",
-        params: params || undefined,
+        params: {
+          page: params?.page ?? 1,
+          limit: params?.limit ?? 16,
+        },
       }),
       providesTags: ["Transactions"],
     }),
@@ -79,6 +98,7 @@ export const transactionApi = apiSlice.injectEndpoints({
 });
 
 export const {
+  useGetTransactionSummaryQuery,
   useGetAllTransactionsQuery,
   useGetTransactionQuery,
   useUpdateTransactionStatusMutation,

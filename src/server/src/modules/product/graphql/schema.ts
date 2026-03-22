@@ -81,6 +81,14 @@ const typeDefs = gql`
     totalCount: Int
   }
 
+  type HomePageCatalog {
+    featured: [ProductCard!]!
+    trending: [ProductCard!]!
+    newArrivals: [ProductCard!]!
+    bestSellers: [ProductCard!]!
+    categories: [Category!]!
+  }
+
   input ProductFilters {
     search: String
     isNew: Boolean
@@ -95,6 +103,7 @@ const typeDefs = gql`
 
   type Query {
     products(first: Int, skip: Int, filters: ProductFilters): ProductConnection!
+    homePageCatalog(pageSize: Int): HomePageCatalog!
     product(slug: String!): Product
     newProducts(first: Int, skip: Int): ProductConnection!
     featuredProducts(first: Int, skip: Int): ProductConnection!

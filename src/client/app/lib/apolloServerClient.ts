@@ -1,15 +1,16 @@
 import { ApolloClient, InMemoryCache, HttpLink, from } from "@apollo/client";
+import { cookies } from "next/headers";
 import { runtimeEnv } from "./runtimeEnv";
 
 /**
  * SSR-only Apollo client.
  *
  * Priority for the GraphQL endpoint:
- *   INTERNAL_API_URL   — direct service-to-service URL, never reaches the
- *                        browser bundle.  Set this to the backend's internal
- *                        address in production (e.g. http://api:5000/api/v1).
- *   NEXT_PUBLIC_API_URL — public fallback used in development when both
- *                        services run on localhost.
+ *   INTERNAL_API_URL    - direct service-to-service URL, never reaches the
+ *                         browser bundle. Set this to the backend's internal
+ *                         address in production (for example http://api:5000/api/v1).
+ *   NEXT_PUBLIC_API_URL - public fallback used in development when both
+ *                         services run on localhost.
  */
 function resolveServerGraphQLUrl(): string {
   const raw = runtimeEnv.internalApiUrl || runtimeEnv.apiBaseUrl || "";
@@ -26,7 +27,7 @@ function resolveServerGraphQLUrl(): string {
 const SERVER_GRAPHQL_URL = resolveServerGraphQLUrl();
 
 // 15-second hard timeout per SSR attempt.
-// Neon (serverless Postgres) can take 1–3 s to resume from suspension, so
+// Neon (serverless Postgres) can take 1-3 s to resume from suspension, so
 // the original 8 s window was too tight on cold DB starts.
 const SSR_FETCH_TIMEOUT_MS = 15_000;
 
@@ -58,8 +59,8 @@ async function fetchWithTimeout(
       clearTimeout(timer);
       lastError = err;
 
-      // Only retry on network/abort errors (e.g. Neon cold-start timeout).
-      // Don't retry on 4xx/5xx — those are application errors.
+      // Only retry on network/abort errors (for example Neon cold-start timeout).
+      // Don't retry on 4xx/5xx - those are application errors.
       const isAbort = err instanceof Error && err.name === "AbortError";
       const isNetwork =
         err instanceof TypeError &&
@@ -79,16 +80,32 @@ async function fetchWithTimeout(
   throw lastError;
 }
 
+const buildRequestCookieHeader = async (): Promise<string | undefined> => {
+  try {
+    const cookieStore = await cookies();
+    const entries = cookieStore.getAll();
+    if (!entries.length) {
+      return undefined;
+    }
+
+    return entries.map(({ name, value }) => `${name}=${value}`).join("; ");
+  } catch {
+    return undefined;
+  }
+};
+
 /**
  * Returns a fresh Apollo client for each SSR request.
- * Each call gets its own InMemoryCache — no shared state between requests.
+ * Each call gets its own InMemoryCache - no shared state between requests.
  */
-export function createServerApolloClient(): ApolloClient<object> {
+export async function createServerApolloClient(): Promise<ApolloClient<object>> {
+  const cookieHeader = await buildRequestCookieHeader();
+
   const httpLink = new HttpLink({
     uri: SERVER_GRAPHQL_URL,
     credentials: "include",
     fetch: fetchWithTimeout,
-    headers: { "x-public-catalog": "1" },
+    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   });
 
   return new ApolloClient({

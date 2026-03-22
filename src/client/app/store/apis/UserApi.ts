@@ -56,11 +56,35 @@ export const userApi = apiSlice.injectEndpoints({
      */
     getDealers: builder.query<
       { dealers: any[] },
-      { status?: string } | undefined
+      { status?: string; page?: number; limit?: number } | undefined
     >({
       query: (params) => ({
         url: "/users/dealers",
-        params: params?.status ? { status: params.status } : undefined,
+        params: {
+          page: params?.page ?? 1,
+          limit: params?.limit ?? 200,
+          ...(params?.status ? { status: params.status } : {}),
+        },
+      }),
+      providesTags: ["Dealers"],
+    }),
+
+    getDealerSummary: builder.query<
+      {
+        summary: {
+          totalCount: number;
+          pendingCount: number;
+          approvedCount: number;
+          legacyCount: number;
+          rejectedCount: number;
+          suspendedCount: number;
+          activeCount: number;
+        };
+      },
+      void
+    >({
+      query: () => ({
+        url: "/users/dealers/summary",
       }),
       providesTags: ["Dealers"],
     }),
@@ -203,6 +227,7 @@ export const {
   useUpdateMyProfileMutation,
   useGetUserByIdQuery,
   useGetDealersQuery,
+  useGetDealerSummaryQuery,
   useCreateDealerMutation,
   useUpdateDealerStatusMutation,
   useDeleteDealerMutation,

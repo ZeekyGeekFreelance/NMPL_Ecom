@@ -390,7 +390,8 @@ const OrderCard = ({
 const UserOrders = () => {
   const { showToast } = useToast();
   const { data, isLoading, error } = useGetUserOrdersQuery(undefined, {
-    pollingInterval: 8000,
+    pollingInterval: 15000,
+    skipPollingIfUnfocused: true,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
