@@ -3,14 +3,8 @@ const fs = require("fs");
 const path = require("path");
 
 const mode = process.argv[2] || "pre";
-const isVercelRuntime =
-  String(process.env.VERCEL || "").trim() === "1" ||
-  String(process.env.VERCEL || "").trim().toLowerCase() === "true";
-const requestedDistDirName = (process.argv[3] || process.env.NEXT_DIST_DIR || ".next").trim() || ".next";
 const distDirName =
-  isVercelRuntime && requestedDistDirName === ".next-prod"
-    ? ".next"
-    : requestedDistDirName;
+  (process.argv[3] || process.env.NEXT_DIST_DIR || ".next").trim() || ".next";
 const clientRoot = path.resolve(__dirname, "..");
 const appRoot = path.join(clientRoot, "app");
 const buildRoot = path.join(clientRoot, distDirName);

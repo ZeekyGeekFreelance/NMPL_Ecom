@@ -1,8 +1,24 @@
 /* eslint-disable no-console */
 const { execFileSync } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 
 const repoRoot = path.resolve(__dirname, "..");
+const candidateNpmCliPaths = [
+  process.env.npm_execpath,
+  path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  path.join(path.dirname(path.dirname(process.execPath)), "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+].filter(Boolean);
+
+const npmCliPath = candidateNpmCliPaths.find((candidatePath) =>
+  fs.existsSync(candidatePath)
+);
+
+if (!npmCliPath) {
+  throw new Error(
+    "[deps] Unable to resolve npm CLI entrypoint. Ensure the check runs via npm or Node includes npm."
+  );
+}
 const packageRoots = [
   path.join(repoRoot, "src", "client"),
   path.join(repoRoot, "src", "server"),
@@ -58,13 +74,12 @@ const walkDependencies = (node, visit, seen = new Set()) => {
 for (const packageRoot of packageRoots) {
   const packageLabel = path.relative(repoRoot, packageRoot);
   const raw = execFileSync(
-    "npm.cmd",
-    ["ls", "--json", "--long", "--depth=0", "--omit=dev"],
+    process.execPath,
+    [npmCliPath, "ls", "--json", "--long", "--depth=0", "--omit=dev"],
     {
       cwd: packageRoot,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      shell: true,
     }
   );
 

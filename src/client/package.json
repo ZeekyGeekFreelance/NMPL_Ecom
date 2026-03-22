@@ -6,7 +6,7 @@
     "dev": "node ./scripts/run-next.js dev",
     "repo:sanity": "node ./scripts/repo-sanity-proxy.js",
     "env:check": "node ./scripts/validate-env.js",
-    "build": "npm run repo:sanity && npm run env:check -- --production && node ./scripts/assert-determinism.js pre .next-prod && node ./scripts/run-next.js build && node ./scripts/assert-determinism.js post .next-prod",
+    "build": "npm run repo:sanity && npm run env:check -- --production && node ./scripts/assert-determinism.js pre .next && node ./scripts/run-next.js build && node ./scripts/assert-determinism.js post .next",
     "start": "node ./scripts/run-next.js start",
     "lint": "next lint",
     "audit": "npm audit --audit-level=high"
