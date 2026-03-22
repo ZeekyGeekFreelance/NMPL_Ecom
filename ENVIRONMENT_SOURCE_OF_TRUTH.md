@@ -59,13 +59,14 @@ Server values already decided:
 Client values that must be filled with real production data:
 
 - `NEXT_PUBLIC_API_URL`
-- `INTERNAL_API_URL`
+- `INTERNAL_API_URL` when an internal SSR-only service URL is available
 
 Production rules:
 
 - `DATABASE_URL` must be the pooled/runtime connection string
 - `DIRECT_URL` must be the direct maintenance connection string used by Prisma migrations
-- `INTERNAL_API_URL` is mandatory in production so SSR bypasses the public edge host
+- `INTERNAL_API_URL` is recommended in production so SSR can bypass the public edge host
+- if `INTERNAL_API_URL` is omitted, SSR falls back to `NEXT_PUBLIC_API_URL`
 
 Client values already decided:
 

@@ -72,8 +72,8 @@ if (env.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(env.NEXT_PUBLIC_API
 }
 
 if (env.NODE_ENV === "production" && !env.INTERNAL_API_URL) {
-  throw new Error(
-    "[client-env] Production build blocked: INTERNAL_API_URL is required for SSR/server-side API access"
+  console.warn(
+    "[client-env] INTERNAL_API_URL is not set. SSR will fall back to NEXT_PUBLIC_API_URL."
   );
 }
 
