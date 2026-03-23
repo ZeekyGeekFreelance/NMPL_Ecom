@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node ./scripts/run-next.js dev",
+    "dev:docker": "node ./scripts/run-next.js dev --turbopack",
     "repo:sanity": "node ./scripts/repo-sanity-proxy.js",
     "env:check": "node ./scripts/validate-env.js",
     "build": "npm run repo:sanity && npm run env:check -- --production && node ./scripts/assert-determinism.js pre .next && node ./scripts/run-next.js build && node ./scripts/assert-determinism.js post .next",

@@ -24,7 +24,13 @@ const dotenv = require("dotenv");
 
 const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
 const isDocker = String(process.env.DOCKER_MODE || "").trim().toLowerCase() === "true";
-const envFileCandidates = nodeEnv === "production" ? [".env.production"] : [".env"];
+const explicitEnvFile = String(process.env.ENV_FILE_NAME || "").trim();
+const baseEnvFile = nodeEnv === "production" ? ".env.production" : ".env";
+const envFileCandidates = [baseEnvFile];
+
+if (explicitEnvFile && explicitEnvFile !== baseEnvFile) {
+  envFileCandidates.push(explicitEnvFile);
+}
 
 // Keys whose current system value will be replaced even in Docker mode when
 // that value points to a localhost address — these are always misconfigured

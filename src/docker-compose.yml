@@ -117,6 +117,7 @@ services:
       INTERNAL_API_URL: http://server:5000/api/v1
       NEXT_PUBLIC_PLATFORM_NAME: NMPL
       NEXT_PUBLIC_SUPPORT_EMAIL: support@nmpl.online
+      DOCKER_MODE: "true"
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     ports:
@@ -130,7 +131,7 @@ services:
       - ./client:/app
       - /app/node_modules
       - /app/.next
-    command: npm run dev
+    command: npm run dev:docker
     restart: unless-stopped
 
 volumes:

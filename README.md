@@ -90,7 +90,11 @@ Expected result:
 
 ## Host Dev With Local Node Processes
 
-If you want hot reload on the host but still want reproducible infra, use Docker only for Postgres and Redis:
+Two host-side server profiles are supported.
+
+### Option A: Host App + Local Docker Postgres/Redis
+
+Use Docker only for infra:
 
 ```bash
 cd src
@@ -102,10 +106,9 @@ In another shell:
 ```bash
 cd src/server
 npm ci
-npx prisma generate
 npx prisma migrate deploy
 npm run seed
-npm run dev
+npm run dev:localdocker
 ```
 
 In another shell:
@@ -116,16 +119,38 @@ npm ci
 npm run dev
 ```
 
-For this mode:
+### Option B: Host App + Neon
+
+Run the app directly on the host with the base `src/server/.env`:
+
+```bash
+cd src/server
+npm ci
+npm run dev:neon
+```
+
+In another shell:
+
+```bash
+cd src/client
+npm ci
+npm run dev
+```
+
+For host mode:
 
 - keep `src/server/.env` on port `5000`
 - keep `src/client/.env` on `http://localhost:5000/api/v1`
+- `npm run dev:neon` uses the base `src/server/.env`
+- `npm run dev:localdocker` overlays `src/server/.env.localdocker` on top of `src/server/.env` so the host server targets Docker Postgres/Redis on `127.0.0.1`
 - do not run the Docker client/server and the host client/server on the same ports at the same time
+- do not run migrations or seed against Neon unless that is intentional
 
 ## Reproducibility Notes
 
 - The Docker dev client now stores `.next` in a dedicated container volume instead of the host bind mount.
 - The client dev startup clears stale `.next` contents before `next dev` starts.
+- The Docker dev client uses Turbopack so route-to-route navigation does not repeatedly fall back to slow webpack recompiles on bind-mounted source trees.
 - If you switch branches or recover from an interrupted client build, recreating only the client is enough:
 
 ```bash

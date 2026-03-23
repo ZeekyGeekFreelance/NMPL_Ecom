@@ -5,6 +5,8 @@
   "overrides": {},
   "scripts": {
     "dev": "prisma generate && nodemon",
+    "dev:neon": "node ./scripts/run-dev-profile.js neon",
+    "dev:localdocker": "node ./scripts/run-dev-profile.js localdocker",
     "dev:docker": "prisma generate && node -r ./scripts/load-env.js -r ts-node/register/transpile-only -r module-alias/register src/server.ts",
     "compile": "prisma generate && node ./scripts/clean-build.js && tsc",
     "start:docker": "npm run compile && npm run start",

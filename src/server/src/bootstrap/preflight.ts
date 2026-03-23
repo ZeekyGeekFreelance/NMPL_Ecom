@@ -128,10 +128,6 @@ export const assertMixedModeMismatch = async (): Promise<void> => {
     return;
   }
 
-  if (!isLocalAddress(config.database.host)) {
-    return;
-  }
-
   const dockerDbHostPort = config.diagnostics.dockerDbHostPort;
   if (!dockerDbHostPort) {
     return;
@@ -143,7 +139,9 @@ export const assertMixedModeMismatch = async (): Promise<void> => {
 
   if (dockerDbPortOpen && !dbConfiguredForDockerPort) {
     throw new Error(
-      `[preflight] Mixed mode detected: Docker PostgreSQL appears active on 127.0.0.1:${dockerDbHostPort}, but DATABASE_URL points elsewhere. Abort boot.`
+      `[preflight] Mixed mode detected: Docker PostgreSQL appears active on 127.0.0.1:${dockerDbHostPort}, ` +
+      `but DATABASE_URL points to ${config.database.host}:${config.database.port}. ` +
+      `For host-mode dev, update src/server/.env to 127.0.0.1:${dockerDbHostPort} or stop the Docker DB. Abort boot.`
     );
   }
 };
