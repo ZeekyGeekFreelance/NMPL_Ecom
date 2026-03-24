@@ -66,6 +66,8 @@ const installScriptAllowlist = new Map([
 const dependencyFields = ["dependencies", "optionalDependencies"];
 const exactVersionPattern =
   /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const currentPlatform = process.platform;
+const currentArch = process.arch;
 
 const loadJson = (filePath) => JSON.parse(fs.readFileSync(filePath, "utf8"));
 
@@ -137,6 +139,25 @@ const getLicenseException = (packageName) => {
   return null;
 };
 
+const matchesConstraint = (constraint, currentValue) => {
+  if (!Array.isArray(constraint) || constraint.length === 0) {
+    return true;
+  }
+
+  return constraint.includes(currentValue);
+};
+
+const isOptionalPackageSkippedForCurrentPlatform = (entry) => {
+  if (!entry || entry.optional !== true) {
+    return false;
+  }
+
+  const supportsCurrentOs = matchesConstraint(entry.os, currentPlatform);
+  const supportsCurrentCpu = matchesConstraint(entry.cpu, currentArch);
+
+  return !supportsCurrentOs || !supportsCurrentCpu;
+};
+
 const issues = [];
 const installScriptNotes = [];
 const licenseExceptionNotes = [];
@@ -163,7 +184,12 @@ for (const packageRoot of packageRoots) {
 
   const packages = lockfile.packages || {};
   for (const [packagePath, entry] of Object.entries(packages)) {
-    if (!packagePath || !packagePath.startsWith("node_modules/") || entry.dev === true) {
+    if (
+      !packagePath ||
+      !packagePath.startsWith("node_modules/") ||
+      entry.dev === true ||
+      isOptionalPackageSkippedForCurrentPlatform(entry)
+    ) {
       continue;
     }
 

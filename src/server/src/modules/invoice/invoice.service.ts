@@ -101,6 +101,60 @@ export class InvoiceService {
     return resolveCustomerTypeFromUser(invoice.user);
   }
 
+  private normalizeLifecycleStatus(value?: string | null): string {
+    const normalizedValue = String(value || "")
+      .trim()
+      .toUpperCase();
+
+    const normalizedStatusByLegacyValue: Record<string, string> = {
+      PLACED: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+      PENDING: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
+      PROCESSING: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      SHIPPED: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      IN_TRANSIT: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      PAID: ORDER_LIFECYCLE_STATUS.CONFIRMED,
+      DELIVERED: ORDER_LIFECYCLE_STATUS.DELIVERED,
+      REJECTED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      CANCELED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      RETURNED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+      REFUNDED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
+    };
+
+    return normalizedStatusByLegacyValue[normalizedValue] || normalizedValue;
+  }
+
+  private isInvoiceEligibleFromOrder(order: Awaited<ReturnType<InvoiceRepository["findOrderForInvoice"]>>): boolean {
+    if (!order) {
+      return false;
+    }
+
+    if (order.invoice) {
+      return true;
+    }
+
+    const candidateStatuses = [
+      this.normalizeLifecycleStatus(order.transaction?.status),
+      this.normalizeLifecycleStatus(order.status),
+    ];
+
+    if (order.payment?.status === "PAID") {
+      candidateStatuses.push(ORDER_LIFECYCLE_STATUS.CONFIRMED);
+    }
+
+    if (
+      Array.isArray(order.paymentTransactions) &&
+      order.paymentTransactions.some((transaction) => transaction.status === "CONFIRMED")
+    ) {
+      candidateStatuses.push(ORDER_LIFECYCLE_STATUS.CONFIRMED);
+    }
+
+    return candidateStatuses.some(
+      (status) =>
+        status === ORDER_LIFECYCLE_STATUS.CONFIRMED ||
+        status === ORDER_LIFECYCLE_STATUS.DELIVERED
+    );
+  }
+
   private async sendInvoiceEmails(invoice: InvoiceWithDetails): Promise<void> {
     const internalRecipients = await this.getInternalRecipients(
       invoice.customerEmail
@@ -232,34 +286,7 @@ export class InvoiceService {
       throw new AppError(404, "Order not found");
     }
 
-    const transactionStatus = String(
-      order.transaction?.status || order.status || ""
-    )
-      .trim()
-      .toUpperCase();
-
-    const normalizedStatusByLegacyValue: Record<string, string> = {
-      PLACED: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
-      PENDING: ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION,
-      PROCESSING: ORDER_LIFECYCLE_STATUS.CONFIRMED,
-      SHIPPED: ORDER_LIFECYCLE_STATUS.CONFIRMED,
-      IN_TRANSIT: ORDER_LIFECYCLE_STATUS.CONFIRMED,
-      PAID: ORDER_LIFECYCLE_STATUS.CONFIRMED,
-      DELIVERED: ORDER_LIFECYCLE_STATUS.DELIVERED,
-      REJECTED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
-      CANCELED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
-      RETURNED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
-      REFUNDED: ORDER_LIFECYCLE_STATUS.QUOTATION_REJECTED,
-    };
-
-    const normalizedStatus =
-      normalizedStatusByLegacyValue[transactionStatus] || transactionStatus;
-
-    const isInvoiceEligible =
-      normalizedStatus === ORDER_LIFECYCLE_STATUS.CONFIRMED ||
-      normalizedStatus === ORDER_LIFECYCLE_STATUS.DELIVERED;
-
-    if (!isInvoiceEligible) {
+    if (!this.isInvoiceEligibleFromOrder(order)) {
       throw new AppError(
         409,
         "Invoice is available only after payment is confirmed."

@@ -116,7 +116,10 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
     [initialVariables]
   );
 
-  if (!seededQueryKeysRef.current.has(initialQueryKey)) {
+  if (
+    !initialConnection.isFallback &&
+    !seededQueryKeysRef.current.has(initialQueryKey)
+  ) {
     try {
       apolloClient.writeQuery({
         query: GET_PRODUCTS,
@@ -179,7 +182,7 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
     networkStatus,
   } = useQuery(GET_PRODUCTS, {
     variables: { first: requestPageSize, skip: 0, filters: serverFilters },
-    fetchPolicy: "cache-first",
+    fetchPolicy: initialConnection.isFallback ? "network-only" : "cache-first",
     nextFetchPolicy: "cache-first",
     pollInterval: dealerCatalogPollInterval,
     notifyOnNetworkStatusChange: false,

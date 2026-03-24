@@ -11,6 +11,7 @@ export interface HomePageData {
   newArrivals: Product[];
   bestSellers: Product[];
   categories: { id: string; slug: string; name: string; description?: string }[];
+  isFallback: boolean;
 }
 
 const EMPTY_HOME_PAGE_DATA: HomePageData = {
@@ -19,6 +20,7 @@ const EMPTY_HOME_PAGE_DATA: HomePageData = {
   newArrivals: [],
   bestSellers: [],
   categories: [],
+  isFallback: true,
 };
 
 /**
@@ -53,6 +55,7 @@ export const fetchHomePageData = async (): Promise<HomePageData> => {
       newArrivals: data?.homePageCatalog?.newArrivals ?? [],
       bestSellers: data?.homePageCatalog?.bestSellers ?? [],
       categories: data?.homePageCatalog?.categories ?? [],
+      isFallback: false,
     };
   } catch (error) {
     if (runtimeEnv.isDevelopment) {

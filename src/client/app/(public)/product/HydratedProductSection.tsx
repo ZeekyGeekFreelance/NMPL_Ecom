@@ -12,6 +12,7 @@ import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 interface HydratedProductSectionProps {
   title: string;
   initialProducts: Product[];
+  initialProductsAreFallback?: boolean;
   filters: Record<string, unknown>;
   showTitle?: boolean;
 }
@@ -19,6 +20,7 @@ interface HydratedProductSectionProps {
 const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
   title,
   initialProducts,
+  initialProductsAreFallback = false,
   filters,
   showTitle = false,
 }) => {
@@ -36,21 +38,12 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
       ].join("|")
     : null;
 
-  // Seed the Apollo cache with SSR data (or empty data) before the first render
-  // so that useQuery("cache-first") finds an entry immediately and never fires
-  // a cold-cache network request on hydration.
-  //
-  // Previously this guard was `initialProducts.length > 0`, which meant sections
-  // with no flagged products in the DB would skip seeding, leave the cache cold,
-  // trigger a network request, and surface "Failed to fetch" error banners.
-  // Seeding with empty data is always safe: the cache entry is replaced by the
-  // first successful auth-refetch or poll that returns real products.
-  //
-  // seededRef.current is only set to true on success so a writeQuery failure
-  // (e.g. type policy not yet satisfied on first SSR render pass) is retried
-  // on the next render rather than silently abandoned.
+  // Seed the Apollo cache only when SSR returned real catalog data. If SSR
+  // fell back to empty arrays because the API was still cold, caching those
+  // empties as authoritative data can pin the first healthy client render to
+  // a fake "no products" state.
   const seededRef = useRef(false);
-  if (!seededRef.current) {
+  if (!initialProductsAreFallback && !seededRef.current) {
     try {
       apolloClient.writeQuery({
         query: GET_PRODUCTS,
@@ -79,14 +72,15 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
   // Used to decide whether a subsequent network error is worth surfacing:
   // if the section was always empty (no flagged products in the DB), a
   // downstream error panel is misleading — show an empty section instead.
-  const hasEverLoadedRef = useRef(initialProducts.length > 0);
+  const hasEverLoadedRef = useRef(
+    !initialProductsAreFallback && initialProducts.length > 0
+  );
 
   const { data, error, networkStatus, refetch } = useQuery(GET_PRODUCTS, {
     variables: { first: 12, skip: 0, filters },
-    // cache-first: the seeded cache entry above is served immediately on mount
-    // (no network request). Subsequent reads (poll, navigate-back) also hit
-    // cache first. A real network request only fires on refetch() or poll.
-    fetchPolicy: "cache-first",
+    // A real SSR result can be treated as cache-first. A fallback-empty SSR
+    // result must trigger a real network read on the first healthy client pass.
+    fetchPolicy: initialProductsAreFallback ? "network-only" : "cache-first",
     nextFetchPolicy: "cache-first",
     // Partial data surfaced alongside errors for resilience.
     errorPolicy: "all",

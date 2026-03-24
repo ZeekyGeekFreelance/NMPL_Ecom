@@ -289,6 +289,30 @@ export const getPaymentAwareOrderStatusColor = (params?: {
 export const canDownloadInvoiceForStatus = (status?: string | null): boolean =>
   ["CONFIRMED", "DELIVERED"].includes(normalizeOrderStatus(status));
 
+export const canDownloadInvoiceForOrder = (params?: {
+  status?: string | null;
+  transactionStatus?: string | null;
+  isPayLater?: boolean | null;
+  paymentDueDate?: string | Date | null;
+  paymentTransactions?: Array<{ status?: string | null }>;
+  payment?: { status?: string | null } | null;
+}): boolean => {
+  const resolvedStatus = normalizeOrderStatus(
+    params?.transactionStatus || params?.status
+  );
+
+  if (["CONFIRMED", "DELIVERED"].includes(resolvedStatus)) {
+    return true;
+  }
+
+  return resolvePaymentState({
+    isPayLater: params?.isPayLater,
+    paymentDueDate: params?.paymentDueDate,
+    paymentTransactions: params?.paymentTransactions,
+    payment: params?.payment,
+  }).isPaid;
+};
+
 export const isTerminalOrderStatus = (status?: string | null): boolean => {
   const normalized = normalizeOrderStatus(status);
   return (

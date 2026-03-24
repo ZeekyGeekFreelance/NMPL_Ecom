@@ -1,8 +1,13 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { logout } from "./AuthSlice";
+import { logout, setUser } from "./AuthSlice";
 import { API_BASE_URL } from "@/app/lib/constants/config";
 import { emitAuthSyncEvent } from "@/app/lib/authSyncChannel";
 import { clearPendingAuthIntent } from "@/app/lib/authIntent";
+import {
+  beginGlobalActivity,
+  endGlobalActivity,
+} from "@/app/lib/activityIndicator";
+import { storeAuthFlashMessage } from "@/app/lib/authSessionRecovery";
 import {
   captureCsrfTokenFromHeaders,
   getCsrfToken,
@@ -158,6 +163,27 @@ const getAuthUserFromState = (api: any) => {
   return state?.auth?.user;
 };
 
+type RecoveredAuthUser = {
+  id: string;
+  accountReference?: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+  effectiveRole?: "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
+  avatar: string | null;
+  isDealer?: boolean;
+  dealerStatus?:
+    | "PENDING"
+    | "APPROVED"
+    | "LEGACY"
+    | "REJECTED"
+    | "SUSPENDED"
+    | null;
+  dealerBusinessName?: string | null;
+  dealerContactPhone?: string | null;
+};
+
 const withMutationSafetyHeaders = (args: any) => {
   if (typeof args === "string") {
     return args;
@@ -288,8 +314,62 @@ const handleUnauthorizedState = (api: any) => {
   clearPendingAuthIntent();
 
   if (authUser) {
+    storeAuthFlashMessage("Your session expired. Please sign in again.");
     emitAuthSyncEvent("SIGNED_OUT");
   }
+};
+
+const resolveUserFromGetMePayload = (
+  payload: unknown
+): RecoveredAuthUser | null => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const typedPayload = payload as { data?: unknown; user?: unknown; id?: unknown };
+  const root =
+    typedPayload.data && typeof typedPayload.data === "object"
+      ? (typedPayload.data as Record<string, unknown>)
+      : typedPayload;
+
+  if (root.user && typeof root.user === "object") {
+    const nestedUser = root.user as { id?: unknown };
+    if (typeof nestedUser.id === "string") {
+      return root.user as RecoveredAuthUser;
+    }
+  }
+
+  if (typeof root.id === "string") {
+    return root as RecoveredAuthUser;
+  }
+
+  return null;
+};
+
+const attemptSessionRecoveryAfterRefreshFailure = async (
+  api: any,
+  extraOptions: any,
+  requestArgs: any,
+  maxRetries: number
+) => {
+  const profileResult = await executeBaseQueryWithRetry(
+    { url: "/users/me", method: "GET" },
+    api,
+    extraOptions,
+    0
+  );
+
+  if (profileResult.error || !profileResult.data) {
+    return null;
+  }
+
+  const recoveredUser = resolveUserFromGetMePayload(profileResult.data);
+  if (recoveredUser) {
+    api.dispatch(setUser({ user: recoveredUser }));
+  }
+  emitAuthSyncEvent("SESSION_REFRESHED");
+
+  return executeBaseQueryWithRetry(requestArgs, api, extraOptions, maxRetries);
 };
 
 const baseQuery = fetchBaseQuery({
@@ -387,73 +467,98 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
   const normalizedBodyArgs = withNormalizedMutationBody(args);
   const requestMeta = getRequestMeta(normalizedBodyArgs);
   const normalizedUrl = normalizeUrlPath(requestMeta.url);
+  const shouldTrackGlobalActivity =
+    isMutationMethod(requestMeta.method) &&
+    normalizedUrl !== "/auth/refresh-token" &&
+    normalizedUrl !== CSRF_BOOTSTRAP_URL;
+  const activityToken = shouldTrackGlobalActivity ? beginGlobalActivity() : null;
 
-  if (requiresCsrfBootstrap(requestMeta.method, normalizedUrl)) {
-    const csrfReady = await ensureCsrfToken(api, extraOptions);
-    if (!csrfReady) {
-      return {
-        error: {
-          status: 503,
-          data: {
-            message:
-              "Security token initialization failed. Please refresh and try again.",
+  try {
+    if (requiresCsrfBootstrap(requestMeta.method, normalizedUrl)) {
+      const csrfReady = await ensureCsrfToken(api, extraOptions);
+      if (!csrfReady) {
+        return {
+          error: {
+            status: 503,
+            data: {
+              message:
+                "Security token initialization failed. Please refresh and try again.",
+            },
           },
-        },
-      };
+        };
+      }
     }
+
+    const requestArgs = withMutationSafetyHeaders(normalizedBodyArgs);
+    const maxRetries = isMutationMethod(requestMeta.method)
+      ? MAX_RETRIES_FOR_MUTATION
+      : MAX_RETRIES_FOR_QUERY;
+
+    let result = await executeBaseQueryWithRetry(
+      requestArgs,
+      api,
+      extraOptions,
+      maxRetries
+    );
+
+    if (result.error?.status === 401) {
+      const authUser = getAuthUserFromState(api);
+
+      if (!shouldAttemptTokenRefresh(normalizedUrl, authUser)) {
+        if (
+          !isAuthEndpoint(normalizedUrl) &&
+          shouldSyncUnauthorizedState(normalizedUrl, authUser)
+        ) {
+          handleUnauthorizedState(api);
+        }
+        return result;
+      }
+
+      // Try refresh the token
+      const refreshResult = await refreshAuthToken(api, extraOptions);
+
+      if (refreshResult.data) {
+        emitAuthSyncEvent("SESSION_REFRESHED");
+        // If there's data, retry the original req with the new token
+        result = await executeBaseQueryWithRetry(
+          requestArgs,
+          api,
+          extraOptions,
+          maxRetries
+        );
+        if (
+          result.error?.status === 401 &&
+          shouldSyncUnauthorizedState(normalizedUrl, authUser)
+        ) {
+          handleUnauthorizedState(api);
+        }
+      } else {
+        const canTryCrossTabRecovery = Boolean(authUser);
+
+        if (canTryCrossTabRecovery) {
+          const recoveredResult = await attemptSessionRecoveryAfterRefreshFailure(
+            api,
+            extraOptions,
+            requestArgs,
+            maxRetries
+          );
+
+          if (recoveredResult) {
+            return recoveredResult;
+          }
+        }
+
+        // If refresh fails, clear local auth state once.
+        if (shouldSyncUnauthorizedState(normalizedUrl, authUser)) {
+          handleUnauthorizedState(api);
+        }
+      }
+    }
+
+    return result;
+  } finally {
+    endGlobalActivity(activityToken);
   }
-
-  const requestArgs = withMutationSafetyHeaders(normalizedBodyArgs);
-  const maxRetries = isMutationMethod(requestMeta.method)
-    ? MAX_RETRIES_FOR_MUTATION
-    : MAX_RETRIES_FOR_QUERY;
-
-  let result = await executeBaseQueryWithRetry(
-    requestArgs,
-    api,
-    extraOptions,
-    maxRetries
-  );
-
-  if (result.error?.status === 401) {
-    const authUser = getAuthUserFromState(api);
-
-    if (!shouldAttemptTokenRefresh(normalizedUrl, authUser)) {
-      if (
-        !isAuthEndpoint(normalizedUrl) &&
-        shouldSyncUnauthorizedState(normalizedUrl, authUser)
-      ) {
-        handleUnauthorizedState(api);
-      }
-      return result;
-    }
-
-    // Try refresh the token
-    const refreshResult = await refreshAuthToken(api, extraOptions);
-
-    if (refreshResult.data) {
-      // If there's data, retry the original req with the new token
-      result = await executeBaseQueryWithRetry(
-        requestArgs,
-        api,
-        extraOptions,
-        maxRetries
-      );
-      if (
-        result.error?.status === 401 &&
-        shouldSyncUnauthorizedState(normalizedUrl, authUser)
-      ) {
-        handleUnauthorizedState(api);
-      }
-    } else {
-      // If refresh fails, clear local auth state once.
-      if (shouldSyncUnauthorizedState(normalizedUrl, authUser)) {
-        handleUnauthorizedState(api);
-      }
-    }
-  }
-
-  return result;
 };
 
 export const apiSlice = createApi({

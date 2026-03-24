@@ -71,7 +71,7 @@ const getCsrfTokenFromHeader = (req: Request): string | null => {
 const setCsrfTokenCookie = (res: Response, token: string): void => {
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: false, // Must be readable by JavaScript to include in headers
-    secure: config.isProduction,
+    secure: config.security.cookieSecure,
     sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
     maxAge: 1000 * 60 * 60 * 24, // 24 hours
     path: "/",

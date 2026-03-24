@@ -6,6 +6,7 @@ import {
   PAYMENT_SOURCE_TYPE,
   PAYMENT_TXN_STATUS,
   INVOICE_PAYMENT_STATUS,
+  TRANSACTION_STATUS,
 } from "@prisma/client";
 
 interface AdminPaymentRequest {
@@ -91,9 +92,21 @@ export class ComprehensivePaymentService {
       });
 
       // 5. Update order status
+      const nextOrderStatus =
+        order.status === "DELIVERED" ? "DELIVERED" : "CONFIRMED";
+      const nextTransactionStatus =
+        order.status === "DELIVERED"
+          ? TRANSACTION_STATUS.DELIVERED
+          : TRANSACTION_STATUS.CONFIRMED;
+
       await tx.order.update({
         where: { id: request.orderId },
-        data: { status: order.status === "DELIVERED" ? "DELIVERED" : "PAID" }
+        data: { status: nextOrderStatus }
+      });
+
+      await tx.transaction.updateMany({
+        where: { orderId: request.orderId },
+        data: { status: nextTransactionStatus },
       });
 
       // 6. Update legacy payment record for backward compatibility
@@ -212,9 +225,21 @@ export class ComprehensivePaymentService {
       });
 
       // 6. Update order status
+      const nextOrderStatus =
+        order.status === "DELIVERED" ? "DELIVERED" : "CONFIRMED";
+      const nextTransactionStatus =
+        order.status === "DELIVERED"
+          ? TRANSACTION_STATUS.DELIVERED
+          : TRANSACTION_STATUS.CONFIRMED;
+
       await tx.order.update({
         where: { id: request.orderId },
-        data: { status: order.status === "DELIVERED" ? "DELIVERED" : "PAID" }
+        data: { status: nextOrderStatus }
+      });
+
+      await tx.transaction.updateMany({
+        where: { orderId: request.orderId },
+        data: { status: nextTransactionStatus },
       });
 
       // 7. Update legacy payment record

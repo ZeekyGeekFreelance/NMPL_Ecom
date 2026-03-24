@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
@@ -8,6 +9,8 @@ import MainLayout from "@/app/components/templates/MainLayout";
 import { Loader2 } from "lucide-react";
 import { useSignInMutation } from "@/app/store/apis/AuthApi";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
+import { storeFirstLoginState } from "@/app/lib/firstLoginPasswordFlow";
+import { consumeAuthFlashMessage } from "@/app/lib/authSessionRecovery";
 import { resolveDisplayRole } from "@/app/lib/userRole";
 import {
   normalizeEmailValue,
@@ -25,6 +28,7 @@ const DealerSignIn = () => {
   const searchParams = useSearchParams();
   const apiErrorMessage =
     (error as any)?.data?.message || "Unable to sign in with dealer credentials.";
+  const [authFlashMessage, setAuthFlashMessage] = useState<string | null>(null);
 
   const {
     control,
@@ -42,26 +46,28 @@ const DealerSignIn = () => {
 
   const onSubmit = async (formData: InputForm) => {
     try {
+      const requestedNextPath = searchParams.get("next");
+      const nextPath =
+        requestedNextPath && requestedNextPath.startsWith("/")
+          ? requestedNextPath
+          : null;
       const response = await signIn({
         ...formData,
         email: normalizeEmailValue(formData.email),
         portal: "DEALER_PORTAL",
       }).unwrap();
       
-      // Check if legacy dealer needs to change password
-      if ((response as any).requiresPasswordChange) {
-        // Store email and password temporarily for password change
-        sessionStorage.setItem('dealer_temp_email', formData.email);
-        sessionStorage.setItem('dealer_temp_password', formData.password);
-        router.push('/dealer/change-password');
+      if (response.requiresPasswordChange) {
+        storeFirstLoginState({
+          email: normalizeEmailValue(formData.email),
+          currentPassword: formData.password,
+          portal: "DEALER_PORTAL",
+          nextPath,
+        });
+        router.push("/dealer/change-password");
         return;
       }
       
-      const requestedNextPath = searchParams.get("next");
-      const nextPath =
-        requestedNextPath && requestedNextPath.startsWith("/")
-          ? requestedNextPath
-          : null;
       const role = resolveDisplayRole(response.user);
       const destination =
         role === "ADMIN" || role === "SUPERADMIN"
@@ -75,6 +81,10 @@ const DealerSignIn = () => {
     }
   };
 
+  useEffect(() => {
+    setAuthFlashMessage(consumeAuthFlashMessage());
+  }, []);
+
   return (
     <GuestOnlyGuard>
       <MainLayout>
@@ -86,6 +96,12 @@ const DealerSignIn = () => {
             <p className="text-sm text-gray-600 text-center mb-6">
               Use your approved dealer account to access dealer-specific pricing.
             </p>
+
+            {authFlashMessage && !error && (
+              <div className="bg-amber-50 border border-amber-300 text-amber-700 text-center text-sm p-3 rounded mb-4">
+                {authFlashMessage}
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-300 text-red-600 text-center text-sm p-3 rounded mb-4">

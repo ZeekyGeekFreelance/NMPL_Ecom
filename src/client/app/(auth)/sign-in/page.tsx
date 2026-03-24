@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import Input from "@/app/components/atoms/Input";
 import Link from "next/link";
@@ -11,6 +12,8 @@ import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import GuestOnlyGuard from "@/app/components/auth/GuestOnlyGuard";
 import { runtimeEnv } from "@/app/lib/runtimeEnv";
 import { resolveDisplayRole } from "@/app/lib/userRole";
+import { storeFirstLoginState } from "@/app/lib/firstLoginPasswordFlow";
+import { consumeAuthFlashMessage } from "@/app/lib/authSessionRecovery";
 import {
   normalizeEmailValue,
   validateEmailValue,
@@ -27,6 +30,7 @@ const SignIn = () => {
   const searchParams = useSearchParams();
   const apiErrorMessage = getApiErrorMessage(error);
   const showDevCredentials = !runtimeEnv.isProduction;
+  const [authFlashMessage, setAuthFlashMessage] = useState<string | null>(null);
 
   const {
     control,
@@ -44,16 +48,26 @@ const SignIn = () => {
 
   const onSubmit = async (formData: InputForm) => {
     try {
-      const response = await signIn({
-        ...formData,
-        email: normalizeEmailValue(formData.email),
-        portal: "USER_PORTAL",
-      }).unwrap();
       const requestedNextPath = searchParams.get("next");
       const nextPath =
         requestedNextPath && requestedNextPath.startsWith("/")
           ? requestedNextPath
           : null;
+      const response = await signIn({
+        ...formData,
+        email: normalizeEmailValue(formData.email),
+        portal: "USER_PORTAL",
+      }).unwrap();
+      if (response.requiresPasswordChange) {
+        storeFirstLoginState({
+          email: normalizeEmailValue(formData.email),
+          currentPassword: formData.password,
+          portal: "USER_PORTAL",
+          nextPath,
+        });
+        router.push("/change-password");
+        return;
+      }
       const role = resolveDisplayRole(response.user);
       const destination =
         role === "ADMIN" || role === "SUPERADMIN"
@@ -66,6 +80,10 @@ const SignIn = () => {
       // Mutation error state is already handled by RTK Query.
     }
   };
+
+  useEffect(() => {
+    setAuthFlashMessage(consumeAuthFlashMessage());
+  }, []);
 
   return (
     <GuestOnlyGuard>
@@ -96,6 +114,12 @@ const SignIn = () => {
                 <p>Super Admin: superadmin@example.com / password123</p>
                 <p>Admin: admin@example.com / password123</p>
                 <p>User: user@example.com / password123</p>
+              </div>
+            )}
+
+            {authFlashMessage && !error && (
+              <div className="bg-amber-50 border border-amber-300 text-amber-700 text-center text-sm p-3 rounded mb-4">
+                {authFlashMessage}
               </div>
             )}
 

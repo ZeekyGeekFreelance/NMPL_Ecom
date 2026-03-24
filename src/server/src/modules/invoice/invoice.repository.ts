@@ -57,6 +57,16 @@ const orderInvoiceInclude = {
   },
   address: true,
   payment: true,
+  paymentTransactions: {
+    where: {
+      status: "CONFIRMED",
+    },
+    select: {
+      id: true,
+      status: true,
+      paymentReceivedAt: true,
+    },
+  },
   transaction: true,
   invoice: true,
 } satisfies Prisma.OrderInclude;

@@ -54,6 +54,9 @@ jobs:
       - name: Validate client production env
         run: npm --prefix ./src/client run env:check -- --production
 
+      - name: Run test suite
+        run: npm run test
+
       - name: Build server
         run: npm --prefix ./src/server run build
 

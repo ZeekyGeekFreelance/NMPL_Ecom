@@ -143,8 +143,8 @@ export class UserController {
       sendResponse(res, 201, {
         data: { user: newAdmin },
         message: assignBillingSupervisor
-          ? "Admin created and assigned to billing successfully"
-          : "Admin created successfully",
+          ? "Admin created and assigned to billing. A first-login password change is required."
+          : "Admin created successfully. A first-login password change is required.",
       });
 
       this.logsService.info("Admin created", {
@@ -199,7 +199,7 @@ export class UserController {
 
       sendResponse(res, 200, {
         data: { user },
-        message: "Admin password updated successfully",
+        message: "Admin temporary password issued successfully. The admin must change it on next sign-in.",
       });
     }
   );

@@ -277,13 +277,14 @@ export class UserService {
 
     const sent = await sendEmail({
       to: params.recipientEmail,
-      subject: `${platformName} | Admin Password Updated`,
+      subject: `${platformName} | Admin Password Reset`,
       text: [
         `Hello ${params.recipientName},`,
         "",
-        `Your admin password was updated by SuperAdmin: ${params.changedBy}.`,
+        `Your admin password was reset by SuperAdmin: ${params.changedBy}.`,
         `Account Reference: ${params.accountReference}`,
         "All active sessions have been logged out.",
+        "Your next sign-in will require an immediate password change before account access is granted.",
         "",
         `If this change was not expected, contact ${supportEmail} immediately.`,
       ].join("\n"),
@@ -291,12 +292,13 @@ export class UserService {
         <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6;">
           <p>Hello <strong>${params.recipientName}</strong>,</p>
           <p>
-            Your admin password was updated by SuperAdmin:
+            Your admin password was reset by SuperAdmin:
             <strong>${params.changedBy}</strong>.
           </p>
           <p>
             <strong>Account Reference:</strong> ${params.accountReference}<br />
-            <strong>Security Action:</strong> All active sessions have been logged out.
+            <strong>Security Action:</strong> All active sessions have been logged out.<br />
+            <strong>Next Step:</strong> Your next sign-in will require an immediate password change.
           </p>
           <p>
             If this change was not expected, contact
@@ -652,19 +654,23 @@ export class UserService {
     }
 
     // Check if user already exists
+    const normalizedName = this.normalizeDisplayName(adminData.name, "Name");
     const normalizedEmail = this.normalizeEmail(adminData.email);
     const normalizedPhone = this.normalizePhone(adminData.phone);
+    const strongPassword = this.assertStrongPassword(adminData.password);
     const existingUser = await this.userRepository.findUserByEmail(normalizedEmail);
     if (existingUser) {
       throw new AppError(400, "User with this email already exists");
     }
 
     const newAdmin = await this.userRepository.createUser({
-      ...adminData,
+      name: normalizedName,
       email: normalizedEmail,
       phone: normalizedPhone,
-      role: "ADMIN",
+      password: strongPassword,
+      role: ROLE.ADMIN,
       isBillingSupervisor: adminData.assignBillingSupervisor === true,
+      mustChangePassword: true,
     });
 
     if (adminData.assignBillingSupervisor) {
@@ -762,6 +768,9 @@ export class UserService {
     }
 
     await this.userRepository.updateUserPassword(targetUserId, strongPassword);
+    await this.userRepository.updateUser(targetUserId, {
+      mustChangePassword: true,
+    });
 
     await this.notifyAdminPasswordChanged({
       recipientName: targetUser.name,

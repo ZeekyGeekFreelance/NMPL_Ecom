@@ -8,12 +8,14 @@ export interface ProductConnectionPayload {
   products: Product[];
   hasMore: boolean;
   totalCount: number | null;
+  isFallback: boolean;
 }
 
 const EMPTY_PRODUCT_CONNECTION: ProductConnectionPayload = {
   products: [],
   hasMore: false,
   totalCount: 0,
+  isFallback: true,
 };
 
 export const fetchServerProductConnection = async (options: {
@@ -48,6 +50,7 @@ export const fetchServerProductConnection = async (options: {
         typeof data?.products?.totalCount === "number"
           ? data.products.totalCount
           : null,
+      isFallback: false,
     };
   } catch (error) {
     if (runtimeEnv.isDevelopment) {

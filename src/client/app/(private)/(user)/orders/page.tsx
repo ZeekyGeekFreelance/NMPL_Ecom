@@ -25,7 +25,7 @@ import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import useToast from "@/app/hooks/ui/useToast";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
 import {
-  canDownloadInvoiceForStatus,
+  canDownloadInvoiceForOrder,
   getCustomerOrderStatusLabel,
   getPaymentStateColor,
   getPaymentStateLabel,
@@ -116,6 +116,7 @@ const OrderCard = ({
   const [acceptQuotation, { isLoading: isAcceptingQuotation }] =
     useAcceptQuotationMutation();
   const [isProceedConfirmOpen, setIsProceedConfirmOpen] = React.useState(false);
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = React.useState(false);
 
   const getItemCount = (orderItems: any[]) => {
     return (
@@ -140,7 +141,14 @@ const OrderCard = ({
     normalizedStatus === "DELIVERED" &&
     !!order?.paymentDueDate &&
     !paymentState.isPaid;
-  const canDownloadInvoice = canDownloadInvoiceForStatus(order.status);
+  const canDownloadInvoice = canDownloadInvoiceForOrder({
+    status: order?.status,
+    transactionStatus: order?.transaction?.status,
+    isPayLater: order?.isPayLater,
+    paymentDueDate: order?.paymentDueDate,
+    paymentTransactions: order?.paymentTransactions,
+    payment: order?.payment,
+  });
   const payLaterPayment = usePayLaterPayment(order);
 
   const handleProceedToPayment = React.useCallback(async () => {
@@ -199,6 +207,19 @@ const OrderCard = ({
     setIsProceedConfirmOpen(false);
     await payLaterPayment.startPayment();
   }, [payLaterPayment]);
+
+  const handleDownloadInvoice = React.useCallback(async () => {
+    if (isDownloadingInvoice) {
+      return;
+    }
+
+    setIsDownloadingInvoice(true);
+    try {
+      await onDownloadInvoice(order.id);
+    } finally {
+      setIsDownloadingInvoice(false);
+    }
+  }, [isDownloadingInvoice, onDownloadInvoice, order.id]);
 
   return (
     <motion.div
@@ -311,13 +332,17 @@ const OrderCard = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => onDownloadInvoice(order.id)}
-            disabled={!canDownloadInvoice}
+            onClick={handleDownloadInvoice}
+            disabled={!canDownloadInvoice || isDownloadingInvoice}
             className="w-full flex items-center justify-center space-x-1 sm:space-x-2 bg-gray-50 hover:bg-gray-100 text-gray-700 hover:text-gray-900 py-2 sm:py-3 px-3 sm:px-4 rounded-lg font-medium transition-all duration-200 group text-sm sm:text-base disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FileText size={14} className="sm:w-4 sm:h-4" />
             <span>
-              {canDownloadInvoice ? "Invoice PDF" : "Invoice after Confirmation"}
+              {isDownloadingInvoice
+                ? "Preparing Invoice..."
+                : canDownloadInvoice
+                ? "Invoice PDF"
+                : "Invoice after Confirmation"}
             </span>
           </button>
           {canProceedToPayment || isPayLaterDue ? (
@@ -471,7 +496,16 @@ const UserOrders = () => {
   const handleDownloadInvoice = React.useCallback(
     async (orderId: string) => {
       const order = orders.find((item: any) => item.id === orderId);
-      if (!canDownloadInvoiceForStatus(order?.status || "PENDING_VERIFICATION")) {
+      if (
+        !canDownloadInvoiceForOrder({
+          status: order?.status,
+          transactionStatus: order?.transaction?.status,
+          isPayLater: order?.isPayLater,
+          paymentDueDate: order?.paymentDueDate,
+          paymentTransactions: order?.paymentTransactions,
+          payment: order?.payment,
+        })
+      ) {
         showToast(
           "Invoice is generated after payment confirmation.",
           "info"

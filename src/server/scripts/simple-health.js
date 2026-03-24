@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Simple health check server for debugging production issues
- * This bypasses the full application startup and just provides basic health info
+ * Diagnostic fallback server for manual debugging only.
+ * This must never present itself as a healthy production API.
  */
 
 const http = require('http');
@@ -10,10 +10,10 @@ const port = process.env.PORT || 5000;
 
 const server = http.createServer((req, res) => {
   if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      status: 'alive',
-      message: 'Simple health check server running',
+      status: 'diagnostic_fallback',
+      message: 'Diagnostic fallback server running; the main API failed to boot.',
       timestamp: new Date().toISOString(),
       nodeVersion: process.version,
       platform: process.platform,
@@ -31,8 +31,10 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, () => {
-  console.log(`[simple-health] Server running on port ${port}`);
-  console.log(`[simple-health] Health check available at http://localhost:${port}/health`);
+  console.log(`[simple-health] Diagnostic server running on port ${port}`);
+  console.log(
+    `[simple-health] This endpoint intentionally returns 503 so it cannot masquerade as a healthy production API.`
+  );
 });
 
 server.on('error', (err) => {

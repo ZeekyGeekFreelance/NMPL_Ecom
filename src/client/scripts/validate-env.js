@@ -5,15 +5,6 @@ const { loadEnvConfig } = require("@next/env");
 const NODE_ENV_OPTIONS = ["development", "test", "production"];
 const LOCAL_HOST_PATTERN = /(localhost|127\.0\.0\.1)/i;
 
-const args = new Set(process.argv.slice(2));
-const forceProduction = args.has("--production");
-
-if (forceProduction && process.env.NODE_ENV !== "production") {
-  process.env.NODE_ENV = "production";
-}
-
-loadEnvConfig(process.cwd());
-
 const normalizeApiBaseUrl = (value) => {
   const trimmed = String(value || "").trim().replace(/\/+$/, "");
   if (!trimmed) {
@@ -37,6 +28,9 @@ const schema = z.object({
   NEXT_PUBLIC_PLATFORM_NAME: z.string().min(1),
   NEXT_PUBLIC_SUPPORT_EMAIL: z.string().email(),
   NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: z.enum(["true", "false"]).optional(),
+  NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW: z
+    .enum(["true", "false"])
+    .optional(),
   NEXT_PUBLIC_DEALER_CATALOG_POLL_MS: z
     .string()
     .optional()
@@ -54,27 +48,72 @@ const schema = z.object({
     }),
 });
 
-const env = schema.parse({
-  NODE_ENV: forceProduction ? "production" : process.env.NODE_ENV,
-  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-  INTERNAL_API_URL: process.env.INTERNAL_API_URL,
-  NEXT_PUBLIC_PLATFORM_NAME: process.env.NEXT_PUBLIC_PLATFORM_NAME,
-  NEXT_PUBLIC_SUPPORT_EMAIL: process.env.NEXT_PUBLIC_SUPPORT_EMAIL,
-  NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: process.env.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,
-  NEXT_PUBLIC_DEALER_CATALOG_POLL_MS:
-    process.env.NEXT_PUBLIC_DEALER_CATALOG_POLL_MS,
-});
+const validateClientEnv = ({
+  envSource = process.env,
+  forceProduction = false,
+  allowLocalProductionPreview = false,
+} = {}) => {
+  const env = schema.parse({
+    NODE_ENV: forceProduction ? "production" : envSource.NODE_ENV,
+    NEXT_PUBLIC_API_URL: envSource.NEXT_PUBLIC_API_URL,
+    INTERNAL_API_URL: envSource.INTERNAL_API_URL,
+    NEXT_PUBLIC_PLATFORM_NAME: envSource.NEXT_PUBLIC_PLATFORM_NAME,
+    NEXT_PUBLIC_SUPPORT_EMAIL: envSource.NEXT_PUBLIC_SUPPORT_EMAIL,
+    NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: envSource.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,
+    NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW:
+      envSource.NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW,
+    NEXT_PUBLIC_DEALER_CATALOG_POLL_MS:
+      envSource.NEXT_PUBLIC_DEALER_CATALOG_POLL_MS,
+  });
 
-if (env.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(env.NEXT_PUBLIC_API_URL)) {
-  throw new Error(
-    "[client-env] Production build blocked: NEXT_PUBLIC_API_URL cannot target localhost/127.0.0.1"
-  );
+  if (
+    env.NODE_ENV === "production" &&
+    !allowLocalProductionPreview &&
+    LOCAL_HOST_PATTERN.test(env.NEXT_PUBLIC_API_URL)
+  ) {
+    throw new Error(
+      "[client-env] Production build blocked: NEXT_PUBLIC_API_URL cannot target localhost/127.0.0.1"
+    );
+  }
+
+  return {
+    env,
+    warnings:
+      env.NODE_ENV === "production" && !env.INTERNAL_API_URL
+        ? [
+          "[client-env] INTERNAL_API_URL is not set. SSR will fall back to NEXT_PUBLIC_API_URL.",
+        ]
+        : [],
+  };
+};
+
+if (require.main === module) {
+  const args = new Set(process.argv.slice(2));
+  const forceProduction = args.has("--production");
+  const allowLocalProductionPreview =
+    args.has("--local-preview") ||
+    String(process.env.ALLOW_LOCAL_PRODUCTION_PREVIEW || "").trim().toLowerCase() ===
+      "true";
+
+  if (forceProduction && process.env.NODE_ENV !== "production") {
+    process.env.NODE_ENV = "production";
+  }
+
+  loadEnvConfig(process.cwd());
+  const result = validateClientEnv({
+    envSource: process.env,
+    forceProduction,
+    allowLocalProductionPreview,
+  });
+
+  for (const warning of result.warnings) {
+    console.warn(warning);
+  }
+
+  console.log("[client-env] Environment validation passed.");
 }
 
-if (env.NODE_ENV === "production" && !env.INTERNAL_API_URL) {
-  console.warn(
-    "[client-env] INTERNAL_API_URL is not set. SSR will fall back to NEXT_PUBLIC_API_URL."
-  );
-}
-
-console.log("[client-env] Environment validation passed.");
+module.exports = {
+  normalizeApiBaseUrl,
+  validateClientEnv,
+};

@@ -336,13 +336,13 @@ export class AuthController {
 
       res.clearCookie("refreshToken", {
         httpOnly: true,
-        secure: config.isProduction,
+        secure: config.security.cookieSecure,
         sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
         path: "/",
       });
       res.clearCookie("accessToken", {
         httpOnly: true,
-        secure: config.isProduction,
+        secure: config.security.cookieSecure,
         sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
         path: "/",
       });

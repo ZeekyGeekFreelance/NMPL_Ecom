@@ -119,6 +119,13 @@ const parseBoolean = (
 ): boolean | undefined =>
   parseEnv(key, z.enum(["true", "false"]).transform((v) => v === "true"), options);
 
+const allowLocalProductionPreview =
+  parseBoolean("ALLOW_LOCAL_PRODUCTION_PREVIEW", {
+    devDefault: false,
+    optional: true,
+    productionRequired: false,
+  }) ?? false;
+
 const parsePositiveInt = (
   key: string,
   options?: {
@@ -589,6 +596,7 @@ const appConfig = {
     cookieSameSite: parseEnv("COOKIE_SAMESITE", z.enum(["lax", "strict", "none"]), {
       devDefault: "lax",
     }) as "lax" | "strict" | "none",
+    cookieSecure: isProduction && !allowLocalProductionPreview,
     helmetEnabled: parseBoolean("HELMET_ENABLED", {
       devDefault: true,
     }) as boolean,
@@ -674,6 +682,7 @@ const appConfig = {
     }) as number,
   },
   diagnostics: {
+    allowLocalProductionPreview,
     strictBuildChecks: parseBoolean("STRICT_BUILD_CHECKS", {
       devDefault: true,
     }) as boolean,

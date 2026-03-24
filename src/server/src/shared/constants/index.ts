@@ -4,7 +4,7 @@ export const cookieParserOptions = {};
 
 export const cookieOptions = {
   httpOnly: true,
-  secure: config.isProduction,
+  secure: config.security.cookieSecure,
   sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
   path: "/",
   maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days — must match REFRESH_TOKEN_ABS_TTL_SECONDS (604800)

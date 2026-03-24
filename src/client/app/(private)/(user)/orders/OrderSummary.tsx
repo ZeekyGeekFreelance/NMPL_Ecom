@@ -15,7 +15,7 @@ import {
   useRejectQuotationMutation,
 } from "@/app/store/apis/OrderApi";
 import {
-  canDownloadInvoiceForStatus,
+  canDownloadInvoiceForOrder,
   normalizeOrderStatus,
 } from "@/app/lib/orderLifecycle";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
@@ -73,6 +73,7 @@ const OrderSummary = ({
     useAcceptQuotationMutation();
   const [rejectQuotation, { isLoading: isRejectingQuotation }] =
     useRejectQuotationMutation();
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
   const statusFromTransaction = normalizeOrderStatus(order?.transaction?.status);
   const statusFromOrder = normalizeOrderStatus(order?.status);
   const normalizedOrderStatus =
@@ -84,7 +85,14 @@ const OrderSummary = ({
       ? statusFromTransaction
       : statusFromOrder;
   const canTakeQuotationDecision = normalizedOrderStatus === "AWAITING_PAYMENT";
-  const canDownloadInvoice = canDownloadInvoiceForStatus(normalizedOrderStatus);
+  const canDownloadInvoice = canDownloadInvoiceForOrder({
+    status: order?.status,
+    transactionStatus: order?.transaction?.status,
+    isPayLater: order?.isPayLater,
+    paymentDueDate: order?.paymentDueDate,
+    paymentTransactions: order?.paymentTransactions,
+    payment: order?.payment,
+  });
   const hasConfirmedPayment =
     Array.isArray(order?.paymentTransactions) &&
     order.paymentTransactions.some(
@@ -155,12 +163,15 @@ const OrderSummary = ({
     }
 
     try {
+      setIsDownloadingInvoice(true);
       await downloadInvoiceByOrderId(order.id);
       showToast("Invoice downloaded successfully", "success");
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to download invoice";
       showToast(message, "error");
+    } finally {
+      setIsDownloadingInvoice(false);
     }
   }, [canDownloadInvoice, normalizedOrderStatus, order.id, showToast]);
 
@@ -287,11 +298,11 @@ const OrderSummary = ({
         <button
           type="button"
           onClick={handleDownloadInvoice}
-          disabled={!canDownloadInvoice}
+          disabled={!canDownloadInvoice || isDownloadingInvoice}
           className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download size={15} />
-          Invoice PDF
+          {isDownloadingInvoice ? "Preparing Invoice..." : "Invoice PDF"}
         </button>
       </div>
       {!canDownloadInvoice && (

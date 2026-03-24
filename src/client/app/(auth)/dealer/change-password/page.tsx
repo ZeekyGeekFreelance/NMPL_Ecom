@@ -7,6 +7,11 @@ import MainLayout from "@/app/components/templates/MainLayout";
 import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useChangePasswordOnFirstLoginMutation } from "@/app/store/apis/AuthApi";
+import {
+  clearFirstLoginState,
+  readFirstLoginState,
+  resolvePostPasswordChangeDestination,
+} from "@/app/lib/firstLoginPasswordFlow";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
 interface InputForm {
@@ -18,21 +23,18 @@ const DealerChangePassword = () => {
   const router = useRouter();
   const [changePasswordOnFirstLogin, { isLoading, error: mutationError }] =
     useChangePasswordOnFirstLoginMutation();
-  const [email, setEmail] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
+  const [firstLoginState, setFirstLoginState] = useState<ReturnType<typeof readFirstLoginState>>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const storedEmail = sessionStorage.getItem('dealer_temp_email');
-    const storedPassword = sessionStorage.getItem('dealer_temp_password');
+    const storedState = readFirstLoginState();
     
-    if (!storedEmail || !storedPassword) {
-      router.push('/dealer/sign-in');
+    if (!storedState || storedState.portal !== "DEALER_PORTAL") {
+      router.push("/dealer/sign-in");
       return;
     }
     
-    setEmail(storedEmail);
-    setCurrentPassword(storedPassword);
+    setFirstLoginState(storedState);
   }, [router]);
 
   const {
@@ -56,28 +58,27 @@ const DealerChangePassword = () => {
     setError("");
 
     try {
-      await changePasswordOnFirstLogin({
-        email,
-        currentPassword,
+      const response = await changePasswordOnFirstLogin({
+        email: firstLoginState!.email,
+        currentPassword: firstLoginState!.currentPassword,
         newPassword: formData.newPassword,
       }).unwrap();
 
-      // Clear temporary storage
-      sessionStorage.removeItem('dealer_temp_email');
-      sessionStorage.removeItem('dealer_temp_password');
+      clearFirstLoginState();
 
-      // Force a small delay to ensure cookies are set
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Redirect to dealer portal with full page reload to ensure auth state is fresh
-      window.location.href = "/";
+      window.location.href = resolvePostPasswordChangeDestination(
+        response.user,
+        firstLoginState?.nextPath
+      );
     } catch (err: any) {
       const message = getApiErrorMessage(err);
       setError(message || "Unable to change password. Please try again.");
     }
   };
 
-  if (!email) {
+  if (!firstLoginState) {
     return null;
   }
 

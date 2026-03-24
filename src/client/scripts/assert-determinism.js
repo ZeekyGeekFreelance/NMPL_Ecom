@@ -5,6 +5,11 @@ const path = require("path");
 const mode = process.argv[2] || "pre";
 const distDirName =
   (process.argv[3] || process.env.NEXT_DIST_DIR || ".next").trim() || ".next";
+const allowLocalProductionPreview =
+  process.argv.includes("--local-preview") ||
+  String(process.env.ALLOW_LOCAL_PRODUCTION_PREVIEW || "")
+    .trim()
+    .toLowerCase() === "true";
 const clientRoot = path.resolve(__dirname, "..");
 const appRoot = path.join(clientRoot, "app");
 const buildRoot = path.join(clientRoot, distDirName);
@@ -68,6 +73,13 @@ const assertNoInlineProcessEnv = () => {
 };
 
 const assertNoForbiddenArtifactValues = () => {
+  if (allowLocalProductionPreview) {
+    console.log(
+      "[client-determinism] Local preview build allowed to embed localhost API values."
+    );
+    return;
+  }
+
   const artifactFiles = walkFiles(buildRoot).filter((filePath) => {
     if (!/\.(js|mjs|cjs|json|map|html|txt)$/i.test(filePath)) {
       return false;

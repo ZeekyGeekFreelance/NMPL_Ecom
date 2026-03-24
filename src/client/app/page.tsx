@@ -20,8 +20,14 @@ import MainLayout from "./components/templates/MainLayout";
 export default async function Home() {
   // Fetch all data on the server — parallel, fault-tolerant.
   // Individual section failures return [] so the page always renders.
-  const { featured, trending, newArrivals, bestSellers, categories } =
-    await fetchHomePageData();
+  const {
+    featured,
+    trending,
+    newArrivals,
+    bestSellers,
+    categories,
+    isFallback,
+  } = await fetchHomePageData();
 
   return (
     <MainLayout>
@@ -31,24 +37,28 @@ export default async function Home() {
       <HydratedProductSection
         title="Featured"
         initialProducts={featured}
+        initialProductsAreFallback={isFallback}
         filters={{ isFeatured: true }}
         showTitle
       />
       <HydratedProductSection
         title="Trending"
         initialProducts={trending}
+        initialProductsAreFallback={isFallback}
         filters={{ isTrending: true }}
         showTitle
       />
       <HydratedProductSection
         title="New Arrivals"
         initialProducts={newArrivals}
+        initialProductsAreFallback={isFallback}
         filters={{ isNew: true }}
         showTitle
       />
       <HydratedProductSection
         title="Best Sellers"
         initialProducts={bestSellers}
+        initialProductsAreFallback={isFallback}
         filters={{ isBestSeller: true }}
         showTitle
       />

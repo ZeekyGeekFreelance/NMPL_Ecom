@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const NODE_ENV_OPTIONS = ["development", "test", "production"] as const;
 const LOCAL_HOST_PATTERN = /(localhost|127\.0\.0\.1)/i;
+const ALLOW_LOCAL_PRODUCTION_PREVIEW =
+  String(
+    process.env.NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW ||
+      process.env.ALLOW_LOCAL_PRODUCTION_PREVIEW ||
+      ""
+  )
+    .trim()
+    .toLowerCase() === "true";
 
 const trim = (value: string): string => value.trim();
 
@@ -18,8 +26,14 @@ const normalizeApiBaseUrl = (value: string): string => {
   return `${trimmed}/api/v1`;
 };
 
-const resolveDevApiBaseUrl = (configuredApiBaseUrl: string, nodeEnv: string): string => {
-  if (nodeEnv !== "development" || typeof window === "undefined") {
+const resolveBrowserAlignedApiBaseUrl = (
+  configuredApiBaseUrl: string,
+  nodeEnv: string
+): string => {
+  const shouldAlignForBrowserHost =
+    nodeEnv === "development" || ALLOW_LOCAL_PRODUCTION_PREVIEW;
+
+  if (!shouldAlignForBrowserHost || typeof window === "undefined") {
     return configuredApiBaseUrl;
   }
 
@@ -69,6 +83,10 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => (value === undefined ? undefined : value === "true")),
+  NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
   NEXT_PUBLIC_DEALER_CATALOG_POLL_MS: z
     .string()
     .optional()
@@ -101,18 +119,24 @@ const parsed = envSchema.parse({
   NEXT_PUBLIC_PLATFORM_NAME: process.env.NEXT_PUBLIC_PLATFORM_NAME,
   NEXT_PUBLIC_SUPPORT_EMAIL: process.env.NEXT_PUBLIC_SUPPORT_EMAIL,
   NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM: process.env.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,
+  NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW:
+    process.env.NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW,
   NEXT_PUBLIC_DEALER_CATALOG_POLL_MS:
     process.env.NEXT_PUBLIC_DEALER_CATALOG_POLL_MS,
   INTERNAL_API_URL: process.env.INTERNAL_API_URL,
 });
 
-if (parsed.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(parsed.NEXT_PUBLIC_API_URL)) {
+if (
+  parsed.NODE_ENV === "production" &&
+  !ALLOW_LOCAL_PRODUCTION_PREVIEW &&
+  LOCAL_HOST_PATTERN.test(parsed.NEXT_PUBLIC_API_URL)
+) {
   throw new Error(
     "[client-config] Production build blocked: NEXT_PUBLIC_API_URL cannot target localhost/127.0.0.1"
   );
 }
 
-const resolvedApiBaseUrl = resolveDevApiBaseUrl(
+const resolvedApiBaseUrl = resolveBrowserAlignedApiBaseUrl(
   parsed.NEXT_PUBLIC_API_URL,
   parsed.NODE_ENV
 );
@@ -127,5 +151,6 @@ export const runtimeEnv = Object.freeze({
   platformName: parsed.NEXT_PUBLIC_PLATFORM_NAME,
   supportEmail: parsed.NEXT_PUBLIC_SUPPORT_EMAIL,
   enableNativeConfirm: parsed.NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM,
+  allowLocalProductionPreview: parsed.NEXT_PUBLIC_ALLOW_LOCAL_PRODUCTION_PREVIEW,
   dealerCatalogPollMs: parsed.NEXT_PUBLIC_DEALER_CATALOG_POLL_MS,
 });

@@ -7,7 +7,7 @@ const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 
 const sessionCookieOptions = {
   httpOnly: true,
-  secure: config.isProduction,
+  secure: config.security.cookieSecure,
   sameSite: config.security.cookieSameSite as "lax" | "strict" | "none",
   path: "/",
   signed: true,
