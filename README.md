@@ -38,6 +38,65 @@ This repository is currently locked around the following local development ports
 
 Use Node.js `22.x` for host-based commands.
 
+## Fast Path: Production-Like Local Preview With Real DB
+
+If your goal is:
+
+- built server and built client
+- `NODE_ENV=production`
+- real DB and real credentials from `src/server/.env`
+- local browser access on `localhost`
+
+run this and skip the Docker app containers:
+
+### 1. Point the env files correctly
+
+- keep real database and credential values in `src/server/.env`
+- keep `src/client/.env` on `http://localhost:5000/api/v1`
+- do not run the Docker `server` or `client` containers on ports `5000` or `3000`
+
+### 2. Build and start the server in production-like Neon mode
+
+```bash
+cd src/server
+npm ci
+npm run build
+npm run start:preview:neon
+```
+
+### 3. Build and start the client in local preview mode
+
+Open a second shell:
+
+```bash
+cd src/client
+npm ci
+npm run build:preview
+npm run start:preview
+```
+
+### 4. Verify
+
+Open a third shell:
+
+```bash
+curl.exe http://localhost:5000/health
+curl.exe -I http://localhost:3000/
+curl.exe -I http://localhost:3000/sign-in
+```
+
+Expected result:
+
+- `/health` returns `"healthy": true`
+- the app opens at `http://localhost:3000`
+- the local app talks to the locally running production-mode server, which uses `src/server/.env`
+
+Important:
+
+- use `npm run build:preview` for the client, not plain `npm run build`
+- use `npm run start:preview:neon` for the server, not `npm run dev:neon`
+- do not run `npm run seed` unless you intentionally want seed data in the real DB
+
 ## Recommended Setup: Docker Dev
 
 This is the most reproducible path for a fresh clone on a standalone machine.
@@ -280,20 +339,12 @@ Important SQL rules:
 
 ## Local Built Preview
 
-If you want to test a production build locally, do not use the plain production
-client build against the seeded dev stack. The client `build/start` path uses
-production env semantics and can otherwise point at the production API while the
-server still points at a different local or Neon database.
+Two preview profiles exist:
 
-Use these explicit preview commands instead:
+- `npm run start:preview:localdocker`: production-mode server using `src/server/.env.localdocker`
+- `npm run start:preview:neon`: production-mode server using `src/server/.env`
 
-```bash
-cd src/server
-npm run build
-npm run start:preview:localdocker
-```
-
-In another shell:
+For the client, always use:
 
 ```bash
 cd src/client
@@ -301,12 +352,10 @@ npm run build:preview
 npm run start:preview
 ```
 
-Notes:
+Reason:
 
-- `npm run start:preview:localdocker` runs the compiled server in production mode while still targeting the local Docker Postgres/Redis profile from `src/server/.env.localdocker`.
-- `npm run start:preview:neon` is available if you intentionally want the compiled server to use the base Neon profile from `src/server/.env`.
-- `npm run build:preview` / `npm run start:preview` force the built Next client to keep using `src/client/.env` localhost API settings instead of `src/client/.env.production`.
-- The plain client `npm run build` is still the deployment-oriented production build path.
+- `build:preview` keeps the local client pointed at `src/client/.env`
+- plain `npm run build` uses deployment-oriented production env semantics
 
 ## Privileged Account Policy
 
