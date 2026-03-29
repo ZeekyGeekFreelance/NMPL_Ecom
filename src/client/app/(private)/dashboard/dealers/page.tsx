@@ -22,7 +22,7 @@ import { useGetAllVariantsQuery } from "@/app/store/apis/VariantApi";
 import { useGetDealerCreditLedgerQuery, useGetOutstandingPaymentOrdersQuery } from "@/app/store/apis/PaymentApi";
 import useToast from "@/app/hooks/ui/useToast";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
-import { Eye, EyeOff, FileText, Loader2, Search, Trash2, X, Receipt, TrendingDown, TrendingUp } from "lucide-react";
+import { FileText, Search, Trash2, X, Receipt, TrendingDown, TrendingUp } from "lucide-react";
 import { toAccountReference, toOrderReference, toPaymentReference, toTransactionReference } from "@/app/lib/utils/accountReference";
 import { getPaginatedSerialNumber } from "@/app/lib/utils/pagination";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
@@ -38,6 +38,9 @@ import {
   validatePasswordPolicy,
   validateTenDigitPhone,
 } from "@/app/lib/validators/common";
+import PasswordVisibilityToggle from "@/app/components/atoms/PasswordVisibilityToggle";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 type DealerStatus = "PENDING" | "APPROVED" | "LEGACY" | "REJECTED" | "SUSPENDED";
 type DealerFilter = "ALL" | DealerStatus;
@@ -876,7 +879,11 @@ const DealersDashboard = () => {
               {isLoading ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                    Loading dealer accounts...
+                    <LoadingDots
+                      label="Loading dealer accounts"
+                      align="center"
+                      className="justify-center"
+                    />
                   </td>
                 </tr>
               ) : visibleDealers.length === 0 ? (
@@ -946,8 +953,8 @@ const DealersDashboard = () => {
                           >
                             {isUpdatingStatus ? (
                               <span className="inline-flex items-center gap-1">
-                                <Loader2 size={12} className="animate-spin" />
-                                Updating...
+                                <MiniSpinner size={12} />
+                                Approve
                               </span>
                             ) : (
                               "Approve"
@@ -966,8 +973,8 @@ const DealersDashboard = () => {
                           >
                             {isUpdatingStatus ? (
                               <span className="inline-flex items-center gap-1">
-                                <Loader2 size={12} className="animate-spin" />
-                                Updating...
+                                <MiniSpinner size={12} />
+                                Reject
                               </span>
                             ) : (
                               "Reject"
@@ -1007,11 +1014,11 @@ const DealersDashboard = () => {
                           className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                         >
                           {isDeletingDealer ? (
-                            <Loader2 size={14} className="animate-spin" />
+                            <MiniSpinner size={14} />
                           ) : (
                             <Trash2 size={14} />
                           )}
-                          {isDeletingDealer ? "Deleting..." : "Delete"}
+                          <span>Delete</span>
                         </button>
                       </div>
                     </td>
@@ -1093,18 +1100,16 @@ const DealersDashboard = () => {
                       return r === true ? true : r;
                     },
                   })}
-                  className={`w-full rounded-lg border px-3 py-2 pr-10 ${
+                  className={`w-full rounded-lg border px-3 py-2 pr-14 ${
                     dealerFormErrors.password ? "border-red-500 bg-red-50" : "border-gray-300"
                   }`}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowCreateDealerPassword((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  aria-label={showCreateDealerPassword ? "Hide password" : "Show password"}
-                >
-                  {showCreateDealerPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+                <PasswordVisibilityToggle
+                  visible={showCreateDealerPassword}
+                  onToggle={() => setShowCreateDealerPassword((p) => !p)}
+                  className="text-gray-500 hover:text-gray-700"
+                  size={18}
+                />
               </div>
               {/* nosemgrep: hardcoded-credential */}
               {/* Error message display for password validation, not a credential. */}
@@ -1213,8 +1218,8 @@ const DealersDashboard = () => {
                 >
                   {isCreatingDealer ? (
                     <span className="inline-flex items-center gap-2">
-                      <Loader2 size={14} className="animate-spin" />
-                      Creating...
+                      <MiniSpinner size={14} />
+                      Create
                     </span>
                   ) : (
                     "Create"
@@ -1248,7 +1253,7 @@ const DealersDashboard = () => {
 
               {isFetchingDealerPrices ? (
                 <div className="flex-1 min-h-0 flex items-center justify-center">
-                  <p className="text-sm text-gray-500">Loading current prices...</p>
+                  <LoadingDots label="Loading pricing" align="center" />
                 </div>
               ) : (
                 <div className="flex-1 min-h-0 flex flex-col space-y-4">
@@ -1478,8 +1483,8 @@ const DealersDashboard = () => {
                   >
                     {isSavingPrices ? (
                       <span className="inline-flex items-center gap-2">
-                        <Loader2 size={14} className="animate-spin" />
-                        Saving...
+                        <MiniSpinner size={14} />
+                        Save Pricing
                       </span>
                     ) : (
                       "Save Pricing"
@@ -1519,8 +1524,7 @@ const DealersDashboard = () => {
               {isFetchingCreditLedger || isFetchingOutstandingOrders ? (
                 <div className="flex-1 min-h-0 flex items-center justify-center">
                   <div className="text-center">
-                    <Loader2 size={32} className="animate-spin text-indigo-600 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">Loading payment history...</p>
+                    <LoadingDots label="Loading payment history" align="center" />
                   </div>
                 </div>
               ) : (
