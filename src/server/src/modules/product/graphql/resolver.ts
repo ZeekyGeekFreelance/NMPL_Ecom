@@ -582,12 +582,14 @@ const resolveProductConnection = async (
   let cacheHit = false;
 
   const cached = await getCachedListingConnection(catalogCacheKey);
-  if (cached) {
+  const canUseCachedResult =
+    !!cached && (!options.needsTotalCount || cached.totalCount !== null);
+  if (canUseCachedResult) {
     cacheHit = true;
   }
 
   const result: ProductConnection =
-    cached ||
+    (canUseCachedResult ? cached : null) ||
     (await (async () => {
       const totalCount = options.needsTotalCount
         ? await context.prisma.product.count({ where: options.where })
