@@ -155,7 +155,7 @@ router.post(
   protect,
   authorizeRole("ADMIN", "SUPERADMIN"),
   csrfProtection,
-  upload.any(),
+  upload.array("images", 10),
   productController.createProduct
 );
 

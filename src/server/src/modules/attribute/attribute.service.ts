@@ -37,7 +37,7 @@ export class AttributeService {
   // }
 
   async getAllAttributes(queryString: Record<string, any>) {
-    const apiFeatures = new ApiFeatures(queryString)
+    const apiFeatures = new ApiFeatures(queryString, "attribute")
       .filter()
       .sort()
       .limitFields()

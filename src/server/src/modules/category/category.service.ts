@@ -13,7 +13,7 @@ export class CategoryService {
     const hasExplicitPagination =
       queryString?.page !== undefined || queryString?.limit !== undefined;
 
-    const apiFeaturesBuilder = new ApiFeatures(queryString)
+    const apiFeaturesBuilder = new ApiFeatures(queryString, "category")
       .filter()
       .sort()
       .limitFields();

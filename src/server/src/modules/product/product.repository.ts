@@ -51,8 +51,17 @@ export class ProductRepository {
       isBestSeller: true,
       salesCount: true,
       categoryId: true,
+      gstId: true,
       category: {
         select: { id: true, name: true, slug: true, description: true },
+      },
+      gst: {
+        select: {
+          id: true,
+          name: true,
+          rate: true,
+          isActive: true,
+        },
       },
       variants: {
         select: {
@@ -88,6 +97,7 @@ export class ProductRepository {
       where: { id },
       include: {
         category: true,
+        gst: true,
         variants: {
           include: {
             attributes: {
@@ -118,6 +128,7 @@ export class ProductRepository {
       where: { slug },
       include: {
         category: true,
+        gst: true,
         variants: {
           include: {
             attributes: {
@@ -144,6 +155,7 @@ export class ProductRepository {
     name: string;
     slug: string;
     description?: string;
+    gstId?: string | null;
     isNew?: boolean;
     isTrending?: boolean;
     isBestSeller?: boolean;
@@ -156,6 +168,7 @@ export class ProductRepository {
       data,
       include: {
         category: true,
+        gst: true,
         variants: {
           include: {
             attributes: { include: { attribute: true, value: true } },
@@ -196,6 +209,7 @@ export class ProductRepository {
       name: string;
       slug: string;
       description?: string;
+      gstId?: string | null;
       isNew?: boolean;
       isTrending?: boolean;
       isBestSeller?: boolean;
@@ -211,6 +225,7 @@ export class ProductRepository {
       data,
       include: {
         category: true,
+        gst: true,
         variants: {
           include: {
             attributes: {

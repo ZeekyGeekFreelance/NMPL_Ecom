@@ -41,7 +41,7 @@ export class VariantService {
   }
 
   async getAllVariants(queryString: Record<string, any>) {
-    const apiFeatures = new ApiFeatures(queryString)
+    const apiFeatures = new ApiFeatures(queryString, "variant")
       .filter()
       .sort()
       .limitFields()

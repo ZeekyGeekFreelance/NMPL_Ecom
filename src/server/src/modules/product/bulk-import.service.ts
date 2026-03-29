@@ -43,7 +43,12 @@ export class BulkImportService {
    * Parse a CSV file buffer into raw record objects.
    */
   private parseFile(file: Express.Multer.File): unknown[] {
-    if (file.mimetype === "text/csv") {
+    const hasCsvMime =
+      file.mimetype === "text/csv" ||
+      file.mimetype === "application/vnd.ms-excel";
+    const hasCsvExtension = /\.csv$/i.test(file.originalname || "");
+
+    if (hasCsvMime && hasCsvExtension) {
       return parse(file.buffer.toString(), {
         columns: true,
         skip_empty_lines: true,

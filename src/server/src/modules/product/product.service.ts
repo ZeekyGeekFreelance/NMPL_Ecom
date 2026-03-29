@@ -131,6 +131,7 @@ export class ProductService {
       isBestSeller: boolean;
       isFeatured: boolean;
       categoryId: string | null;
+      gstId?: string | null;
     },
     productData: Partial<{
       name: string;
@@ -140,6 +141,7 @@ export class ProductService {
       isBestSeller?: boolean;
       isFeatured?: boolean;
       categoryId?: string;
+      gstId?: string;
     }>
   ): boolean {
     if (productData.name !== undefined && productData.name !== existingProduct.name) {
@@ -178,8 +180,50 @@ export class ProductService {
     ) {
       return true;
     }
+    if (
+      productData.gstId !== undefined &&
+      (productData.gstId ?? null) !== (existingProduct.gstId ?? null)
+    ) {
+      return true;
+    }
 
     return false;
+  }
+
+  private async resolveActiveGstId(
+    rawGstId: unknown,
+    options?: { required?: boolean }
+  ): Promise<string | undefined> {
+    if (typeof rawGstId !== "string") {
+      if (options?.required) {
+        throw new AppError(400, "Select a GST master.");
+      }
+
+      return undefined;
+    }
+
+    const gstId = rawGstId.trim();
+    if (!gstId) {
+      if (options?.required) {
+        throw new AppError(400, "Select a GST master.");
+      }
+
+      return undefined;
+    }
+
+    const gst = await prisma.gst.findUnique({
+      where: { id: gstId },
+      select: {
+        id: true,
+        isActive: true,
+      },
+    });
+
+    if (!gst || !gst.isActive) {
+      throw new AppError(400, "Select an active GST master.");
+    }
+
+    return gst.id;
   }
 
   private hasVariantCollectionChanges(
@@ -340,7 +384,7 @@ export class ProductService {
   }
 
   async getAllProducts(queryString: Record<string, any>, userId?: string) {
-    const apiFeatures = new ApiFeatures(queryString)
+    const apiFeatures = new ApiFeatures(queryString, "product")
       .filter()
       .sort()
       .limitFields()
@@ -404,6 +448,7 @@ export class ProductService {
     isBestSeller?: boolean;
     isFeatured?: boolean;
     categoryId?: string;
+    gstId?: string;
     variants?: {
       sku: string;
       price: number;
@@ -416,8 +461,12 @@ export class ProductService {
     }[];
   }) {
     const { variants, ...productData } = data;
+    const gstId = await this.resolveActiveGstId(productData.gstId, {
+      required: true,
+    });
     const normalizedProductData = {
       ...productData,
+      gstId,
       name: normalizeHumanTextForField(productData.name, "name"),
     };
 
@@ -621,6 +670,7 @@ export class ProductService {
         where: { id: product.id },
         include: {
           category: true,
+          gst: true,
           variants: {
             include: {
               attributes: {
@@ -649,6 +699,7 @@ export class ProductService {
       isBestSeller?: boolean;
       isFeatured?: boolean;
       categoryId?: string;
+      gstId?: string;
       variants?: {
         id?: string;
         sku: string;
@@ -670,8 +721,13 @@ export class ProductService {
     }
 
     const { variants, ...productData } = updatedData;
+    const hasGstIdField = Object.prototype.hasOwnProperty.call(productData, "gstId");
+    const gstId = hasGstIdField
+      ? await this.resolveActiveGstId(productData.gstId, { required: true })
+      : undefined;
     const normalizedProductData = {
       ...productData,
+      ...(hasGstIdField ? { gstId } : {}),
       ...(typeof productData.name === "string"
         ? { name: normalizeHumanTextForField(productData.name, "name") }
         : {}),
@@ -1059,6 +1115,7 @@ export class ProductService {
         where: { id: productId },
         include: {
           category: true,
+          gst: true,
           variants: {
             include: {
               attributes: {

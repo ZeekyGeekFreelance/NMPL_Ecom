@@ -68,6 +68,7 @@ export class ProductController {
         isBestSeller,
         isFeatured,
         categoryId,
+        gstId,
         variants: rawVariants,
       } = req.body;
 
@@ -166,6 +167,7 @@ export class ProductController {
         isBestSeller: isBestSeller === "true",
         isFeatured: isFeatured === "true",
         categoryId,
+        gstId: String(gstId ?? "").trim(),
         variants: processedVariants,
       });
 
@@ -185,11 +187,14 @@ export class ProductController {
         name,
         description,
         categoryId,
+        gstId,
         isNew,
         isFeatured,
         isTrending,
         isBestSeller,
       } = req.body;
+      const hasGstIdField = Object.prototype.hasOwnProperty.call(req.body, "gstId");
+      const normalizedGstId = hasGstIdField ? String(gstId ?? "").trim() : undefined;
 
       // Parse variants from req.body
       let parsedVariants: any[] = [];
@@ -553,6 +558,7 @@ export class ProductController {
           isBestSeller: isBestSeller === "true",
         }),
         ...(categoryId && { categoryId }),
+        ...(hasGstIdField && { gstId: normalizedGstId ?? "" }),
         ...(processedVariants && { variants: processedVariants }),
       };
 
