@@ -3,6 +3,7 @@
 import { Controller, UseFormReturn } from "react-hook-form";
 import { Tag } from "lucide-react";
 import ImageUploader from "@/app/components/molecules/ImageUploader";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 export interface CategoryFormData {
   id?: string;
@@ -105,7 +106,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
           className={`px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors duration-300 ${isLoading ? "opacity-50 cursor-not-allowed" : ""
             }`}
         >
-          {isLoading ? "Saving..." : submitLabel}
+          {isLoading ? <MiniSpinner size={16} /> : submitLabel}
         </button>
       </div>
     </form>

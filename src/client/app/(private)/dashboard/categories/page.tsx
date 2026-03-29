@@ -15,6 +15,7 @@ import CategoryForm, { CategoryFormData } from "./CategoryForm";
 import useToast from "@/app/hooks/ui/useToast";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 const CategoriesDashboard = () => {
   const { showToast } = useToast();
@@ -157,7 +158,7 @@ const CategoriesDashboard = () => {
       {isLoading ? (
         <div className="text-center py-12">
           <Tag size={48} className="mx-auto text-gray-400 mb-4 animate-pulse" />
-          <p className="text-lg text-gray-600">Loading categories...</p>
+          <LoadingDots label="Loading" align="center" className="text-lg" />
         </div>
       ) : error ? (
         <div className="text-center py-12">
