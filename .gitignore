@@ -16,6 +16,7 @@ src/client/.env.*
 src/server/.env
 src/server/.env.*
 !src/server/.env.example
+!src/server/.env.production.example
 !src/server/.env.localdocker.example
 src/client/.next/
 src/client/.next-dev/
