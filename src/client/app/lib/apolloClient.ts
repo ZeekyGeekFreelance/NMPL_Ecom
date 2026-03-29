@@ -1,14 +1,20 @@
 import {
   ApolloClient,
+  ApolloLink,
+  HttpLink,
   InMemoryCache,
+  Observable,
   from,
 } from "@apollo/client";
-import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { onError } from "@apollo/client/link/error";
 import { RetryLink } from "@apollo/client/link/retry";
 import { loadDevMessages, loadErrorMessages } from "@apollo/client/dev";
 import { GRAPHQL_URL } from "./constants/config";
 import { runtimeEnv } from "./runtimeEnv";
+import {
+  beginGlobalActivity,
+  endGlobalActivity,
+} from "@/app/lib/activityIndicator";
 
 if (!runtimeEnv.isProduction) {
   loadDevMessages();
@@ -24,6 +30,9 @@ const NETWORK_FAILURE_PATTERNS = [
   /ecanceled/i,
   /aborted/i,
 ];
+const MAX_APOLLO_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 400;
+const MAX_RETRY_DELAY_MS = 8_000;
 
 const getErrorMessage = (error: unknown) => {
   if (!error || typeof error !== "object") {
@@ -98,21 +107,44 @@ const createApolloClient = (initialState: any = null) => {
   //   20ms was too generous — single-query navigations paid 20ms for nothing.
   //   10ms is enough to collect queries fired in the same render cycle.
   // batchMax: never bundle more than 5 queries in one request.
-  const httpLink = new BatchHttpLink({
+  const httpLink = new HttpLink({
     uri: GRAPHQL_URL,
     credentials: "include",
-    batchInterval: 10,
-    batchMax: 5,
+  });
+  const activityLink = new ApolloLink((operation, forward) => {
+    if (!forward) {
+      return null;
+    }
+
+    const shouldTrackGlobalActivity =
+      operation.getContext()?.skipGlobalActivity !== true;
+
+    return new Observable((observer) => {
+      const token = shouldTrackGlobalActivity ? beginGlobalActivity() : null;
+      const subscription = forward(operation).subscribe({
+        next: (result) => observer.next(result),
+        error: (error) => {
+          endGlobalActivity(token);
+          observer.error(error);
+        },
+        complete: () => {
+          endGlobalActivity(token);
+          observer.complete();
+        },
+      });
+
+      return () => {
+        endGlobalActivity(token);
+        subscription.unsubscribe();
+      };
+    });
   });
 
   const retryLink = new RetryLink({
     attempts: {
-      // 12 retries with exponential backoff covers the full server cold-start
-      // window including the 5-min useBackendReady timeout. If the health gate
-      // releases after the full 5-min timeout (worst case), Apollo still has
-      // retries remaining so the query recovers without showing an error banner.
-      // Total cumulative wait: ~5-6 minutes before surfacing an error.
-      max: 12,
+      // Keep retries short so user-triggered actions fail fast instead of
+      // hanging for minutes. Backend readiness is already gated separately.
+      max: MAX_APOLLO_RETRIES,
       retryIf: (error) => {
         if (!error) return false;
 
@@ -136,8 +168,8 @@ const createApolloClient = (initialState: any = null) => {
       // This spreads retries across a wide window so clients don't all retry
       // at the same moment after a rate-limit event.
       if (statusCode === 429) {
-        const base = 1000;
-        const cap = 30_000;
+        const base = BASE_RETRY_DELAY_MS * 2;
+        const cap = MAX_RETRY_DELAY_MS;
         const ceiling = Math.min(cap, base * Math.pow(2, count));
         return Math.random() * ceiling;
       }
@@ -145,8 +177,8 @@ const createApolloClient = (initialState: any = null) => {
       // For cold-start / transient network errors use exponential backoff so
       // retries spread across the full server startup window.
       // Attempt 1→~1s, 2→~2s, 3→~4s, 4→~8s, 5→~16s, 6→~30s, 7→~30s, 8→~30s.
-      const baseColdStart = 1_000;
-      const capColdStart = 30_000;
+      const baseColdStart = BASE_RETRY_DELAY_MS;
+      const capColdStart = MAX_RETRY_DELAY_MS;
       const ceiling = Math.min(capColdStart, baseColdStart * Math.pow(2, count - 1));
       return ceiling * (0.5 + Math.random() * 0.5); // 50-100% of ceiling for jitter
     },
@@ -156,7 +188,7 @@ const createApolloClient = (initialState: any = null) => {
     // SSR mode prevents the client from being stored as a singleton so each
     // server render gets a clean instance.
     ssrMode: typeof window === "undefined",
-    link: from([errorLink, retryLink, httpLink]),
+    link: from([activityLink, errorLink, retryLink, httpLink]),
     cache: new InMemoryCache({
       typePolicies: {
         // ProductConnection is not normalised by id — it's a query-level

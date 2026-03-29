@@ -71,7 +71,6 @@ const FIELD_EXCLUDE_TOKENS = new Set([
   "typename",
   "filter",
   "message",
-  "chat",
   "comment",
   "description",
   "desc",

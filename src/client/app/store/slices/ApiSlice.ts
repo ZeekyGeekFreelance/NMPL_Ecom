@@ -576,6 +576,7 @@ export const apiSlice = createApi({
     "Logs",
     "Attribute",
     "Variant",
+    "Gst",
     "DeliveryRate",
     // Payment-related tags (used by paymentApiSlice which injects into this slice)
     "OutstandingPayments",
