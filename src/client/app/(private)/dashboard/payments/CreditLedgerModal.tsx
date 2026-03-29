@@ -21,6 +21,7 @@ import {
   TrendingUp, 
   X 
 } from "lucide-react";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 interface CreditLedgerModalProps {
   isOpen: boolean;
@@ -169,7 +170,7 @@ const CreditLedgerModal = ({ isOpen, onClose, dealerId }: CreditLedgerModalProps
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-center gap-2">
               <Loader2 size={24} className="animate-spin text-gray-400" />
-              <span className="text-gray-600">Loading credit history...</span>
+              <LoadingDots label="Loading" />
             </div>
           </div>
         ) : !dealer ? (

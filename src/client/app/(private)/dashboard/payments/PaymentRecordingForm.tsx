@@ -6,6 +6,7 @@ import { useGetOrderByIdQuery } from "@/app/store/apis/OrderApi";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { Calendar, DollarSign, FileText, Loader2 } from "lucide-react";
 import { toOrderReference, toTransactionReference } from "@/app/lib/utils/accountReference";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CHEQUE";
 
@@ -98,7 +99,7 @@ const PaymentRecordingForm = ({ orderId, onSubmit, onCancel }: PaymentRecordingF
       <div className="p-6">
         <div className="flex items-center justify-center py-8">
           <Loader2 size={24} className="animate-spin text-gray-400" />
-          <span className="ml-2 text-gray-600">Loading order details...</span>
+          <LoadingDots label="Loading" className="ml-2" />
         </div>
       </div>
     );

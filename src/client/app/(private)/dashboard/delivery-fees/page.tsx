@@ -6,6 +6,7 @@ import { withAuth } from "@/app/components/HOC/WithAuth";
 import PermissionGuard from "@/app/components/auth/PermissionGuard";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import useToast from "@/app/hooks/ui/useToast";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 import { ADDRESS_STATE_OPTIONS } from "@/app/lib/validators/address";
 import {
   useDeleteStateDeliveryRateMutation,
@@ -208,7 +209,7 @@ const DeliveryFeesDashboard = () => {
                   <td colSpan={4} className="px-4 py-8 text-center text-gray-600">
                     <span className="inline-flex items-center gap-2">
                       <Loader2 size={16} className="animate-spin" />
-                      Loading state delivery fees...
+                      <LoadingDots label="Loading" />
                     </span>
                   </td>
                 </tr>

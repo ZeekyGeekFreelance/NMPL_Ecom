@@ -12,6 +12,7 @@ import {
 import useToast from "@/app/hooks/ui/useToast";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 import {
   Clock,
   CreditCard,
@@ -339,7 +340,7 @@ const PaymentsDashboard = () => {
                 {isLoading ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                      Loading outstanding payments...
+                      <LoadingDots label="Loading" align="center" />
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (

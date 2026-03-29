@@ -23,6 +23,7 @@ import {
   X 
 } from "lucide-react";
 import Link from "next/link";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 interface PaymentAuditModalProps {
   isOpen: boolean;
@@ -201,7 +202,7 @@ const PaymentAuditModal = ({ isOpen, onClose, orderId }: PaymentAuditModalProps)
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-center gap-2">
               <Loader2 size={24} className="animate-spin text-gray-400" />
-              <span className="text-gray-600">Loading audit trail...</span>
+              <LoadingDots label="Loading" />
             </div>
           </div>
         ) : !order ? (
