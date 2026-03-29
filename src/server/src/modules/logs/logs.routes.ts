@@ -1,9 +1,13 @@
 import express from "express";
 import { makeLogsController } from "./logs.factory";
 import csrfProtection from "@/shared/middlewares/csrfProtection";
+import protect from "@/shared/middlewares/protect";
+import authorizeRole from "@/shared/middlewares/authorizeRole";
 
 const router = express.Router();
 const logsController = makeLogsController();
+
+router.use(protect, authorizeRole("SUPERADMIN"));
 
 /**
  * @swagger

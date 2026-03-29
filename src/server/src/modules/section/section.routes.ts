@@ -2,6 +2,8 @@ import { Router } from "express";
 import { makeSectionController } from "./section.factory";
 import upload from "@/shared/middlewares/upload";
 import csrfProtection from "@/shared/middlewares/csrfProtection";
+import protect from "@/shared/middlewares/protect";
+import authorizeRole from "@/shared/middlewares/authorizeRole";
 
 const router = Router();
 const sectionController = makeSectionController();
@@ -91,7 +93,7 @@ router.get("/arrivals", sectionController.findArrivals);
  *       400:
  *         description: Invalid input data.
  */
-router.post("/", csrfProtection, upload.array("images", 5), sectionController.createSection);
+router.post("/", protect, authorizeRole("ADMIN", "SUPERADMIN"), csrfProtection, upload.array("images", 5), sectionController.createSection);
 
 /**
  * @swagger
@@ -125,7 +127,7 @@ router.post("/", csrfProtection, upload.array("images", 5), sectionController.cr
  *       400:
  *         description: Invalid input data.
  */
-router.put("/:type", csrfProtection, sectionController.updateSection);
+router.put("/:type", protect, authorizeRole("ADMIN", "SUPERADMIN"), csrfProtection, sectionController.updateSection);
 
 /**
  * @swagger
@@ -146,6 +148,6 @@ router.put("/:type", csrfProtection, sectionController.updateSection);
  *       404:
  *         description: Section not found.
  */
-router.delete("/:type", csrfProtection, sectionController.deleteSection);
+router.delete("/:type", protect, authorizeRole("ADMIN", "SUPERADMIN"), csrfProtection, sectionController.deleteSection);
 
 export default router;

@@ -165,7 +165,7 @@ router.get("/audit-trail/:orderId", protect, authorizeRole("ADMIN", "SUPERADMIN"
  *       200:
  *         description: Gateway configuration retrieved successfully
  */
-router.get("/gateway/config", paymentController.getGatewayConfig);
+router.get("/gateway/config", protect, paymentController.getGatewayConfig);
 
 /**
  * @swagger
@@ -307,6 +307,6 @@ router.get("/:paymentId", protect, paymentController.getPaymentDetails);
  *       404:
  *         description: Payment not found.
  */
-router.delete("/:paymentId", protect, csrfProtection, paymentController.deletePayment);
+router.delete("/:paymentId", protect, authorizeRole("ADMIN", "SUPERADMIN"), csrfProtection, paymentController.deletePayment);
 
 export default router;
