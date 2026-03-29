@@ -73,11 +73,5 @@ export const deviceDetectionMiddleware = (
 
   req.deviceInfo = deviceInfo;
 
-  // Add device info to response headers
-  res.setHeader("X-Device-Type", deviceInfo.type);
-  res.setHeader("X-Platform", deviceInfo.platform);
-  res.setHeader("X-Browser", deviceInfo.browser);
-  res.setHeader("X-Browser-Version", deviceInfo.version);
-
   next();
 };

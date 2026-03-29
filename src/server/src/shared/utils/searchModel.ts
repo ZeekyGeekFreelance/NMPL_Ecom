@@ -1,4 +1,14 @@
 import mapTransactionStatus from "./mapTransactionsStatus";
+import AppError from "@/shared/errors/AppError";
+
+const ALLOWED_MODELS = new Set([
+  "product",
+  "category",
+  "transaction",
+  "user",
+  "productVariant",
+  "attribute",
+]);
 
 /**
  * Generic search function to query any model in Prisma dynamically.
@@ -20,6 +30,10 @@ const searchModel = async (
   searchQuery: string,
   prisma: any
 ) => {
+  if (!ALLOWED_MODELS.has(model)) {
+    throw new AppError(400, "Unsupported search model.");
+  }
+
   return await prisma[model].findMany({
     where: {
       OR: fields

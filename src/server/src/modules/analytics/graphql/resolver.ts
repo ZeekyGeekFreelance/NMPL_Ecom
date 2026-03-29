@@ -26,7 +26,11 @@ const DASHBOARD_ROLES = new Set(["ADMIN", "SUPERADMIN"]);
 
 const withDashboardAuthorization = (resolver: QueryResolver): QueryResolver => {
   return async (parent, args, context, info) => {
-    const role = context?.req?.user?.role || (context as any)?.user?.role;
+    const role =
+      context?.req?.user?.effectiveRole ||
+      context?.req?.user?.role ||
+      (context as any)?.user?.effectiveRole ||
+      (context as any)?.user?.role;
 
     if (!role || !DASHBOARD_ROLES.has(role)) {
       throw new Error("Forbidden");
