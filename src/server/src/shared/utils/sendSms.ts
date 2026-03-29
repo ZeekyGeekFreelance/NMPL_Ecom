@@ -55,6 +55,10 @@ const sendSms = async ({ to, body }: SendSmsInput): Promise<boolean> => {
   const provider = resolveSmsProvider();
 
   if (provider === "LOG") {
+    if (config.isProduction) {
+      logger.error("[sendSms] SMS_PROVIDER=LOG is not allowed in production.");
+      return false;
+    }
     logger.warn(`[sendSms] SMS_PROVIDER=LOG. OTP for ${to}: ${body}`);
     return true;
   }

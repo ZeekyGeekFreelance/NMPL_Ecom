@@ -9,6 +9,7 @@ import AppError from "@/shared/errors/AppError";
 import { CartService } from "../cart/cart.service";
 import { makeLogsService } from "../logs/logs.factory";
 import { config } from "@/config";
+import { rotateCsrfToken } from "@/shared/middlewares/csrfProtection";
 
 const { ...clearCookieOptions } = cookieOptions;
 
@@ -47,6 +48,7 @@ export class AuthController {
     if (accessToken && refreshToken) {
       res.cookie("refreshToken", refreshToken, cookieOptions);
       res.cookie("accessToken", accessToken, cookieOptions);
+      rotateCsrfToken(res);
     }
 
     sendResponse(res, 201, {
@@ -112,6 +114,7 @@ export class AuthController {
     if (!requiresPasswordChange) {
       res.cookie("refreshToken", result.refreshToken!, cookieOptions);
       res.cookie("accessToken", result.accessToken!, cookieOptions);
+      rotateCsrfToken(res);
     }
 
     sendResponse(res, 200, {
@@ -167,6 +170,7 @@ export class AuthController {
 
     res.clearCookie("refreshToken", { ...clearCookieOptions });
     res.clearCookie("accessToken", { ...clearCookieOptions });
+    rotateCsrfToken(res);
 
     sendResponse(res, 200, { message: "Logged out successfully" });
 
@@ -193,6 +197,7 @@ export class AuthController {
 
       res.cookie("refreshToken", refreshToken, cookieOptions);
       res.cookie("accessToken", accessToken, cookieOptions);
+      rotateCsrfToken(res);
 
       sendResponse(res, 200, {
         message: "Password changed successfully. You are now signed in.",
@@ -246,6 +251,7 @@ export class AuthController {
       res.clearCookie("accessToken", { ...clearCookieOptions });
       res.cookie("refreshToken", refreshToken, cookieOptions);
       res.cookie("accessToken", accessToken, cookieOptions);
+      rotateCsrfToken(res);
 
       sendResponse(res, 200, {
         message: "Password changed successfully. All other sessions have been logged out.",
@@ -349,6 +355,7 @@ export class AuthController {
 
       res.cookie("refreshToken", newRefreshToken, cookieOptions);
       res.cookie("accessToken", newAccessToken, cookieOptions);
+      rotateCsrfToken(res);
 
       sendResponse(res, 200, {
         message: "Token refreshed successfully",

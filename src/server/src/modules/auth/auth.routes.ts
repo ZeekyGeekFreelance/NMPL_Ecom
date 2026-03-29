@@ -73,7 +73,6 @@ router.post(
 );
 
 router.post("/sign-out", optionalAuth, csrfProtection, authController.signout);
-router.get("/sign-out", optionalAuth, authController.signout);
 
 router.post(
   "/refresh-token",

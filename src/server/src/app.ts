@@ -92,7 +92,10 @@ export const createApp = async () => {
   app.use(attachRequestSession);
 
   app.use((req, res, next) => {
-    if (req.headers["access-control-request-private-network"] === "true") {
+    if (
+      !config.isProduction &&
+      req.headers["access-control-request-private-network"] === "true"
+    ) {
       res.setHeader("Access-Control-Allow-Private-Network", "true");
     }
     next();
@@ -125,22 +128,28 @@ export const createApp = async () => {
     })
   );
 
-  if (config.isProduction && config.security.helmetEnabled) {
+  if (config.security.helmetEnabled) {
     app.use(
       helmet({
-        contentSecurityPolicy: {
-          directives: parseCspDirectives(config.security.csp),
-        },
+        contentSecurityPolicy: config.isProduction
+          ? {
+              directives: parseCspDirectives(config.security.csp),
+            }
+          : false,
+        crossOriginResourcePolicy: config.isProduction ? undefined : false,
+        hsts: config.isProduction ? undefined : false,
       })
     );
     app.use(helmet.frameguard({ action: "deny" }));
-    app.use(
-      helmet.hsts({
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true,
-      })
-    );
+    if (config.isProduction) {
+      app.use(
+        helmet.hsts({
+          maxAge: 31536000,
+          includeSubDomains: true,
+          preload: true,
+        })
+      );
+    }
     app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
     app.use(helmet.permittedCrossDomainPolicies());
     app.use((_req, res, next) => {

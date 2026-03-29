@@ -750,6 +750,23 @@ if (isProduction && appConfig.payment.enableMockPayment) {
   );
 }
 
+if (isProduction && appConfig.payment.razorpayMockMode) {
+  throwConfigError(
+    "RAZORPAY_MOCK_MODE",
+    "Production mode does not allow Razorpay mock mode"
+  );
+}
+
+if (
+  isProduction &&
+  (!appConfig.payment.razorpayKeyId || !appConfig.payment.razorpayKeySecret)
+) {
+  throwConfigError(
+    "RAZORPAY_KEY_ID",
+    "Production requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET"
+  );
+}
+
 if (appConfig.payment.stripeSecretKey && !appConfig.payment.stripeWebhookSecret) {
   throwConfigError(
     "STRIPE_WEBHOOK_SECRET",
@@ -780,6 +797,13 @@ if (appConfig.sms.provider === "TWILIO") {
       "TWILIO provider requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER"
     );
   }
+}
+
+if (isProduction && appConfig.sms.provider === "LOG") {
+  throwConfigError(
+    "SMS_PROVIDER",
+    "Production must use the TWILIO SMS provider"
+  );
 }
 
 if (isProduction) {

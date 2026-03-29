@@ -81,6 +81,12 @@ const setCsrfTokenCookie = (res: Response, token: string): void => {
   });
 };
 
+export const rotateCsrfToken = (res: Response): string => {
+  const token = generateCsrfToken();
+  setCsrfTokenCookie(res, token);
+  return token;
+};
+
 /**
  * CSRF Protection Middleware
  * 
@@ -135,8 +141,7 @@ export const exposeCsrfToken = (req: Request, res: Response, next: NextFunction)
   // Generate token if it doesn't exist
   let token = getCsrfTokenFromCookie(req);
   if (!token) {
-    token = generateCsrfToken();
-    setCsrfTokenCookie(res, token);
+    token = rotateCsrfToken(res);
   }
   res.setHeader("X-CSRF-Token", token);
   next();

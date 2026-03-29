@@ -43,7 +43,10 @@ const errorHandlers: Record<string | number, ErrorHandler> = {
       case "P2025":
         return new AppError(404, "Record not found");
       default:
-        return new AppError(400, `Prisma error: ${err.message}`);
+        return new AppError(
+          400,
+          "Database request failed. Please check your input and try again."
+        );
     }
   },
   PrismaClientValidationError: () =>
@@ -136,10 +139,6 @@ const globalError = async (
     traceId,
     message: error.message,
     ...(error.details && { errors: error.details }),
-    ...(isDev && {
-      stack: error.stack,
-      error,
-    }),
   });
 };
 
