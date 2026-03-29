@@ -4,6 +4,7 @@ import React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useGetLogByIdQuery } from "@/app/store/apis/LogsApi";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 import {
   toAccountReference,
   toOrderReference,
@@ -74,7 +75,7 @@ const LogDetails: React.FC = () => {
   if (isLoading) {
     return (
       <div className="p-4 text-center py-8">
-        <span className="text-gray-600">Loading log details...</span>
+        <LoadingDots label="Loading" align="center" />
       </div>
     );
   }

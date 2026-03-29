@@ -3,6 +3,7 @@ import { useForm, Controller } from "react-hook-form";
 import { useState } from "react";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import Modal from "@/app/components/organisms/Modal";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface RestockFormData {
   quantity: number;
@@ -143,7 +144,7 @@ const RestockModal: React.FC<RestockModalProps> = ({
                       : "bg-indigo-600 hover:bg-indigo-700"
                   }`}
                 >
-                  {isLoading ? "Restocking..." : "Restock"}
+                  {isLoading ? <MiniSpinner size={16} /> : "Restock"}
                 </button>
               </div>
             </form>

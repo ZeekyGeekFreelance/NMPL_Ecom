@@ -4,6 +4,7 @@ import { useGetRestockHistoryQuery } from "@/app/store/apis/VariantApi";
 import formatDate from "@/app/utils/formatDate";
 import { Search, X } from "lucide-react";
 import { getPaginatedSerialNumber } from "@/app/lib/utils/pagination";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 interface RestockHistoryModalProps {
   isOpen: boolean;
@@ -209,7 +210,11 @@ const RestockHistoryModal: React.FC<RestockHistoryModalProps> = ({
                       colSpan={6}
                       className="px-4 py-8 text-center text-sm text-gray-500"
                     >
-                      Loading restock history...
+                      <LoadingDots
+                        label="Loading restock history"
+                        align="center"
+                        className="justify-center"
+                      />
                     </td>
                   </tr>
                 ) : visibleRestocks.length === 0 ? (

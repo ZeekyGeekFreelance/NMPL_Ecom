@@ -14,6 +14,8 @@ import useClickOutside from "@/app/hooks/dom/useClickOutside";
 import { useGetDealerSummaryQuery } from "@/app/store/apis/UserApi";
 import { useGetTransactionSummaryQuery } from "@/app/store/apis/TransactionApi";
 import { resolveDisplayRole } from "@/app/lib/userRole";
+import CustomLoader from "@/app/components/feedback/CustomLoader";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 type ActionMessage = {
   id: string;
@@ -135,11 +137,7 @@ export default function DashboardLayout({
   }, [isAuthenticated, isDashboardUser, isAuthLoading, router]);
 
   if (isAuthLoading || !isAuthenticated || !isDashboardUser) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600" />
-      </div>
-    );
+    return <CustomLoader />;
   }
 
   return (
@@ -228,7 +226,7 @@ export default function DashboardLayout({
               >
                 <div className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gray-100">
                   {isAuthLoading ? (
-                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    <MiniSpinner size={20} />
                   ) : user?.avatar ? (
                     <Image
                       src={user.avatar}

@@ -10,6 +10,7 @@ import LogContext from "./LogContext";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import { toPrefixedReference } from "@/app/lib/utils/accountReference";
 import ConfirmModal from "@/app/components/organisms/ConfirmModal";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 const LogsDashboard = () => {
   const { data, isLoading, error, refetch } = useGetAllLogsQuery({});
@@ -181,7 +182,9 @@ const LogsDashboard = () => {
           />
         </>
       ) : isLoading ? (
-        <div className="text-center py-8">Loading logs...</div>
+        <div className="flex justify-center py-8">
+          <LoadingDots label="Loading" align="center" />
+        </div>
       ) : (
         <div className="text-center py-8 text-red-600">Failed to load logs</div>
       )}
