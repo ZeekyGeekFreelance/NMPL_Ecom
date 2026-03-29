@@ -8,6 +8,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import { validatePasswordPolicy } from "@/app/lib/validators/common";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 type ResetPasswordForm = {
   password: string;
@@ -111,7 +112,7 @@ const PasswordResetWithToken = () => {
           className="bg-primary mt-4 text-white w-full py-[12px] rounded"
           disabled={isLoading || !isValid}
         >
-          {isLoading ? "Resetting..." : "Reset Password"}
+          {isLoading ? <MiniSpinner size={16} /> : "Reset Password"}
         </Button>
 
         <Link className="mt-4 hover:underline" href={"/sign-in"}>

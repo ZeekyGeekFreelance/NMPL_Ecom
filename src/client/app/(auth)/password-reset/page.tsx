@@ -7,6 +7,7 @@ import Button from "@/app/components/atoms/Button";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { useForgotPasswordMutation } from "@/app/store/apis/AuthApi";
 import Input from "@/app/components/atoms/Input";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 import {
   normalizeEmailValue,
   validateEmailValue,
@@ -111,7 +112,7 @@ const PasswordReset = () => {
               }`}
               disabled={isLoading || !isValid}
             >
-              {isLoading ? "Sending..." : "Send reset link"}
+              {isLoading ? <MiniSpinner size={16} /> : "Send reset link"}
             </Button>
           </form>
 

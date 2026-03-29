@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { Eye, EyeClosed } from "lucide-react";
+import PasswordVisibilityToggle from "@/app/components/atoms/PasswordVisibilityToggle";
 
 export const passwordSchema = z
   .string()
@@ -56,20 +56,18 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
               return result.success || result.error.errors[0].message;
             },
           })}
-          className={`p-[17px] pl-3 pr-10 w-full border-b-2 text-gray-800 placeholder:text-gray-600 focus:outline-none ${
+          className={`p-[17px] pl-3 pr-14 w-full border-b-2 text-gray-800 placeholder:text-gray-600 focus:outline-none ${
             errors[name]
               ? "border-red-500 bg-red-50/40 focus:border-red-500"
               : "border-gray-300 focus:border-gray-700"
           }`}
         />
-        <button
-          type="button"
-          onClick={() => setShowPassword((previous) => !previous)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-800"
-          aria-label={showPassword ? "Hide password" : "Show password"}
-        >
-          {showPassword ? <Eye size={18} /> : <EyeClosed size={18} />}
-        </button>
+        <PasswordVisibilityToggle
+          visible={showPassword}
+          onToggle={() => setShowPassword((previous) => !previous)}
+          className="text-gray-600 hover:text-gray-800"
+          size={18}
+        />
       </div>
       {errors[name] && (
         <p className="text-red-500 text-sm mt-1">

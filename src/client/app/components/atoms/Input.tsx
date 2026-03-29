@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { Controller } from "react-hook-form";
-import { Eye, EyeClosed, LucideIcon } from "lucide-react";
+import { LucideIcon } from "lucide-react";
 import {
   normalizeHumanTextForField,
   toTitleCaseWordsForTyping,
 } from "@/app/lib/textNormalization";
+import PasswordVisibilityToggle from "@/app/components/atoms/PasswordVisibilityToggle";
 interface InputProps {
   label?: string;
   control: any;
@@ -73,7 +74,9 @@ const Input: React.FC<InputProps> = ({
                   type={resolvedType}
                   placeholder={placeholder}
                   aria-invalid={Boolean(resolvedError)}
-                  className={`p-[14px] pl-3 pr-10 w-full border-b-2 text-gray-800 placeholder:text-gray-600 ${
+                  className={`p-[14px] pl-3 ${
+                    isPasswordField ? "pr-14" : "pr-10"
+                  } w-full border-b-2 text-gray-800 placeholder:text-gray-600 ${
                     resolvedError
                       ? "border-red-500 bg-red-50/40 focus:border-red-500"
                       : "border-gray-300 focus:border-gray-700"
@@ -108,18 +111,12 @@ const Input: React.FC<InputProps> = ({
                 />
 
                 {isPasswordField ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((previous) => !previous)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-800"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? (
-                      <Eye className="h-[20px] w-[20px]" />
-                    ) : (
-                      <EyeClosed className="h-[20px] w-[20px]" />
-                    )}
-                  </button>
+                  <PasswordVisibilityToggle
+                    visible={showPassword}
+                    onToggle={() => setShowPassword((previous) => !previous)}
+                    className="text-gray-600 hover:text-gray-800"
+                    size={20}
+                  />
                 ) : null}
 
                 {Icon && !isPasswordField && (
