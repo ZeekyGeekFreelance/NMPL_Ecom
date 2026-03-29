@@ -172,9 +172,18 @@ export class OrderRepository {
     userId: string;
     customerRoleSnapshot: ORDER_CUSTOMER_ROLE;
     cartId?: string;
-    orderItems: { variantId: string; quantity: number; price: number }[];
+    orderItems: {
+      productId: string;
+      variantId: string;
+      quantity: number;
+      price: number;
+      gstRateAtPurchase: number;
+      taxAmount: number;
+      total: number;
+    }[];
     pricing: {
       subtotalAmount: number;
+      taxAmount: number;
       deliveryCharge: number;
       deliveryMode: DELIVERY_MODE;
       deliveryLabel: string;
@@ -204,7 +213,12 @@ export class OrderRepository {
         (sum, item) => sum + item.quantity * item.price,
         0
       );
+      const computedTaxAmount = data.orderItems.reduce(
+        (sum, item) => sum + item.taxAmount,
+        0
+      );
       const normalizedSubtotal = Number(computedSubtotal.toFixed(2));
+      const normalizedTaxAmount = Number(computedTaxAmount.toFixed(2));
       const subtotalFromPricing = Number(data.pricing.subtotalAmount.toFixed(2));
       if (Math.abs(normalizedSubtotal - subtotalFromPricing) > 0.01) {
         throw new AppError(
@@ -213,8 +227,18 @@ export class OrderRepository {
         );
       }
 
+      const taxAmountFromPricing = Number(data.pricing.taxAmount.toFixed(2));
+      if (Math.abs(normalizedTaxAmount - taxAmountFromPricing) > 0.01) {
+        throw new AppError(
+          409,
+          "Tax mismatch detected. Please refresh checkout summary and retry."
+        );
+      }
+
       const deliveryCharge = Number(data.pricing.deliveryCharge.toFixed(2));
-      const computedAmount = Number((normalizedSubtotal + deliveryCharge).toFixed(2));
+      const computedAmount = Number(
+        (normalizedSubtotal + normalizedTaxAmount + deliveryCharge).toFixed(2)
+      );
       const uniqueVariantIds = [...new Set(data.orderItems.map((item) => item.variantId))];
 
       // Validate quantities and variant existence, but do not deduct stock at
@@ -234,6 +258,7 @@ export class OrderRepository {
         select: {
           id: true,
           sku: true,
+          productId: true,
           product: {
             select: {
               name: true,
@@ -249,6 +274,33 @@ export class OrderRepository {
 
       if (missingVariantIds.length > 0) {
         throw new AppError(404, `Variant not found: ${missingVariantIds[0]}`);
+      }
+
+      for (const item of data.orderItems) {
+        const variant = variantById.get(item.variantId);
+        if (!variant || variant.productId !== item.productId) {
+          throw new AppError(
+            409,
+            "Order item integrity mismatch detected. Please refresh checkout and retry."
+          );
+        }
+
+        const expectedTaxAmount = Number(
+          ((item.quantity * item.price * item.gstRateAtPurchase) / 100).toFixed(2)
+        );
+        const expectedTotal = Number(
+          (item.quantity * item.price + expectedTaxAmount).toFixed(2)
+        );
+
+        if (
+          Math.abs(expectedTaxAmount - Number(item.taxAmount)) > 0.01 ||
+          Math.abs(expectedTotal - Number(item.total)) > 0.01
+        ) {
+          throw new AppError(
+            409,
+            "Order tax calculation mismatch detected. Please refresh checkout and retry."
+          );
+        }
       }
 
       // Create order in verification queue. Stock is reserved only after admin verification.
@@ -283,9 +335,13 @@ export class OrderRepository {
           },
           orderItems: {
             create: data.orderItems.map((item) => ({
+              productId: item.productId,
               variantId: item.variantId,
               quantity: item.quantity,
               price: item.price,
+              gstRateAtPurchase: item.gstRateAtPurchase,
+              taxAmount: item.taxAmount,
+              total: item.total,
             })),
           },
           payment: {

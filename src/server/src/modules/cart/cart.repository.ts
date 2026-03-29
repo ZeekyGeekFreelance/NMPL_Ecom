@@ -17,7 +17,19 @@ export class CartRepository {
       where: { userId, status: CART_STATUS.ACTIVE },
       orderBy: { updatedAt: "desc" },
       include: {
-        cartItems: { include: { variant: { include: { product: true } } } },
+        cartItems: {
+          include: {
+            variant: {
+              include: {
+                product: {
+                  include: {
+                    gst: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -36,7 +48,19 @@ export class CartRepository {
       where: { sessionId, status: CART_STATUS.ACTIVE },
       orderBy: { updatedAt: "desc" },
       include: {
-        cartItems: { include: { variant: { include: { product: true } } } },
+        cartItems: {
+          include: {
+            variant: {
+              include: {
+                product: {
+                  include: {
+                    gst: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -54,7 +78,19 @@ export class CartRepository {
     const cart = await prisma.cart.create({
       data,
       include: {
-        cartItems: { include: { variant: { include: { product: true } } } },
+        cartItems: {
+          include: {
+            variant: {
+              include: {
+                product: {
+                  include: {
+                    gst: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 

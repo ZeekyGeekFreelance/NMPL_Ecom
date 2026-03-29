@@ -69,6 +69,7 @@ export class CheckoutController {
         orderReference: toOrderReference(order.id),
         status: order.status,
         subtotalAmount: order.subtotalAmount,
+        taxAmount: order.taxAmount,
         deliveryCharge: order.deliveryCharge,
         deliveryMode: order.deliveryMode,
         finalTotal: order.amount,

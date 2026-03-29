@@ -57,6 +57,7 @@ interface InvoicePdfInput {
   customerType: "DEALER" | "USER";
   items: InvoicePdfItem[];
   subtotalAmount: number;
+  taxAmount: number;
   deliveryCharge: number;
   deliveryMode: string;
   totalAmount: number;
@@ -304,6 +305,10 @@ export default function generateInvoicePdf(
       doc.moveDown(0.8);
       doc.font(fonts.regular).fontSize(10);
       doc.text(`Subtotal: ${formatCurrency(invoice.subtotalAmount)}`, 50, doc.y, {
+        align: "right",
+      });
+      doc.moveDown(0.3);
+      doc.text(`GST: ${formatCurrency(invoice.taxAmount)}`, 50, doc.y, {
         align: "right",
       });
       doc.moveDown(0.3);

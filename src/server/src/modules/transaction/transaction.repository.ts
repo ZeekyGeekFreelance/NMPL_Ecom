@@ -31,6 +31,9 @@ type OrderItemSnapshot = {
   variantId: string;
   quantity: number;
   price: number;
+  gstRateAtPurchase: number;
+  taxAmount: number;
+  total: number;
   variant: {
     productId: string;
     sku: string;
@@ -393,6 +396,9 @@ export class TransactionRepository {
             variantId: true,
             quantity: true,
             price: true,
+            gstRateAtPurchase: true,
+            taxAmount: true,
+            total: true,
             variant: {
               select: {
                 productId: true,
@@ -496,10 +502,18 @@ export class TransactionRepository {
 
     const updatedOrderItems: OrderItemSnapshot[] = [];
     let quotedSubtotal = 0;
+    let quotedTaxAmount = 0;
 
     for (const item of order.orderItems) {
       const update = sanitizedUpdates.get(item.id)!;
       quotedSubtotal += update.quantity * update.price;
+      const recalculatedTaxAmount = Number(
+        ((update.quantity * update.price * Number(item.gstRateAtPurchase || 0)) / 100).toFixed(2)
+      );
+      const recalculatedTotal = Number(
+        (update.quantity * update.price + recalculatedTaxAmount).toFixed(2)
+      );
+      quotedTaxAmount += recalculatedTaxAmount;
 
       await tx.orderItem.update({
         where: {
@@ -508,6 +522,8 @@ export class TransactionRepository {
         data: {
           quantity: update.quantity,
           price: update.price,
+          taxAmount: recalculatedTaxAmount,
+          total: recalculatedTotal,
         },
       });
 
@@ -515,13 +531,16 @@ export class TransactionRepository {
         ...item,
         quantity: update.quantity,
         price: update.price,
+        taxAmount: recalculatedTaxAmount,
+        total: recalculatedTotal,
       });
     }
 
     const normalizedSubtotal = Number(quotedSubtotal.toFixed(2));
+    const normalizedTaxAmount = Number(quotedTaxAmount.toFixed(2));
     const normalizedDeliveryCharge = Number(order.deliveryCharge || 0);
     const finalAmount = Number(
-      (normalizedSubtotal + normalizedDeliveryCharge).toFixed(2)
+      (normalizedSubtotal + normalizedTaxAmount + normalizedDeliveryCharge).toFixed(2)
     );
 
     await tx.order.update({

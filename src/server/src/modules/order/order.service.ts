@@ -345,21 +345,52 @@ export class OrderService {
     }
 
     const currency = config.payment.stripeCurrency.toLowerCase();
-    const lineItems = order.orderItems.map((item) => ({
-      quantity: item.quantity,
+    const lineItems: Array<{
+      quantity: number;
+      price_data: {
+        currency: string;
+        unit_amount: number;
+        product_data: {
+          name: string;
+          metadata: Record<string, string>;
+        };
+      };
+    }> = order.orderItems.map((item) => ({
+      quantity: 1,
       price_data: {
         currency,
-        unit_amount: Math.round(item.price * 100),
+        unit_amount: Math.round(Number(item.total || 0) * 100),
         product_data: {
-          name: item.variant?.product?.name || item.variant?.sku || "Product",
+          name:
+            item.quantity > 1
+              ? `${item.variant?.product?.name || item.variant?.sku || "Product"} x ${item.quantity}`
+              : item.variant?.product?.name || item.variant?.sku || "Product",
           metadata: {
             orderId: order.id,
             orderItemId: item.id,
             variantId: item.variantId,
+            quotedQuantity: String(item.quantity),
           },
         },
       },
     }));
+
+    if (Number(order.deliveryCharge || 0) > 0) {
+      lineItems.push({
+        quantity: 1,
+        price_data: {
+          currency,
+          unit_amount: Math.round(Number(order.deliveryCharge || 0) * 100),
+          product_data: {
+            name: order.address?.deliveryLabel || "Delivery Charge",
+            metadata: {
+              orderId: order.id,
+              type: "delivery_charge",
+            },
+          },
+        },
+      });
+    }
 
     const hasInvalidLineItem = lineItems.some(
       (line) =>
@@ -502,7 +533,19 @@ export class OrderService {
       ? await prisma.cart.findUnique({
           where: { id: params.cartId },
           include: {
-            cartItems: { include: { variant: { include: { product: true } } } },
+            cartItems: {
+              include: {
+                variant: {
+                  include: {
+                    product: {
+                      include: {
+                        gst: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         })
       : await prisma.cart.findFirst({
@@ -511,7 +554,19 @@ export class OrderService {
             status: CART_STATUS.ACTIVE,
           },
           include: {
-            cartItems: { include: { variant: { include: { product: true } } } },
+            cartItems: {
+              include: {
+                variant: {
+                  include: {
+                    product: {
+                      include: {
+                        gst: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
           orderBy: {
             updatedAt: "desc",
@@ -534,11 +589,25 @@ export class OrderService {
       cart.cartItems.map((item) => item.variantId)
     );
     const customerRoleSnapshot = resolveCustomerTypeFromUser(orderingUser);
-    const orderItems = cart.cartItems.map((item) => ({
-      variantId: item.variantId,
-      quantity: item.quantity,
-      price: dealerPriceMap.get(item.variantId) ?? item.variant.price,
-    }));
+    const orderItems = cart.cartItems.map((item) => {
+      const price = Number(dealerPriceMap.get(item.variantId) ?? item.variant.price);
+      const quantity = Number(item.quantity);
+      const gstRateAtPurchase = Number(item.variant.product.gst?.rate ?? 0);
+      const taxAmount = Number(
+        ((price * quantity * gstRateAtPurchase) / 100).toFixed(2)
+      );
+      const total = Number((price * quantity + taxAmount).toFixed(2));
+
+      return {
+        productId: item.variant.productId,
+        variantId: item.variantId,
+        quantity,
+        price,
+        gstRateAtPurchase,
+        taxAmount,
+        total,
+      };
+    });
 
     const normalizedDeliveryMode =
       String(params.deliveryMode || "").toUpperCase() === DELIVERY_MODE.PICKUP
@@ -555,10 +624,7 @@ export class OrderService {
       address: selectedAddress,
     });
     const pricing = buildCheckoutPricing({
-      items: orderItems.map((item) => ({
-        quantity: item.quantity,
-        price: item.price,
-      })),
+      items: orderItems,
       deliveryQuote,
     });
 
@@ -589,6 +655,7 @@ export class OrderService {
     return {
       cartId: draft.cart.id,
       subtotalAmount: draft.pricing.subtotalAmount,
+      taxAmount: draft.pricing.taxAmount,
       deliveryMode: draft.pricing.deliveryMode,
       deliveryLabel: draft.pricing.deliveryLabel,
       deliveryCharge: draft.pricing.deliveryCharge,
@@ -645,6 +712,7 @@ export class OrderService {
       isPayLater: draft.isPayLater,
       pricing: {
         subtotalAmount: draft.pricing.subtotalAmount,
+        taxAmount: draft.pricing.taxAmount,
         deliveryCharge: draft.pricing.deliveryCharge,
         deliveryMode: draft.pricing.deliveryMode as DELIVERY_MODE,
         deliveryLabel: draft.pricing.deliveryLabel,
@@ -682,7 +750,10 @@ export class OrderService {
       }
     );
 
-    return order;
+    return {
+      ...order,
+      taxAmount: draft.pricing.taxAmount,
+    };
   }
 
   private async getAdminNotificationRecipients(
@@ -743,6 +814,11 @@ export class OrderService {
       where: { id: orderId },
       select: {
         subtotalAmount: true,
+        orderItems: {
+          select: {
+            taxAmount: true,
+          },
+        },
         deliveryCharge: true,
         deliveryMode: true,
         amount: true,
@@ -757,6 +833,12 @@ export class OrderService {
       return;
     }
 
+    const taxAmount = Number(
+      (order.orderItems || []).reduce(
+        (sum, item) => sum + Number(item.taxAmount || 0),
+        0
+      ).toFixed(2)
+    );
     const platformName = getPlatformName();
     const supportEmail = getSupportEmail();
     const accountReference = toAccountReference(user.id);
@@ -783,6 +865,7 @@ export class OrderService {
             `Current status: ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}`,
             `Action Time (IST): ${actionTime}`,
             `Subtotal: ${formatCurrency(order.subtotalAmount)}`,
+            `GST: ${formatCurrency(taxAmount)}`,
             `Delivery (${order.address?.deliveryLabel || order.deliveryMode}): ${formatCurrency(
               order.deliveryCharge
             )}`,
@@ -801,6 +884,7 @@ export class OrderService {
                 <strong>Current status:</strong> ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}<br />
                 <strong>Action Time (IST):</strong> ${actionTime}<br />
                 <strong>Subtotal:</strong> ${formatCurrency(order.subtotalAmount)}<br />
+                <strong>GST:</strong> ${formatCurrency(taxAmount)}<br />
                 <strong>Delivery (${order.address?.deliveryLabel || order.deliveryMode}):</strong> ${formatCurrency(
                   order.deliveryCharge
                 )}<br />
@@ -834,6 +918,7 @@ export class OrderService {
             `Current status: ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}`,
             `Action Time (IST): ${actionTime}`,
             `Subtotal: ${formatCurrency(order.subtotalAmount)}`,
+            `GST: ${formatCurrency(taxAmount)}`,
             `Delivery (${order.address?.deliveryLabel || order.deliveryMode}): ${formatCurrency(
               order.deliveryCharge
             )}`,
@@ -855,6 +940,7 @@ export class OrderService {
                 <strong>Current status:</strong> ${ORDER_LIFECYCLE_STATUS.PENDING_VERIFICATION}<br />
                 <strong>Action Time (IST):</strong> ${actionTime}<br />
                 <strong>Subtotal:</strong> ${formatCurrency(order.subtotalAmount)}<br />
+                <strong>GST:</strong> ${formatCurrency(taxAmount)}<br />
                 <strong>Delivery (${order.address?.deliveryLabel || order.deliveryMode}):</strong> ${formatCurrency(
                   order.deliveryCharge
                 )}<br />

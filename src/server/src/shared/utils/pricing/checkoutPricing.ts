@@ -8,6 +8,7 @@ import { canonicalizeAddressState } from "@/modules/address/address.location";
 type LineItem = {
   quantity: number;
   price: number;
+  taxAmount?: number;
 };
 
 type DeliveryQuote = {
@@ -69,6 +70,19 @@ export const calculateItemsSubtotal = (items: LineItem[]): number => {
   }, 0);
 
   return Number(subtotal.toFixed(2));
+};
+
+export const calculateItemsTax = (items: LineItem[]): number => {
+  const taxAmount = items.reduce((sum, item) => {
+    const tax = Number(item.taxAmount ?? 0);
+    if (!Number.isFinite(tax) || tax < 0) {
+      throw new AppError(400, "Invalid tax amount in checkout payload.");
+    }
+
+    return sum + tax;
+  }, 0);
+
+  return Number(taxAmount.toFixed(2));
 };
 
 export const getAddressForCheckout = async (
@@ -236,11 +250,13 @@ export const buildCheckoutPricing = (params: {
   deliveryQuote: DeliveryQuote;
 }) => {
   const subtotalAmount = calculateItemsSubtotal(params.items);
+  const taxAmount = calculateItemsTax(params.items);
   const deliveryCharge = Number(params.deliveryQuote.deliveryCharge.toFixed(2));
-  const finalTotal = Number((subtotalAmount + deliveryCharge).toFixed(2));
+  const finalTotal = Number((subtotalAmount + taxAmount + deliveryCharge).toFixed(2));
 
   return {
     subtotalAmount,
+    taxAmount,
     deliveryCharge,
     finalTotal,
     deliveryMode: params.deliveryQuote.deliveryMode,

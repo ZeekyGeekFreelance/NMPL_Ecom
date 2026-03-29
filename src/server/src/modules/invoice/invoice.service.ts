@@ -159,6 +159,12 @@ export class InvoiceService {
     const internalRecipients = await this.getInternalRecipients(
       invoice.customerEmail
     );
+    const taxAmount = Number(
+      (invoice.order.orderItems || []).reduce(
+        (sum, item) => sum + Number(item.taxAmount || 0),
+        0
+      ).toFixed(2)
+    );
     const shouldSendCustomerCopy = !invoice.customerEmailSentAt;
     const shouldSendInternalCopy =
       internalRecipients.length > 0 && !invoice.internalEmailSentAt;
@@ -189,6 +195,7 @@ export class InvoiceService {
         customerType,
         orderDate: invoice.order.orderDate,
         subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+        taxAmount,
         deliveryCharge: Number(invoice.order.deliveryCharge || 0),
         deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
@@ -226,6 +233,7 @@ export class InvoiceService {
         customerType,
         orderDate: invoice.order.orderDate,
         subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+        taxAmount,
         deliveryCharge: Number(invoice.order.deliveryCharge || 0),
         deliveryMode: String(invoice.order.deliveryMode || "DELIVERY"),
         totalAmount: invoice.order.amount,
@@ -326,6 +334,11 @@ export class InvoiceService {
       unitPrice: item.price,
       subtotal: item.price * item.quantity,
     }));
+    const taxAmount = Number(
+      invoice.order.orderItems
+        .reduce((sum, item) => sum + Number(item.taxAmount || 0), 0)
+        .toFixed(2)
+    );
 
     const paymentTransactions = Array.isArray(invoice.paymentTransactions)
       ? invoice.paymentTransactions.filter(
@@ -380,6 +393,7 @@ export class InvoiceService {
       customerType,
       items,
       subtotalAmount: Number(invoice.order.subtotalAmount || 0),
+      taxAmount,
       deliveryCharge: Number(invoice.order.deliveryCharge || 0),
       deliveryMode: normalizedDeliveryMode,
       totalAmount: invoice.order.amount,
