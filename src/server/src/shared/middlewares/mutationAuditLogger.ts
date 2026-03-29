@@ -201,13 +201,13 @@ const fetchPreviousState = async (
         return prisma.payment.findUnique({ where: { id: entityId } });
       case "logs":
         return prisma.log.findUnique({ where: { id: entityId } });
+      case "gst":
+        return prisma.gst.findUnique({ where: { id: entityId } });
       case "cart":
         if (pathSegments[1] === "item") {
           return prisma.cartItem.findUnique({ where: { id: entityId } });
         }
         return prisma.cart.findUnique({ where: { id: entityId } });
-      case "chat":
-        return prisma.chat.findUnique({ where: { id: entityId } });
       default:
         return null;
     }

@@ -13,11 +13,11 @@ import addressRoutes from "@/modules/address/address.routes";
 import transactionRoutes from "@/modules/transaction/transaction.routes";
 import logRoutes from "@/modules/logs/logs.routes";
 import sectionRoutes from "@/modules/section/section.routes";
-import { configureChatRoutes } from "@/modules/chat/chat.routes";
 import attributesRoutes from "@/modules/attribute/attribute.routes";
 import variantsRoutes from '@/modules/variant/variant.routes'
 import invoiceRoutes from "@/modules/invoice/invoice.routes";
 import deliveryRateRoutes from "@/modules/deliveryRate/deliveryRate.routes";
+import gstRoutes from "@/modules/gst/gst.routes";
 import idempotencyGuard from "@/shared/middlewares/idempotencyGuard";
 import mutationAuditLogger from "@/shared/middlewares/mutationAuditLogger";
 import { productsRateLimiter } from "@/shared/middlewares/rateLimiter";
@@ -47,10 +47,10 @@ export const configureV1Routes = () => {
   router.use("/addresses", addressRoutes);
   router.use("/sections", sectionRoutes);
   router.use("/attributes", attributesRoutes);
-  router.use("/chat", configureChatRoutes());
   router.use('/variants', variantsRoutes)
   router.use("/invoices", invoiceRoutes);
   router.use("/delivery-rates", deliveryRateRoutes);
+  router.use("/gst", gstRoutes);
 
   return router;
 };
