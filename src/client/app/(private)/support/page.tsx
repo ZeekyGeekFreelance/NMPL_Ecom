@@ -1,99 +1,54 @@
 "use client";
-import { useMemo, useState } from "react";
-import {
-  useCreateChatMutation,
-  useGetUserChatsQuery,
-} from "@/app/store/apis/ChatApi";
-import ChatContainer from "../(chat)";
+import Link from "next/link";
 import MainLayout from "@/app/components/templates/MainLayout";
 import { withAuth } from "@/app/components/HOC/WithAuth";
-import { toPrefixedReference } from "@/app/lib/utils/accountReference";
+import { SUPPORT_EMAIL } from "@/app/lib/constants/config";
 
 const SupportPage = () => {
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const { data: chatsData, isLoading } = useGetUserChatsQuery(undefined);
-  const [createChat, { isLoading: isCreatingChat }] = useCreateChatMutation();
-
-  const chats = useMemo(() => chatsData?.chats || [], [chatsData?.chats]);
-
-  const formatChatReference = (id: string) => toPrefixedReference("CHT", id);
-
-  const handleCreateChat = async () => {
-    try {
-      const result = await createChat(undefined).unwrap();
-      const newChatId = result.chat.id;
-      setActiveChatId(newChatId);
-    } catch (err) {
-      console.error("Failed to create chat:", err);
-    }
-  };
-
   return (
     <MainLayout>
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 md:py-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[320px_1fr]">
-          <aside className="rounded-xl border border-gray-200 bg-white p-4 md:h-[calc(100vh-140px)] md:overflow-y-auto">
-            <h2 className="mb-4 text-lg font-semibold">Support Conversations</h2>
+      <div className="mx-auto w-full max-w-3xl px-4 py-8 md:py-12">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm md:p-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">
+            Support
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold text-gray-900 md:text-3xl">
+            Direct in-app support is no longer available.
+          </h1>
+          <p className="mt-4 text-sm leading-7 text-gray-600 md:text-base">
+            For help with orders, payments, account access, or dealer questions,
+            contact our support team by email. Include your account or order
+            reference when possible so the team can help faster.
+          </p>
 
-            {isLoading ? (
-              <div className="text-sm text-gray-500">Loading conversations...</div>
-            ) : chats.length === 0 ? (
-              <div className="text-sm text-gray-500">No conversations yet</div>
-            ) : (
-              <ul className="space-y-2">
-                {chats.map((chat) => (
-                  <li key={chat.id}>
-                    <button
-                      onClick={() => setActiveChatId(chat.id)}
-                      className={`w-full rounded-lg p-3 text-left transition ${
-                        activeChatId === chat.id
-                          ? "bg-blue-100 text-blue-800"
-                          : "hover:bg-gray-100"
-                      }`}
-                    >
-                      <div className="font-medium">
-                        Support Ticket #{formatChatReference(chat.id)}
-                      </div>
-                      <div className="mt-1 flex items-center text-sm text-gray-500">
-                        <span
-                          className={`mr-2 inline-block h-2 w-2 rounded-full ${
-                            chat.status === "OPEN" ? "bg-green-500" : "bg-gray-400"
-                          }`}
-                        />
-                        {chat.status === "OPEN" ? "Active" : "Resolved"}
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <button
-              onClick={handleCreateChat}
-              disabled={isCreatingChat}
-              className={`mt-4 w-full rounded-lg p-2 text-white transition-colors ${
-                isCreatingChat
-                  ? "cursor-not-allowed bg-blue-400"
-                  : "bg-blue-600 hover:bg-blue-700"
-              }`}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
             >
-              {isCreatingChat ? "Creating..." : "New Conversation"}
-            </button>
-          </aside>
+              Email support
+            </a>
+            <Link
+              href="/profile"
+              className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Open profile
+            </Link>
+          </div>
 
-          <section className="min-h-[420px] rounded-xl border border-gray-200 bg-white md:h-[calc(100vh-140px)] md:overflow-hidden">
-            {activeChatId ? (
-              <ChatContainer chatId={activeChatId} />
-            ) : (
-              <div className="flex h-full items-center justify-center px-4 text-center text-gray-500">
-                Select a conversation or start a new one.
-              </div>
-            )}
-          </section>
+          <p className="mt-6 text-sm text-gray-500">
+            Support email:{" "}
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="font-medium text-indigo-700 hover:text-indigo-800"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </p>
         </div>
       </div>
     </MainLayout>
   );
 };
 
-export default withAuth(SupportPage, { allowedRoles: ["USER", "DEALER"] });
+export default withAuth(SupportPage);
