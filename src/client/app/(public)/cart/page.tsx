@@ -1,7 +1,14 @@
 "use client";
 import BreadCrumb from "@/app/components/feedback/BreadCrumb";
 import MainLayout from "@/app/components/templates/MainLayout";
-import { Trash2, ShoppingCart, Minus, Plus, ShieldAlert } from "lucide-react";
+import {
+  Trash2,
+  ShoppingCart,
+  Minus,
+  Plus,
+  ShieldAlert,
+  Loader2,
+} from "lucide-react";
 import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -64,6 +71,9 @@ const Cart = () => {
     id: string;
     name: string;
   } | null>(null);
+  const [pendingQuantityItemId, setPendingQuantityItemId] = useState<string | null>(
+    null
+  );
 
   const cartItems = useMemo(
     () => (shouldLoadCart ? data?.cart?.cartItems || [] : []),
@@ -78,6 +88,20 @@ const Cart = () => {
     return cartItems.reduce(
       (sum, item) => sum + item.variant.price * item.quantity,
       0
+    );
+  }, [cartItems]);
+
+  const taxAmount = useMemo(() => {
+    if (!cartItems.length) return 0;
+
+    return Number(
+      cartItems
+        .reduce((sum, item) => {
+          const gstRate = Number(item?.variant?.product?.gst?.rate || 0);
+          const lineTax = (Number(item.variant.price) * item.quantity * gstRate) / 100;
+          return sum + lineTax;
+        }, 0)
+        .toFixed(2)
     );
   }, [cartItems]);
 
@@ -121,6 +145,7 @@ const Cart = () => {
     }
 
     try {
+      setPendingQuantityItemId(item.id);
       await updateCartItem({ id: item.id, quantity: nextQuantity }).unwrap();
     } catch (error) {
       showToast(
@@ -128,6 +153,8 @@ const Cart = () => {
         "error"
       );
       console.error("Error updating item:", error);
+    } finally {
+      setPendingQuantityItemId(null);
     }
   };
 
@@ -196,6 +223,7 @@ const Cart = () => {
               {cartItems.map((item) => {
                 const productSlug = item?.variant?.product?.slug;
                 const productHref = productSlug ? `/product/${productSlug}` : "/shop";
+                const isUpdatingQuantity = pendingQuantityItemId === item.id;
 
                 return (
                   <motion.div
@@ -250,20 +278,25 @@ const Cart = () => {
                         <button
                           type="button"
                           onClick={() => handleQuantityChange(item, -1)}
-                          disabled={item.quantity <= 1}
+                          disabled={item.quantity <= 1 || isUpdatingQuantity}
                           className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
                         >
                           <Minus size={16} />
                         </button>
 
                         <span className="min-w-[32px] text-center font-semibold text-gray-800">
-                          {item.quantity}
+                          {isUpdatingQuantity ? (
+                            <Loader2 size={16} className="mx-auto animate-spin text-indigo-600" />
+                          ) : (
+                            item.quantity
+                          )}
                         </span>
 
                         <button
                           type="button"
                           onClick={() => handleQuantityChange(item, 1)}
-                          className="rounded-full p-2 transition hover:bg-gray-100"
+                          disabled={isUpdatingQuantity}
+                          className="rounded-full p-2 transition hover:bg-gray-100 disabled:opacity-50"
                         >
                           <Plus size={16} />
                         </button>
@@ -292,6 +325,7 @@ const Cart = () => {
             <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
               <CartSummary
                 subtotal={subtotal}
+                taxAmount={taxAmount}
                 totalItems={totalItems}
               />
             </aside>

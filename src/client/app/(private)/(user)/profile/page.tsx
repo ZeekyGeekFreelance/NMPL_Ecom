@@ -58,6 +58,7 @@ import {
   Users,
   WalletCards,
 } from "lucide-react";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 type Role = "USER" | "DEALER" | "ADMIN" | "SUPERADMIN";
 type AccountKind = Role | "DEALER";
@@ -923,9 +924,10 @@ const UserProfile = () => {
                           type="button"
                           onClick={handleSaveProfile}
                           disabled={!canSaveProfile}
-                          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                          className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
                         >
-                          {isUpdatingProfile ? "Saving..." : "Save"}
+                          {isUpdatingProfile ? <MiniSpinner size={16} /> : null}
+                          <span>Save</span>
                         </button>
                       </div>
                       {nameError && (
@@ -1368,15 +1370,12 @@ const UserProfile = () => {
                       <button
                         type="submit"
                         disabled={isSubmittingAddress || hasAddressValidationErrors}
-                        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
                       >
-                        {isSubmittingAddress
-                          ? editingAddressId
-                            ? "Updating..."
-                            : "Saving..."
-                          : editingAddressId
-                          ? "Update Address"
-                          : "Save Address"}
+                        {isSubmittingAddress ? <MiniSpinner size={16} /> : null}
+                        <span>
+                          {editingAddressId ? "Update Address" : "Save Address"}
+                        </span>
                       </button>
                       {editingAddressId && (
                         <button
@@ -1481,8 +1480,12 @@ const UserProfile = () => {
                                   }
                                   className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                  <Trash2 size={12} />
-                                  {deletingAddressId === address.id ? "Deleting..." : "Delete"}
+                                  {deletingAddressId === address.id ? (
+                                    <MiniSpinner size={12} />
+                                  ) : (
+                                    <Trash2 size={12} />
+                                  )}
+                                  <span>Delete</span>
                                 </button>
                               </div>
                             </div>

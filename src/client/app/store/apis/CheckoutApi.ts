@@ -12,6 +12,7 @@ export type CheckoutSelectionPayload = {
 export type CheckoutSummary = {
   cartId: string;
   subtotalAmount: number;
+  taxAmount: number;
   deliveryMode: CheckoutDeliveryMode;
   deliveryLabel: string;
   deliveryCharge: number;
@@ -50,6 +51,7 @@ export const checkoutApi = apiSlice.injectEndpoints({
         orderReference?: string;
         status: string;
         subtotalAmount: number;
+        taxAmount: number;
         deliveryCharge: number;
         deliveryMode: CheckoutDeliveryMode;
         finalTotal: number;

@@ -10,6 +10,7 @@ import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import useToast from "@/app/hooks/ui/useToast";
 import { downloadInvoiceByOrderId } from "@/app/lib/utils/downloadInvoice";
 import { toOrderReference } from "@/app/lib/utils/accountReference";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 import {
   useAcceptQuotationMutation,
   useRejectQuotationMutation,
@@ -115,6 +116,7 @@ const OrderSummary = ({
   const quotationLogs = Array.isArray(order?.quotationLogs)
     ? order.quotationLogs
     : [];
+  const orderItems = Array.isArray(order?.orderItems) ? order.orderItems : [];
   const subtotal = useMemo(() => Number(order?.subtotalAmount ?? order?.amount ?? 0), [
     order?.subtotalAmount,
     order?.amount,
@@ -128,12 +130,29 @@ const OrderSummary = ({
     }
     return 0;
   }, [order?.address?.deliveryCharge, order?.deliveryCharge]);
+  const taxAmount = useMemo(() => {
+    const explicitTaxAmount = Number(
+      orderItems.reduce(
+        (sum: number, item: any) => sum + Number(item?.taxAmount || 0),
+        0
+      ).toFixed(2)
+    );
+
+    if (explicitTaxAmount > 0) {
+      return explicitTaxAmount;
+    }
+
+    return Math.max(
+      0,
+      Number((Number(order?.amount ?? 0) - subtotal - deliveryCharge).toFixed(2))
+    );
+  }, [deliveryCharge, order?.amount, orderItems, subtotal]);
   const finalTotal = useMemo(() => {
     if (typeof order?.amount === "number") {
       return order.amount;
     }
-    return Number((subtotal + deliveryCharge).toFixed(2));
-  }, [order?.amount, subtotal, deliveryCharge]);
+    return Number((subtotal + taxAmount + deliveryCharge).toFixed(2));
+  }, [deliveryCharge, order?.amount, subtotal, taxAmount]);
   const total = useMemo(() => {
     return formatPrice(finalTotal);
   }, [finalTotal, formatPrice]);
@@ -302,7 +321,7 @@ const OrderSummary = ({
           className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download size={15} />
-          {isDownloadingInvoice ? "Preparing Invoice..." : "Invoice PDF"}
+          {isDownloadingInvoice ? <MiniSpinner size={16} /> : "Invoice PDF"}
         </button>
       </div>
       {!canDownloadInvoice && (
@@ -335,7 +354,7 @@ const OrderSummary = ({
               disabled={payLaterPayment.isLoading}
               className="rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-amber-300"
             >
-              {payLaterPayment.isLoading ? "Redirecting..." : "Pay Due Amount"}
+              {payLaterPayment.isLoading ? <MiniSpinner size={16} /> : "Pay Due Amount"}
             </button>
           </div>
         </div>
@@ -356,7 +375,7 @@ const OrderSummary = ({
               disabled={isAcceptingQuotation || isRejectingQuotation}
               className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
-              {isAcceptingQuotation ? "Redirecting..." : "Proceed to Payment"}
+              {isAcceptingQuotation ? <MiniSpinner size={16} /> : "Proceed to Payment"}
             </button>
             <button
               type="button"
@@ -459,9 +478,13 @@ const OrderSummary = ({
         <div className="flex justify-between text-gray-600">
           <span>Product Price</span>
           <div className="flex items-center gap-3">
-            <span className="text-gray-400">{order.orderItems.length} item(s)</span>
+            <span className="text-gray-400">{orderItems.length} item(s)</span>
             <span className="font-medium text-gray-800">{formatPrice(subtotal)}</span>
           </div>
+        </div>
+        <div className="flex justify-between text-gray-600">
+          <span>GST</span>
+          <span className="font-medium text-gray-800">{formatPrice(taxAmount)}</span>
         </div>
         <div className="flex justify-between text-gray-600">
           <span>Delivery Charge</span>

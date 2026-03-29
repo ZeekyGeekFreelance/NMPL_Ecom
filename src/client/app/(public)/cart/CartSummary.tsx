@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import useToast from "@/app/hooks/ui/useToast";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "@/app/hooks/useAuth";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toOrderReference } from "@/app/lib/utils/accountReference";
@@ -24,6 +24,8 @@ import ConfirmModal from "@/app/components/organisms/ConfirmModal";
 import Dropdown from "@/app/components/molecules/Dropdown";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 import {
   ADDRESS_STATE_OPTIONS,
   AddressFieldErrors,
@@ -38,6 +40,7 @@ import {
 
 interface CartSummaryProps {
   subtotal: number;
+  taxAmount: number;
   totalItems: number;
 }
 
@@ -123,7 +126,11 @@ const parseCheckoutSummary = (payload: unknown): CheckoutSummaryData | null => {
   return summary;
 };
 
-const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
+const CartSummary: React.FC<CartSummaryProps> = ({
+  subtotal,
+  taxAmount,
+  totalItems,
+}) => {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
@@ -224,9 +231,17 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     return defaultAddress?.id || addresses[0]?.id || "";
   }, [addresses]);
 
+  const localTaxAmount = useMemo(
+    () => Number(Number(taxAmount || 0).toFixed(2)),
+    [taxAmount]
+  );
   const summarySubtotal = checkoutSummary?.subtotalAmount ?? subtotal;
-  const summaryDeliveryCharge = checkoutSummary?.deliveryCharge;
-  const summaryFinalTotal = checkoutSummary?.finalTotal ?? summarySubtotal;
+  const summaryTaxAmount = checkoutSummary?.taxAmount ?? localTaxAmount;
+  const summaryDeliveryCharge =
+    deliveryMode === "PICKUP" ? 0 : checkoutSummary?.deliveryCharge;
+  const summaryFinalTotal =
+    checkoutSummary?.finalTotal ??
+    Number((summarySubtotal + summaryTaxAmount + (summaryDeliveryCharge ?? 0)).toFixed(2));
   const activeDeliveryLabel =
     checkoutSummary?.deliveryLabel ||
     (deliveryMode === "PICKUP" ? "In-Store Pickup" : "Delivery");
@@ -249,7 +264,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       return summaryError;
     }
 
-    if (!checkoutSummary) {
+    if (deliveryMode === "DELIVERY" && !checkoutSummary) {
       return "Final charges are still being calculated. Please wait a moment.";
     }
 
@@ -267,10 +282,10 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     totalItems,
   ]);
   const canReviewPriceBreakup =
-    !!checkoutSummary &&
     !summaryError &&
     !isCalculatingSummary &&
-    (deliveryMode === "PICKUP" || !!selectedAddressId);
+    totalItems > 0 &&
+    (deliveryMode === "PICKUP" || !!checkoutSummary);
   const shouldShowAddressUnlockNote =
     deliveryMode === "DELIVERY" && !selectedAddressId;
 
@@ -301,6 +316,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
     setAddressInputMode((previous) => (previous === "new" ? "saved" : "new"));
     setAddressSubmitAttempted(false);
     setAddressTouchedFields({});
+    setCheckoutSummary(null);
     setSummaryError(null);
     latestSummaryRequestRef.current = "";
   }, []);
@@ -410,12 +426,18 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
   );
 
   useEffect(() => {
-    const requiresAddress = deliveryMode === "DELIVERY";
-    if (
-      !isAuthenticated ||
-      (requiresAddress && !selectedAddressId) ||
-      totalItems <= 0
-    ) {
+    if (!isAuthenticated || totalItems <= 0) {
+      return;
+    }
+
+    if (deliveryMode === "PICKUP") {
+      setCheckoutSummary(null);
+      setSummaryError(null);
+      latestSummaryRequestRef.current = "";
+      return;
+    }
+
+    if (!selectedAddressId) {
       return;
     }
 
@@ -532,6 +554,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       setAddressForm(getEmptyAddressForm());
       setAddressSubmitAttempted(false);
       setAddressTouchedFields({});
+      setCheckoutSummary(null);
       setHasReviewedPriceBreakup(false);
       latestSummaryRequestRef.current = "";
       showToast("Address saved successfully.", "success");
@@ -572,7 +595,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
 
   const renderSavedAddressList = () => {
     if (isAddressesLoading) {
-      return <p className="text-xs text-gray-500">Loading addresses...</p>;
+      return <LoadingDots label="Loading" className="text-xs" />;
     }
 
     if (addresses.length > 0) {
@@ -598,6 +621,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                     checked={isSelected}
                     onChange={() => {
                       setSelectedAddressId(address.id);
+                      setCheckoutSummary(null);
                       setHasReviewedPriceBreakup(false);
                       setSummaryError(null);
                       latestSummaryRequestRef.current = "";
@@ -688,13 +712,23 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       return;
     }
 
-    const resolvedSummary = await requestCheckoutSummary(true);
-    if (!resolvedSummary) {
+    const resolvedSummary = requiresAddress
+      ? await requestCheckoutSummary(true)
+      : null;
+    const expectedTotal = requiresAddress
+      ? resolvedSummary?.finalTotal
+      : Number((subtotal + localTaxAmount).toFixed(2));
+
+    if (requiresAddress && !resolvedSummary) {
       showToast(
         summaryError ||
           "Checkout summary is not ready. Please verify address and delivery mode.",
         "error"
       );
+      return;
+    }
+    if (typeof expectedTotal !== "number" || !Number.isFinite(expectedTotal)) {
+      showToast("Unable to confirm the final total. Please try again.", "error");
       return;
     }
 
@@ -706,9 +740,11 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         ? {
             addressId: selectedAddressId,
             deliveryMode,
+            expectedTotal,
           }
         : {
             deliveryMode,
+            expectedTotal,
           };
 
       const res = await initiateCheckout(checkoutPayload).unwrap();
@@ -754,7 +790,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
       return;
     }
 
-    if (!checkoutSummary) {
+    if (deliveryMode === "DELIVERY" && !checkoutSummary) {
       showToast("Calculating delivery charges. Please wait a moment.", "error");
       focusAndHighlightSummary();
       return;
@@ -819,13 +855,19 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
             </span>
           </div>
           <div className="flex justify-between text-gray-700">
+            <span>GST</span>
+            <span className="font-medium text-gray-800">
+              {formatPrice(summaryTaxAmount)}
+            </span>
+          </div>
+          <div className="flex justify-between text-gray-700">
             <span>{activeDeliveryLabel}</span>
             {summaryDeliveryCharge !== undefined ? (
               <span className="font-medium text-gray-800">
                 {formatPrice(summaryDeliveryCharge)}
               </span>
             ) : (
-              <span className="font-medium text-gray-500">Select options</span>
+              <span className="font-medium text-gray-500">Select address</span>
             )}
           </div>
           <div className="flex justify-between pt-3 border-t border-gray-200">
@@ -837,8 +879,8 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         </div>
         <p className="mt-2 text-xs text-gray-500">
           {deliveryMode === "DELIVERY"
-            ? "Select delivery mode and address to calculate final payable amount."
-            : "In-store pickup selected. No delivery address is required."}
+            ? "GST is pre-calculated from your cart. Select a delivery address to fetch the delivery charge and final total."
+            : "GST is pre-calculated from your cart. In-store pickup adds no delivery charge."}
         </p>
         {shouldShowAddressUnlockNote ? (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -887,6 +929,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                 checked={deliveryMode === "DELIVERY"}
                 onChange={() => {
                   setDeliveryMode("DELIVERY");
+                  setCheckoutSummary(null);
                   setHasReviewedPriceBreakup(false);
                   setSummaryError(null);
                   latestSummaryRequestRef.current = "";
@@ -906,6 +949,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                 checked={deliveryMode === "PICKUP"}
                 onChange={() => {
                   setDeliveryMode("PICKUP");
+                  setCheckoutSummary(null);
                   setHasReviewedPriceBreakup(false);
                   setSummaryError(null);
                   latestSummaryRequestRef.current = "";
@@ -1167,9 +1211,10 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
                 <button
                   type="submit"
                   disabled={isCreatingAddress || hasAddressValidationErrors}
-                  className="w-full rounded-md bg-gray-900 text-white py-2 text-sm font-medium hover:bg-black disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-gray-900 py-2 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-400"
                 >
-                  {isCreatingAddress ? "Saving..." : "Save Address and Use for Checkout"}
+                  {isCreatingAddress ? <MiniSpinner size={16} /> : null}
+                  <span>Save Address and Use for Checkout</span>
                 </button>
               </form>
             ) : null}
@@ -1201,7 +1246,7 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         ) : null}
         {isCalculatingSummary ? (
           <p className="mt-3 text-xs text-gray-500">
-            Calculating checkout summary...
+            Updating delivery charges...
           </p>
         ) : null}
         </section>
@@ -1227,19 +1272,24 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
               }`}
               aria-disabled={isBusy || totalItems === 0}
             >
-              {isBusy
-                ? "Processing..."
-                : totalItems === 0
-                ? "Cart is Empty"
-                : !hasReviewedPriceBreakup
-                ? "Review Price Breakup to Continue"
-                : deliveryMode === "DELIVERY" && !selectedAddressId
-                ? "Select Address to Continue"
-                : summaryError
-                ? "Resolve Checkout Issue"
-                : !checkoutSummary
-                ? "Waiting for Final Total"
-                : "Proceed to Checkout"}
+              {isBusy ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  Processing...
+                </span>
+              ) : totalItems === 0 ? (
+                "Cart is Empty"
+              ) : !hasReviewedPriceBreakup ? (
+                "Review Price Breakup to Continue"
+              ) : deliveryMode === "DELIVERY" && !selectedAddressId ? (
+                "Select Address to Continue"
+              ) : summaryError ? (
+                "Resolve Checkout Issue"
+              ) : deliveryMode === "DELIVERY" && !checkoutSummary ? (
+                "Waiting for Final Total"
+              ) : (
+                "Proceed to Checkout"
+              )}
             </button>
           ) : (
             <Link
@@ -1302,7 +1352,9 @@ const CartSummary: React.FC<CartSummaryProps> = ({ subtotal, totalItems }) => {
         type="warning"
         message={`Please confirm this price breakup: Subtotal ${formatPrice(
           summarySubtotal
-        )}, ${activeDeliveryLabel} ${
+        )}, GST ${
+          formatPrice(summaryTaxAmount)
+        }, ${activeDeliveryLabel} ${
           summaryDeliveryCharge !== undefined
             ? formatPrice(summaryDeliveryCharge)
             : "Pending"

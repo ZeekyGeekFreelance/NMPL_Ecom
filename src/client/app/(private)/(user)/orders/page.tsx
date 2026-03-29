@@ -38,6 +38,7 @@ import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { useAcceptQuotationMutation } from "@/app/store/apis/OrderApi";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import { usePayLaterPayment } from "@/app/hooks/payment/usePayLaterPayment";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 // Status badge component
 const StatusBadge = ({
@@ -356,12 +357,11 @@ const OrderCard = ({
                   : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-blue-300"
               }`}
             >
+              {isAcceptingQuotation || payLaterPayment.isLoading ? (
+                <MiniSpinner size={16} />
+              ) : null}
               <span>
-                {isAcceptingQuotation || payLaterPayment.isLoading
-                  ? "Redirecting..."
-                  : isPayLaterDue
-                  ? "Pay Due Amount"
-                  : "Proceed to Payment"}
+                {isPayLaterDue ? "Pay Due Amount" : "Proceed to Payment"}
               </span>
             </button>
           ) : (
