@@ -32,6 +32,7 @@ import {
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 import { toTransactionReference } from "@/app/lib/utils/accountReference";
 import { Loader2 } from "lucide-react";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 /** True when the error is a transient server / infra failure (5xx, network). */
 const isTransientServerError = (err: unknown): boolean => {
@@ -616,9 +617,10 @@ const TransactionDetailsPage = () => {
                   type="button"
                   onClick={requestIssueQuotation}
                   disabled={!canSubmitQuotation || isIssuingQuotation}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
                 >
-                  {isIssuingQuotation ? "Sending..." : "Send Quotation"}
+                  {isIssuingQuotation ? <MiniSpinner size={16} /> : null}
+                  <span>Send Quotation</span>
                 </button>
               </div>
             </div>

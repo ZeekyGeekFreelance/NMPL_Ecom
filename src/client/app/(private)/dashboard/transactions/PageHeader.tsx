@@ -1,6 +1,7 @@
 "use client";
 
 import Dropdown from "@/app/components/molecules/Dropdown";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 import Link from "next/link";
 import { ArrowLeft, Download, CreditCard, Receipt } from "lucide-react";
 
@@ -89,17 +90,18 @@ const PageHeader = ({
           disabled={isDownloadingInvoice}
           className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 transition duration-200 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
         >
-          <Download size={16} />
-          {isDownloadingInvoice ? "Downloading..." : "Invoice PDF"}
+          {isDownloadingInvoice ? <MiniSpinner size={16} /> : <Download size={16} />}
+          <span>Invoice PDF</span>
         </button>
 
         <button
           type="button"
           onClick={onOpenQuotationEditor}
           disabled={!canEditQuotation || isIssuingQuotation}
-          className="px-4 py-2 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 transition duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="px-4 py-2 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center gap-2"
         >
-          {isIssuingQuotation ? "Sending..." : "Edit Quotation"}
+          {isIssuingQuotation ? <MiniSpinner size={16} /> : null}
+          <span>Edit Quotation</span>
         </button>
 
         {!isUpdating ? (
@@ -120,9 +122,9 @@ const PageHeader = ({
             </button>
           </>
         ) : (
-          <div className="flex items-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500 mr-2" />
-            <span>Updating...</span>
+          <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+            <MiniSpinner size={16} />
+            <span>Update Status</span>
           </div>
         )}
       </div>
