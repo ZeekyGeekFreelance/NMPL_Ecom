@@ -13,6 +13,9 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { toTransactionReference } from "@/app/lib/utils/accountReference";
+import { beginNavigationActivity } from "@/app/lib/activityIndicator";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface SearchResult {
   type: "product" | "category" | "user" | "transaction";
@@ -63,6 +66,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
 
   const handleResultClick = (result: SearchResult): void => {
     const route = ROUTES[result.type](result.id);
+    beginNavigationActivity();
     router.push(route);
     setIsOpen(false);
   };
@@ -119,8 +123,8 @@ const SearchModal: React.FC<SearchModalProps> = ({
                 </div>
               ) : isLoading ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-8 text-gray-500">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-                  <span className="text-sm">Searching...</span>
+                  <MiniSpinner size={26} />
+                  <LoadingDots label="Searching" align="center" />
                 </div>
               ) : !query.trim() ? (
                 <div className="px-4 py-8 text-center text-sm text-gray-500">

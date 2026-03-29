@@ -58,10 +58,9 @@ const Footer = () => {
 
     return true;
   });
-  const supportHref = isAdminOrSuperAdmin ? "/dashboard/chats" : "/support";
-  const supportDescription = isAdminOrSuperAdmin
-    ? "Use dashboard chats to manage incoming dealer and customer requests."
-    : "Reach out from the support page for payments, order updates, or account issues.";
+  const supportHref = "/support";
+  const supportDescription =
+    "Email our support team for payments, order updates, account access, or dealer help.";
   const footerGridColumns = isAdminOrSuperAdmin
     ? "grid-cols-1 md:grid-cols-3"
     : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4";
@@ -186,7 +185,7 @@ const Footer = () => {
               className="mt-3 inline-block text-sm font-medium"
               style={{ color: "var(--color-secondary)" }}
             >
-              {isAdminOrSuperAdmin ? "Open dashboard chats" : "Contact support"}
+              Contact support
             </Link>
           </div>
         </div>

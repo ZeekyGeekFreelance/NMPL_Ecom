@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Layers,
+  Percent,
   SlidersHorizontal,
   Users,
   Boxes,
@@ -29,6 +30,7 @@ type SidebarNotificationKey =
   | "deliveryFees"
   | "transactions"
   | "payments"
+  | "gst"
   | "dealers"
   | "users"
   | "analytics"
@@ -109,6 +111,13 @@ const Sidebar = ({ notifications = {} }: SidebarProps) => {
             name: "Payments",
             href: "/payments",
             icon: CreditCard,
+            roles: ["ADMIN", "SUPERADMIN"],
+          },
+          {
+            id: "gst" as SidebarNotificationKey,
+            name: "GST",
+            href: "/gst",
+            icon: Percent,
             roles: ["ADMIN", "SUPERADMIN"],
           },
           {

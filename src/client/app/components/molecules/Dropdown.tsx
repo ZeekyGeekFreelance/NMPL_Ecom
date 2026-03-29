@@ -1,7 +1,9 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Loader2, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface DropdownOption {
   label: string;
@@ -105,12 +107,12 @@ const Dropdown: React.FC<DropdownProps> = ({
         aria-label={label || "Select option"}
       >
         <span className="text-sm font-medium text-gray-700 truncate">
-          {isLoading ? "Loading..." : selectedLabel}
+          {isLoading ? <LoadingDots label="Loading" /> : selectedLabel}
         </span>
 
         <div className="flex items-center">
           {isLoading ? (
-            <Loader2 size={16} className="animate-spin text-gray-400 ml-2" />
+            <MiniSpinner size={16} className="ml-2" />
           ) : clearable && value && !disabled ? (
             <X
               size={16}

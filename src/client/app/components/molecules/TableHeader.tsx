@@ -2,6 +2,7 @@
 
 import React from "react";
 import { RefreshCw } from "lucide-react";
+import MiniSpinner from "../feedback/MiniSpinner";
 
 interface TableHeaderProps {
   title?: string;
@@ -47,21 +48,21 @@ const TableHeader: React.FC<TableHeaderProps> = ({
               type="button"
               onClick={onRefresh}
               disabled={isRefreshing}
-              className={`group btn-secondary h-10 w-10 border-2 border-blue-200 p-0 font-bold text-blue-700 shadow-sm transition-all hover:bg-blue-200 ${
+              className={`group inline-flex h-10 items-center justify-center rounded-md border-2 border-blue-200 px-3 font-bold text-blue-700 shadow-sm transition-all hover:bg-blue-200 ${
                 isRefreshing ? "bg-blue-200 text-blue-900 shadow-md" : "bg-blue-100/80"
               }`}
               aria-label="Refresh table data"
               aria-busy={isRefreshing}
             >
-              <RefreshCw
-                size={18}
-                strokeWidth={2.6}
-                className={
-                  isRefreshing
-                    ? "animate-[spin_0.7s_linear_infinite]"
-                    : "transition-transform duration-200 group-hover:rotate-45"
-                }
-              />
+              {isRefreshing ? (
+                <MiniSpinner size={16} />
+              ) : (
+                <RefreshCw
+                  size={18}
+                  strokeWidth={2.6}
+                  className="transition-transform duration-200 group-hover:rotate-45"
+                />
+              )}
             </button>
           )}
         </div>

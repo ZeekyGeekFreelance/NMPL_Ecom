@@ -3,7 +3,7 @@
 import React from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import CustomLoader from "../feedback/CustomLoader";
+import LoadingDots from "../feedback/LoadingDots";
 
 const getNestedValue = (obj: any, key: string): any => {
   return key
@@ -220,7 +220,9 @@ const TableBody: React.FC<TableBodyProps> = ({
           {isLoading ? (
             <tr>
               <td colSpan={columns.length + 1} className="text-center py-16">
-                <CustomLoader />
+                <div className="flex justify-center">
+                  <LoadingDots label="Loading" align="center" />
+                </div>
               </td>
             </tr>
           ) : data.length > 0 ? (

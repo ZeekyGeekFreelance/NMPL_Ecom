@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Search, X, Clock, ArrowRight, Loader2 } from "lucide-react";
+import { Search, X, Clock, ArrowRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import useStorage from "@/app/hooks/state/useStorage";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,6 +12,8 @@ import { Product } from "@/app/types/productTypes";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { useBackendReady } from "@/app/hooks/network/useBackendReady";
 import { getProductListingPriceSummary } from "@/app/lib/productPricing";
+import { beginNavigationActivity } from "@/app/lib/activityIndicator";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 type SearchFormValues = {
   searchQuery: string;
@@ -143,6 +145,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
       skip: !shouldSearch || !backendReady,
       fetchPolicy: "cache-first",
       nextFetchPolicy: "cache-first",
+      context: { skipGlobalActivity: true },
     }
   );
 
@@ -188,6 +191,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
     const query = data.searchQuery.trim();
     if (query) {
       persistQuery(query);
+      beginNavigationActivity();
       router.push(`/shop?search=${encodeURIComponent(query)}`);
     }
 
@@ -202,6 +206,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
   const handleSelectProduct = (product: Product) => {
     persistQuery(product.name);
     setIsFocused(false);
+    beginNavigationActivity();
     router.push(`/product/${product.slug}`);
   };
 
@@ -295,8 +300,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                   </p>
                   {isSearching && (
                     <div className="inline-flex items-center gap-1 text-xs text-gray-500">
-                      <Loader2 size={12} className="animate-spin" />
-                      Searching
+                      <LoadingDots label="Searching" />
                     </div>
                   )}
                 </div>

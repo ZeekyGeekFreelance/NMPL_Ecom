@@ -11,6 +11,7 @@ const TITLE_MAP: Record<string, string> = {
   inventory: "Inventory",
   analytics: "Analytics",
   reports: "Reports",
+  gst: "GST",
   users: "Users",
   dealers: "Dealers",
   products: "Products",

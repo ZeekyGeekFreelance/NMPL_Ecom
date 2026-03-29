@@ -76,6 +76,11 @@ const ADMIN_LINKS: NavLink[] = [
     roles: ["ADMIN", "SUPERADMIN"],
   },
   {
+    href: "/dashboard/gst",
+    label: "GST",
+    roles: ["ADMIN", "SUPERADMIN"],
+  },
+  {
     href: "/dashboard/dealers",
     label: "Dealers",
     roles: ["ADMIN", "SUPERADMIN"],
