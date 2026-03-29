@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, useTransition } from "react";
 import { useAddToCartMutation } from "@/app/store/apis/CartApi";
 import { useAuth } from "@/app/hooks/useAuth";
 import useToast from "@/app/hooks/ui/useToast";
@@ -9,6 +10,7 @@ import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import Link from "next/link";
 import { isCustomerDisplayRole, resolveDisplayRole } from "@/app/lib/userRole";
 import { setPendingAuthIntent } from "@/app/lib/authIntent";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface ProductInfoProps {
   id: string;
@@ -38,10 +40,18 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const searchParams = useSearchParams();
   const formatPrice = useFormatPrice();
   const [addToCart, { isLoading }] = useAddToCartMutation();
+  const [pendingAction, setPendingAction] = useState<"add" | "buy" | null>(null);
+  const [isRouting, startTransition] = useTransition();
   const displayRole = resolveDisplayRole(user);
   const isCustomerUser = isAuthenticated && isCustomerDisplayRole(displayRole);
   const isGuest = !isAuthenticated;
   const showDealerSignupNudge = !isAuthenticated || displayRole === "USER";
+
+  useEffect(() => {
+    if (!isLoading && !isRouting) {
+      setPendingAction(null);
+    }
+  }, [isLoading, isRouting]);
 
   const getCurrentPathWithSearch = () => {
     const query = searchParams?.toString();
@@ -96,6 +106,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
 
     if (isGuest) {
       const returnTo = getCurrentPathWithSearch();
+      setPendingAction("add");
       setPendingAuthIntent({
         actionType: "add_to_cart",
         productId: id,
@@ -104,10 +115,13 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
         returnTo,
       });
       showToast("Please sign in to continue with your cart action.", "info");
-      router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`);
+      startTransition(() => {
+        router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`);
+      });
       return;
     }
 
+    setPendingAction("add");
     const isAdded = await addSelectedVariantToCart();
     if (!isAdded) {
       return;
@@ -131,6 +145,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
 
     if (isGuest) {
       const returnTo = getCurrentPathWithSearch();
+      setPendingAction("buy");
       setPendingAuthIntent({
         actionType: "buy_now",
         productId: id,
@@ -139,7 +154,9 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
         returnTo,
       });
       showToast("Please sign in to continue with checkout.", "info");
-      router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`);
+      startTransition(() => {
+        router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`);
+      });
       return;
     }
 
@@ -156,7 +173,10 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
       returnTo: "/cart",
     });
 
-    router.push("/cart");
+    setPendingAction("buy");
+    startTransition(() => {
+      router.push("/cart");
+    });
   };
 
   const effectivePrice = selectedVariant
@@ -177,6 +197,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const selectedSku = selectedVariant?.sku || variants[0]?.sku || "N/A";
   const cartActionAllowed = !!selectedVariant;
   const canUseCart = !isAuthLoading && cartActionAllowed && (isGuest || isCustomerUser);
+  const isActionPending = isLoading || isRouting;
 
   const colorValues = new Set<string>();
   const sizeValues = new Set<string>();
@@ -223,39 +244,63 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
     return colorMap[colorName.toLowerCase()] || "#6b7280";
   };
 
-  const variantMatchesSelections = (
+  const getVariantAttributeValue = (
     variant: Product["variants"][0],
-    selections: Record<string, string>
+    attributeName: string
   ) =>
-    Object.entries(selections).every(([attributeName, attributeValue]) =>
-      variant.attributes.some(
-        (attribute) =>
-          attribute.attribute.name === attributeName &&
-          attribute.value.value === attributeValue
-      )
+    variant.attributes.find(
+      (attribute) => attribute.attribute.name === attributeName
+    )?.value.value ?? null;
+
+  const isVariantAvailable = (variant: Product["variants"][0]) =>
+    typeof variant.stock !== "number" || variant.stock > 0;
+
+  const getPreferredVariantForOption = (attributeName: string, value: string) => {
+    const candidates = variants.filter(
+      (variant) => getVariantAttributeValue(variant, attributeName) === value
     );
 
-  const isOptionAvailable = (attributeName: string, value: string) => {
-    const intendedSelections = {
-      ...selectedAttributes,
-      [attributeName]: value,
-    };
+    if (!candidates.length) {
+      return null;
+    }
 
+    const availableCandidates = candidates.filter((variant) =>
+      isVariantAvailable(variant)
+    );
+    const pool = availableCandidates.length > 0 ? availableCandidates : candidates;
+
+    return pool
+      .map((variant) => ({
+        variant,
+        score: Object.entries(selectedAttributes).reduce(
+          (total, [selectedAttributeName, selectedValue]) => {
+            if (selectedAttributeName === attributeName) {
+              return total;
+            }
+
+            return (
+              total +
+              (getVariantAttributeValue(variant, selectedAttributeName) === selectedValue
+                ? 1
+                : 0)
+            );
+          },
+          0
+        ),
+      }))
+      .sort((left, right) => right.score - left.score)[0]?.variant ?? null;
+  };
+
+  const isOptionAvailable = (attributeName: string, value: string) => {
     return variants.some(
-      (variant) => variantMatchesSelections(variant, intendedSelections)
+      (variant) =>
+        getVariantAttributeValue(variant, attributeName) === value &&
+        isVariantAvailable(variant)
     );
   };
 
   const getOptionDisplayPrice = (attributeName: string, value: string) => {
-    const intendedSelections = {
-      ...selectedAttributes,
-      [attributeName]: value,
-    };
-
-    const matchedVariant =
-      variants.find((variant) =>
-        variantMatchesSelections(variant, intendedSelections)
-      );
+    const matchedVariant = getPreferredVariantForOption(attributeName, value);
 
     if (!matchedVariant) {
       return null;
@@ -297,7 +342,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
               </>
             )}
           </div>
-          <p className="text-sm font-medium text-emerald-700">inclusive of all taxes</p>
+          <p className="text-sm font-medium text-emerald-700">subject to applicable taxes</p>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
             <span>SKU: {selectedSku}</span>
             {colorValues.size > 0 && (
@@ -448,36 +493,48 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
         <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
           <button
             type="button"
-            disabled={!canUseCart || isLoading}
+            disabled={!canUseCart || isActionPending}
             onClick={handleAddToCart}
             className={`h-12 w-full rounded-md px-4 text-sm font-semibold uppercase tracking-[0.08em] transition ${
-              isLoading || !canUseCart
+              isActionPending || !canUseCart
                 ? "cursor-not-allowed bg-slate-300 text-slate-500"
                 : "text-white"
             }`}
-            style={(!isLoading && canUseCart) ? { backgroundColor: 'var(--color-primary)' } : {}}
+            style={(!isActionPending && canUseCart) ? { backgroundColor: 'var(--color-primary)' } : {}}
+            aria-busy={pendingAction === "add" && isActionPending}
           >
-            {isLoading
-              ? "Adding..."
-              : isAuthLoading
-              ? "Checking..."
-              : canUseCart
-              ? "Add to Cart"
-              : !isGuest && !isCustomerUser
-              ? "Cart Unavailable"
-              : "Select a Variant"}
+            {pendingAction === "add" && isActionPending ? (
+              <span className="inline-flex items-center justify-center">
+                <MiniSpinner size={16} />
+              </span>
+            ) : isAuthLoading ? (
+              "Checking..."
+            ) : canUseCart ? (
+              "Add to Cart"
+            ) : !isGuest && !isCustomerUser ? (
+              "Cart Unavailable"
+            ) : (
+              "Select a Variant"
+            )}
           </button>
           <button
             type="button"
-            disabled={!canUseCart || isLoading}
+            disabled={!canUseCart || isActionPending}
             onClick={handleBuyNow}
             className={`h-12 w-full rounded-md border px-4 text-sm font-semibold uppercase tracking-[0.08em] transition ${
-              canUseCart && !isLoading
+              canUseCart && !isActionPending
                 ? "border-slate-300 bg-white text-slate-900 hover:border-slate-900"
                 : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
             }`}
+            aria-busy={pendingAction === "buy" && isActionPending}
           >
-            Buy Now
+            {pendingAction === "buy" && isActionPending ? (
+              <span className="inline-flex items-center justify-center">
+                <MiniSpinner size={16} />
+              </span>
+            ) : (
+              "Buy Now"
+            )}
           </button>
         </div>
 

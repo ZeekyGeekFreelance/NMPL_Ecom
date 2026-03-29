@@ -84,6 +84,7 @@ const HydratedProductSection: React.FC<HydratedProductSectionProps> = ({
     nextFetchPolicy: "cache-first",
     // Partial data surfaced alongside errors for resilience.
     errorPolicy: "all",
+    context: { skipGlobalActivity: true },
     // Dealer catalog polling (approved dealers only — returns 0 for everyone
     // else so no unnecessary requests are made).
     pollInterval,

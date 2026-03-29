@@ -36,7 +36,6 @@ export const GET_PRODUCTS = gql`
         category { id slug name }
       }
       hasMore
-      totalCount
     }
   }
 `;
@@ -58,7 +57,7 @@ export const GET_SINGLE_PRODUCT = gql`
     product(slug: $slug) {
       id name slug isNew isFeatured isTrending isBestSeller description
       variants {
-        id sku price retailPrice images barcode
+        id sku price retailPrice images barcode stock lowStockThreshold
         attributes {
           id
           attribute { id name slug }

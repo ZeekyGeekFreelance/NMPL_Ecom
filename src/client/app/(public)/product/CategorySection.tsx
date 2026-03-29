@@ -8,6 +8,7 @@ import { GET_PRODUCTS } from "../../gql/Product";
 import SkeletonLoader from "@/app/components/feedback/SkeletonLoader";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 import { useBackendReady } from "@/app/hooks/network/useBackendReady";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface CategorySectionProps {
   categoryId: string;
@@ -26,6 +27,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   const { data, loading, error, fetchMore } = useQuery(GET_PRODUCTS, {
     variables: { first: pageSize, skip: 0, filters: { categoryId } },
     fetchPolicy: "cache-and-network",
+    context: { skipGlobalActivity: true },
     pollInterval: dealerCatalogPollInterval,
     skip: !backendReady,
   });
@@ -118,7 +120,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({
             className="bg-primary text-white px-8 py-3 rounded transition-colors duration-300 font-medium"
             disabled={loading}
           >
-            {loading ? "Loading..." : "Show More"}
+            {loading ? <MiniSpinner size={16} /> : "Show More"}
           </button>
         </div>
       )}

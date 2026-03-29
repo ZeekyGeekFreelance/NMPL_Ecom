@@ -12,10 +12,23 @@ import ProductDetailSkeletonLoader from "@/app/components/feedback/ProductDetail
 import { Product } from "@/app/types/productTypes";
 import { useDealerCatalogPollInterval } from "@/app/hooks/network/useDealerCatalogPollInterval";
 
-const getDefaultVariant = (variants: Product["variants"]) =>
-  variants[0] || null;
-
 const isBrandAttribute = (name: string) => name.trim().toLowerCase() === "brand";
+
+const isVariantAvailable = (variant: Product["variants"][0] | null | undefined) =>
+  typeof variant?.stock !== "number" || variant.stock > 0;
+
+const getDefaultVariant = (variants: Product["variants"]) =>
+  variants.find((variant) => isVariantAvailable(variant)) || variants[0] || null;
+
+const getVariantAttributeValue = (
+  variant: Product["variants"][0],
+  attributeName: string
+) =>
+  variant.attributes.find(
+    (attribute) =>
+      !isBrandAttribute(attribute.attribute.name) &&
+      attribute.attribute.name === attributeName
+  )?.value.value ?? null;
 
 const buildVariantSelectionMap = (variant: Product["variants"][0] | null) => {
   if (!variant) {
@@ -30,6 +43,48 @@ const buildVariantSelectionMap = (variant: Product["variants"][0] | null) => {
     acc[attr.attribute.name] = attr.value.value;
     return acc;
   }, {});
+};
+
+const findClosestAvailableVariant = (params: {
+  variants: Product["variants"];
+  attributeName: string;
+  value: string;
+  currentSelections: Record<string, string>;
+}) => {
+  const candidates = params.variants.filter(
+    (variant) =>
+      getVariantAttributeValue(variant, params.attributeName) === params.value
+  );
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  const sellableCandidates = candidates.filter((variant) =>
+    isVariantAvailable(variant)
+  );
+  const pool = sellableCandidates.length > 0 ? sellableCandidates : candidates;
+
+  return pool
+    .map((variant) => ({
+      variant,
+      score: Object.entries(params.currentSelections).reduce(
+        (total, [attributeName, attributeValue]) => {
+          if (attributeName === params.attributeName) {
+            return total;
+          }
+
+          return (
+            total +
+            (getVariantAttributeValue(variant, attributeName) === attributeValue
+              ? 1
+              : 0)
+          );
+        },
+        0
+      ),
+    }))
+    .sort((left, right) => right.score - left.score)[0]?.variant ?? null;
 };
 
 interface ProductDetailsClientProps {
@@ -156,33 +211,23 @@ const ProductDetailsClient = ({
 
   const handleVariantChange = (attributeName: string, value: string) => {
     const baselineSelectionMap = {
-      ...buildVariantSelectionMap(
-        selectedVariant || getDefaultVariant(product.variants)
-      ),
+      ...buildVariantSelectionMap(selectedVariant || getDefaultVariant(product.variants)),
       ...selectedAttributes,
     };
-    const nextSelections = {
-      ...baselineSelectionMap,
-      [attributeName]: value,
-    };
 
-    const exactMatch = product.variants.find((variant) => {
-      return Object.entries(nextSelections).every(
-        ([attributeKey, attributeValue]) =>
-          variant.attributes.some(
-            (attribute) =>
-              attribute.attribute.name === attributeKey &&
-              attribute.value.value === attributeValue
-          )
-      );
+    const nextVariant = findClosestAvailableVariant({
+      variants: product.variants,
+      attributeName,
+      value,
+      currentSelections: baselineSelectionMap,
     });
 
-    if (!exactMatch) {
+    if (!nextVariant) {
       return;
     }
 
-    setSelectedAttributes(nextSelections);
-    setSelectedVariant(exactMatch);
+    setSelectedVariant(nextVariant);
+    setSelectedAttributes(buildVariantSelectionMap(nextVariant));
   };
 
   const selectedVariantImages =

@@ -1,4 +1,5 @@
 import React from "react";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface AddToCartButtonProps {
   isLoading: boolean;
@@ -14,9 +15,8 @@ const AddToCartButton: React.FC<AddToCartButtonProps> = ({
   const isDisabled = isLoading || !selectedVariant;
 
   const buttonText = isLoading ? (
-    <span className="flex items-center justify-center gap-2">
-      <span className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-      Adding to Cart...
+    <span className="flex items-center justify-center">
+      <MiniSpinner size={18} />
     </span>
   ) : selectedVariant ? (
     "Add to Cart"

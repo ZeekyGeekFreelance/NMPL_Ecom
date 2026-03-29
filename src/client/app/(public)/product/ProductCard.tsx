@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { generateProductPlaceholder } from "@/app/utils/placeholderImage";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
 import { getProductListingPriceSummary } from "@/app/lib/productPricing";
+import { beginNavigationActivity } from "@/app/lib/activityIndicator";
 
 interface ProductCardProps {
   product: Product;
@@ -18,10 +19,22 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { trackInteraction } = useTrackInteraction();
   const router = useRouter();
   const formatPrice = useFormatPrice();
+  const productHref = `/product/${product.slug}`;
 
   const handleClick = () => {
     trackInteraction(product.id, "click");
-    router.push(`/product/${product.slug}`);
+    beginNavigationActivity();
+    router.push(productHref);
+  };
+
+  const handleLinkClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    trackInteraction(product.id, "click");
+    beginNavigationActivity();
+  };
+
+  const prefetchProductRoute = () => {
+    router.prefetch(productHref);
   };
 
   const displayImage =
@@ -54,10 +67,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       className="group bg-white rounded-sm border border-gray-100 overflow-hidden
        relative h-full flex flex-col"
       onClick={handleClick}
+      onMouseEnter={prefetchProductRoute}
+      onTouchStart={prefetchProductRoute}
+      onFocus={prefetchProductRoute}
     >
       {/* Image Container */}
       <div className="relative w-full h-48 sm:h-[170px]  bg-gray-50 flex items-center justify-center overflow-hidden">
-        <Link href={`/product/${product.slug}`} className="block w-full h-full">
+        <Link
+          href={productHref}
+          className="block w-full h-full"
+          onClick={handleLinkClick}
+        >
           <Image
             src={
               displayImage
@@ -89,7 +109,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Action Buttons */}
         <div className="absolute top-2 right-2 flex space-x-1 z-10">
-          <Link href={`/product/${product.slug}`}>
+          <Link href={productHref} onClick={handleLinkClick}>
             <div
               className="bg-white/90 backdrop-blur-sm rounded-full p-1.5 shadow-sm "
               aria-label="View product details"
@@ -102,7 +122,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
 
       <div className="p-3 sm:p-4 lg:p-5 flex flex-col flex-grow">
-        <Link href={`/product/${product.slug}`} className="block flex-grow">
+        <Link
+          href={productHref}
+          className="block flex-grow"
+          onClick={handleLinkClick}
+        >
           <h3 className="font-semibold text-gray-900 text-sm sm:text-sm lg:text-base mb-2 line-clamp-2 leading-snug">
             {product.name}
           </h3>

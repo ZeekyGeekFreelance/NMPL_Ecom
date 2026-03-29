@@ -7,10 +7,10 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useApolloClient, useQuery, NetworkStatus } from "@apollo/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Filter, Loader2 } from "lucide-react";
+import { Package, Filter } from "lucide-react";
 import { GET_PRODUCTS } from "@/app/gql/Product";
 import { Product } from "@/app/types/productTypes";
 import ProductCard from "../product/ProductCard";
@@ -30,6 +30,8 @@ import {
   SortByOption,
 } from "./shopShared";
 import type { ProductConnectionPayload } from "@/app/lib/serverProductQueries";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 const SORT_OPTIONS: Array<{ label: string; value: SortByOption }> = [
   { label: "Relevance", value: "RELEVANCE" },
@@ -43,6 +45,19 @@ const normalizeText = (value: string) =>
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ");
+
+const getFilterSignature = (filters: FilterValues) =>
+  JSON.stringify({
+    search: filters.search || "",
+    sortBy: filters.sortBy || DEFAULT_SORT,
+    categoryId: filters.categoryId || null,
+    minPrice: Number.isFinite(filters.minPrice) ? filters.minPrice : null,
+    maxPrice: Number.isFinite(filters.maxPrice) ? filters.maxPrice : null,
+    isNew: Boolean(filters.isNew),
+    isFeatured: Boolean(filters.isFeatured),
+    isTrending: Boolean(filters.isTrending),
+    isBestSeller: Boolean(filters.isBestSeller),
+  });
 
 const getVariantMinPrice = (product: Product) => {
   const { effectivePrice } = getProductListingPriceSummary(product);
@@ -95,7 +110,6 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
   initialFilters: serverInitialFilters,
   initialConnection,
 }) => {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const apolloClient = useApolloClient();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -146,6 +160,10 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
       ),
     [searchParams]
   );
+  const urlFilterSignature = useMemo(
+    () => getFilterSignature(urlFilters),
+    [urlFilters]
+  );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filters, setFilters] = useState<FilterValues>(serverInitialFilters);
@@ -184,6 +202,7 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
     variables: { first: requestPageSize, skip: 0, filters: serverFilters },
     fetchPolicy: initialConnection.isFallback ? "network-only" : "cache-first",
     nextFetchPolicy: "cache-first",
+    context: { skipGlobalActivity: true },
     pollInterval: dealerCatalogPollInterval,
     notifyOnNetworkStatusChange: false,
     skip: !backendReady,
@@ -204,8 +223,12 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
   }, [queryData]);
 
   useEffect(() => {
-    setFilters(urlFilters);
-  }, [urlFilters]);
+    setFilters((currentFilters) =>
+      getFilterSignature(currentFilters) === urlFilterSignature
+        ? currentFilters
+        : urlFilters
+    );
+  }, [urlFilterSignature, urlFilters]);
 
   useEffect(() => {
     setDisplayedProducts(initialConnection.products);
@@ -257,9 +280,15 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
       }
 
       const nextQuery = query.toString();
-      router.replace(nextQuery ? `/shop?${nextQuery}` : "/shop");
+      const nextUrl = nextQuery ? `/shop?${nextQuery}` : "/shop";
+      if (typeof window !== "undefined") {
+        const currentUrl = `${window.location.pathname}${window.location.search}`;
+        if (currentUrl !== nextUrl) {
+          window.history.replaceState(window.history.state, "", nextUrl);
+        }
+      }
     },
-    [router]
+    []
   );
 
   const applyFilters = useCallback(
@@ -330,8 +359,18 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
   };
 
   const handleReset = useCallback(() => {
-    router.replace("/shop");
-  }, [router]);
+    applyFilters({
+      search: "",
+      sortBy: DEFAULT_SORT,
+      categoryId: undefined,
+      minPrice: undefined,
+      maxPrice: undefined,
+      isNew: undefined,
+      isFeatured: undefined,
+      isTrending: undefined,
+      isBestSeller: undefined,
+    });
+  }, [applyFilters]);
 
   const rankedAndSortedProducts = useMemo(() => {
     const query = filters.search || "";
@@ -420,8 +459,7 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
                     <p className="text-sm text-gray-600">
                       {isCatalogBootstrapping ? (
                         <span className="inline-flex items-center gap-2 font-medium text-gray-700">
-                          <Loader2 size={14} className="animate-spin" />
-                          Loading catalog...
+                          <LoadingDots label="Loading" />
                         </span>
                       ) : (
                         <>
@@ -537,8 +575,7 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
                       >
                         {isFetchingMore ? (
                           <>
-                            <Loader2 size={16} className="animate-spin" />
-                            Loading...
+                            <MiniSpinner size={16} />
                           </>
                         ) : (
                           "Load More Catalog"
@@ -570,10 +607,8 @@ const ShopPageClient: React.FC<ShopPageClientProps> = ({
                     <div className="mt-12 pb-8 text-center">
                       {isFetchingMore ? (
                         <div className="flex items-center justify-center gap-3">
-                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
-                          <span className="text-gray-600">
-                            Loading more products...
-                          </span>
+                          <MiniSpinner size={22} />
+                          <LoadingDots label="Loading" />
                         </div>
                       ) : (
                         <button

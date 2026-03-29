@@ -41,7 +41,11 @@ const CategorySearchDropdown: React.FC<CategorySearchDropdownProps> = ({
 
   const [fetchCategories, { data, loading }] = useLazyQuery(
     GET_CATEGORIES_SEARCH,
-    { fetchPolicy: "cache-first", nextFetchPolicy: "cache-first" }
+    {
+      fetchPolicy: "cache-first",
+      nextFetchPolicy: "cache-first",
+      context: { skipGlobalActivity: true },
+    }
   );
 
   const debouncedFetch = useMemo(
