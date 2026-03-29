@@ -78,8 +78,6 @@ const cleanupDevData = async (): Promise<void> => {
   console.warn("[seed-dev] SEED_RESET=true detected. Running deleteMany cleanup for dev database.");
 
   // Delete in reverse dependency order to satisfy foreign keys.
-  await prisma.chatMessage.deleteMany();
-  await prisma.chat.deleteMany();
   await prisma.report.deleteMany();
   await prisma.interaction.deleteMany();
   await prisma.cartEvent.deleteMany();

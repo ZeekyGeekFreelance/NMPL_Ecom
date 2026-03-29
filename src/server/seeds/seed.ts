@@ -7,8 +7,6 @@ async function cleanup() {
   console.log("ðŸ§¹ Cleaning up existing data...");
 
   // Delete in reverse order of dependencies to respect foreign key constraints
-  await prisma.chatMessage.deleteMany();
-  await prisma.chat.deleteMany();
   await prisma.report.deleteMany();
   await prisma.interaction.deleteMany();
   await prisma.cartEvent.deleteMany();

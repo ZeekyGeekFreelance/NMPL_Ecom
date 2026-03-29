@@ -26,8 +26,6 @@ model User {
   addresses                   Address[]
   carts                       Cart[]
   cartEvents                  CartEvent[]
-  chats                       Chat[]               @relation("UserChats")
-  messages                    ChatMessage[]
   creditLedgerEntries         DealerCreditLedger[] @relation("DealerCreditLedger")
   dealerPriceMappings         DealerPriceMapping[]
   dealerProfile               DealerProfile?
@@ -72,6 +70,7 @@ model Product {
   slug         String           @unique
   id           String           @id @default(uuid())
   categoryId   String?
+  gstId        String?
   isBestSeller Boolean          @default(false)
   isFeatured   Boolean          @default(false)
   isNew        Boolean          @default(false)
@@ -80,10 +79,13 @@ model Product {
   isDeleted    Boolean          @default(false)
   interactions Interaction[]
   category     Category?        @relation(fields: [categoryId], references: [id])
+  gst          Gst?             @relation(fields: [gstId], references: [id])
+  orderItems   OrderItem[]
   variants     ProductVariant[]
 
   @@index([name, slug])
   @@index([categoryId])
+  @@index([gstId])
   @@index([categoryId, createdAt])
   @@index([createdAt])
   @@index([isNew, createdAt])
@@ -289,17 +291,23 @@ model OrderQuotationLog {
 }
 
 model OrderItem {
-  quantity  Int
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  price     Float
-  id        String         @id @default(uuid())
-  orderId   String
-  variantId String
-  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  quantity          Int
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  price             Float
+  gstRateAtPurchase Float          @default(0)
+  taxAmount         Float          @default(0)
+  total             Float          @default(0)
+  id                String         @id @default(uuid())
+  orderId           String
+  productId         String
+  variantId         String
+  order             Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product        @relation(fields: [productId], references: [id])
+  variant           ProductVariant @relation(fields: [variantId], references: [id])
 
   @@index([orderId, variantId])
+  @@index([productId])
 }
 
 model Payment {
@@ -633,30 +641,16 @@ model Section {
   images         String[]     @default([])
 }
 
-model Chat {
-  id        String        @id @default(uuid())
-  status    CHAT_STATUS   @default(OPEN)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  userId    String
-  user      User          @relation("UserChats", fields: [userId], references: [id], onDelete: Cascade)
-  messages  ChatMessage[]
+model Gst {
+  id        String    @id @default(uuid())
+  name      String
+  rate      Float     @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
 
-  @@index([userId])
-}
-
-model ChatMessage {
-  id        String   @id @default(uuid())
-  chatId    String
-  senderId  String
-  content   String?
-  createdAt DateTime @default(now())
-  type      String   @default("TEXT")
-  url       String?
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
-
-  @@index([chatId, senderId])
+  @@index([isActive, rate])
 }
 
 enum ROLE {
@@ -704,11 +698,6 @@ enum CART_STATUS {
   ACTIVE
   ABANDONED
   CONVERTED
-}
-
-enum CHAT_STATUS {
-  OPEN
-  RESOLVED
 }
 
 enum ORDER_CUSTOMER_ROLE {
