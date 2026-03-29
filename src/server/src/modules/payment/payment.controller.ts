@@ -210,6 +210,16 @@ export class PaymentController {
       throw new AppError(400, "Missing required payment verification fields");
     }
 
+    const order = await this.comprehensivePaymentService.getOrderById(orderId);
+    if (!order) {
+      throw new AppError(404, "Order not found");
+    }
+
+    const isAdmin = req.user?.role === "ADMIN" || req.user?.role === "SUPERADMIN";
+    if (!isAdmin && order.userId !== userId) {
+      throw new AppError(403, "Access denied to this order");
+    }
+
     // Verify payment with Razorpay
     const verification = await this.razorpayGatewayService.verifyPayment({
       orderId,

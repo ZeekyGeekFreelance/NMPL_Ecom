@@ -45,7 +45,8 @@ export class RazorpayGatewayService {
 
     // Enable mock mode if credentials are not configured or explicitly set
     this.isMockMode =
-      config.payment.razorpayMockMode || !liveKeyId || !liveKeySecret;
+      !config.isProduction &&
+      (config.payment.razorpayMockMode || !liveKeyId || !liveKeySecret);
     this.razorpayKeyId = this.isMockMode ? (mockKeyId || liveKeyId) : liveKeyId;
     this.razorpayKeySecret = this.isMockMode
       ? (mockKeySecret || liveKeySecret)
@@ -126,6 +127,9 @@ export class RazorpayGatewayService {
       return this.verifyMockPayment(request);
 
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       this.logsService.error("Failed to verify Razorpay payment", {
         orderId: request.orderId,
         razorpayPaymentId: request.razorpayPaymentId,
@@ -220,7 +224,18 @@ export class RazorpayGatewayService {
       .update(body.toString())
       .digest("hex");
 
-    return expectedSignature === signature;
+    try {
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+      const providedBuffer = Buffer.from(signature, "hex");
+
+      if (expectedBuffer.length !== providedBuffer.length) {
+        return false;
+      }
+
+      return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+    } catch {
+      return false;
+    }
   }
 
   /**
