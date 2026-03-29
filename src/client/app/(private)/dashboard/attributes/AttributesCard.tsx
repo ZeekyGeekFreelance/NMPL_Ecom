@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Plus, Tag, Trash2 } from "lucide-react";
 import { useState } from "react";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface AttributeCardProps {
   attribute: {
@@ -178,7 +179,7 @@ const AttributeCard = ({
                 className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 aria-label="Add value"
               >
-                {isCreatingValue ? "Adding..." : "Add"}
+                {isCreatingValue ? <MiniSpinner size={16} /> : "Add"}
               </button>
             </div>
           </div>

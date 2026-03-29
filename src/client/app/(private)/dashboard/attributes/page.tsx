@@ -1,6 +1,5 @@
 "use client";
 import React from "react";
-import { Loader2 } from "lucide-react";
 import AttributeForm from "./AttributeForm";
 import AttributeAssignment from "./AttributeAssignment";
 import DashboardHeader from "./DashboardHeader";
@@ -8,14 +7,15 @@ import { useGetAllAttributesQuery } from "@/app/store/apis/AttributeApi";
 import AttributesBoardView from "./AttributesBoardView";
 import { withAuth } from "@/app/components/HOC/WithAuth";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
 
 const AttributesDashboard: React.FC = () => {
   const { data, isLoading, error } = useGetAllAttributesQuery(undefined);
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <Loader2 className="animate-spin text-primary" size={32} />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <LoadingDots label="Loading attributes" align="center" className="text-base" />
       </div>
     );
   }

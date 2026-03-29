@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Plus } from "lucide-react";
 import useToast from "@/app/hooks/ui/useToast";
 import { useCreateAttributeMutation } from "@/app/store/apis/AttributeApi";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 const AttributeForm: React.FC<any> = () => {
   const { showToast } = useToast();
@@ -57,8 +58,8 @@ const AttributeForm: React.FC<any> = () => {
           disabled={isCreatingAttribute || !newAttribute.name}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Plus size={18} />
-          {isCreatingAttribute ? "Creating..." : "Create Attribute"}
+          {isCreatingAttribute ? <MiniSpinner size={16} /> : <Plus size={18} />}
+          <span>Create Attribute</span>
         </button>
       </form>
     </div>
