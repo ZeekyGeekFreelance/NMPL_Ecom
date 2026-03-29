@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { ShoppingBag, Package, Truck, Zap } from "lucide-react";
 import { PLATFORM_NAME } from "@/app/lib/constants/config";
+import SpokeSpinner from "@/app/components/feedback/SpokeSpinner";
 
 const CustomLoader = () => {
   const loadingSteps = [
@@ -92,19 +93,14 @@ const CustomLoader = () => {
           transition={{ duration: 0.5, delay: 0.4 }}
           className="mb-8"
         >
-          <div className="relative">
+          <div className="relative inline-flex items-center justify-center">
             <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              className="w-16 h-16 border-4 rounded-full mx-auto"
-              style={{ borderColor: 'var(--color-primary-light)', borderTopColor: 'var(--color-primary)' }}
+              animate={{ scale: [0.94, 1.08, 0.94] }}
+              transition={{ duration: 1.8, repeat: Infinity }}
+              className="absolute inset-0 rounded-full"
+              style={{ backgroundColor: "rgba(29, 52, 97, 0.06)" }}
             />
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="absolute inset-0 w-16 h-16 border-4 rounded-full mx-auto"
-              style={{ borderColor: 'var(--color-border)' }}
-            />
+            <SpokeSpinner size={68} />
           </div>
         </motion.div>
 

@@ -1,91 +1,73 @@
 "use client";
-import { useEffect, useRef } from "react";
-import NProgress from "nprogress";
-import { usePathname } from "next/navigation";
-import {
-  GLOBAL_ACTIVITY_END_EVENT,
-  GLOBAL_ACTIVITY_START_EVENT,
-} from "@/app/lib/activityIndicator";
+import { useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { beginNavigationActivity, endNavigationActivity } from "@/app/lib/activityIndicator";
 
 const TopLoadingBar: React.FC = () => {
   const pathname = usePathname();
-  const activeTokensRef = useRef<Set<string>>(new Set());
+  const searchParams = useSearchParams();
+  const routeKey = `${pathname}?${searchParams.toString()}`;
 
   useEffect(() => {
-    NProgress.configure({ showSpinner: false, speed: 400, minimum: 0.2 });
-  }, []);
+    endNavigationActivity();
+  }, [routeKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    const startActivity = (token: string) => {
-      const tokens = activeTokensRef.current;
-      const wasIdle = tokens.size === 0;
-      tokens.add(token);
-      if (wasIdle) {
-        NProgress.start();
-      }
-    };
-
-    const finishActivity = (token: string) => {
-      const tokens = activeTokensRef.current;
-      tokens.delete(token);
-      if (tokens.size === 0) {
-        NProgress.done();
-      }
-    };
-
-    const handleStart = (event: Event) => {
-      const typedEvent = event as CustomEvent<{ token?: string }>;
-      const token = typedEvent.detail?.token;
-      if (!token) {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
         return;
       }
-      startActivity(token);
-    };
 
-    const handleEnd = (event: Event) => {
-      const typedEvent = event as CustomEvent<{ token?: string }>;
-      const token = typedEvent.detail?.token;
-      if (!token) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
         return;
       }
-      finishActivity(token);
+
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      if (
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download") ||
+        anchor.getAttribute("rel") === "external"
+      ) {
+        return;
+      }
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) {
+        return;
+      }
+
+      const currentUrl = new URL(window.location.href);
+      if (
+        nextUrl.pathname === currentUrl.pathname &&
+        nextUrl.search === currentUrl.search
+      ) {
+        return;
+      }
+
+      beginNavigationActivity();
     };
 
-    window.addEventListener(GLOBAL_ACTIVITY_START_EVENT, handleStart);
-    window.addEventListener(GLOBAL_ACTIVITY_END_EVENT, handleEnd);
-
+    window.addEventListener("click", handleDocumentClick, true);
     return () => {
-      window.removeEventListener(GLOBAL_ACTIVITY_START_EVENT, handleStart);
-      window.removeEventListener(GLOBAL_ACTIVITY_END_EVENT, handleEnd);
-      activeTokensRef.current.clear();
-      NProgress.done();
+      window.removeEventListener("click", handleDocumentClick, true);
     };
   }, []);
-
-  useEffect(() => {
-    const routeToken = `route-${pathname}-${Date.now()}`;
-    activeTokensRef.current.add(routeToken);
-    NProgress.start();
-
-    const timer = setTimeout(() => {
-      activeTokensRef.current.delete(routeToken);
-      if (activeTokensRef.current.size === 0) {
-        NProgress.done();
-      }
-    }, 400); // Match NProgress speed
-
-    return () => {
-      clearTimeout(timer);
-      activeTokensRef.current.delete(routeToken);
-      if (activeTokensRef.current.size === 0) {
-        NProgress.done();
-      }
-    };
-  }, [pathname]);
 
   return null;
 };

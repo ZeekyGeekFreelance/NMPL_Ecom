@@ -1,8 +1,5 @@
-"use client";
-import CustomLoader from "./components/feedback/CustomLoader";
+import CustomLoader from "@/app/components/feedback/CustomLoader";
 
-const GlobalLoading = () => {
+export default function RootLoading() {
   return <CustomLoader />;
-};
-
-export default GlobalLoading;
+}
