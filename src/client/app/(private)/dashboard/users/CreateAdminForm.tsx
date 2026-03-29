@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Controller, UseFormReturn } from "react-hook-form";
-import { UserPlus, Mail, User, Lock, Phone, FileText, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Mail, User, Lock, Phone, FileText } from "lucide-react";
 import {
   normalizeEmailValue,
   normalizePhoneDigits,
@@ -12,6 +12,8 @@ import {
   validatePasswordPolicy,
   validateTenDigitPhone,
 } from "@/app/lib/validators/common";
+import PasswordVisibilityToggle from "@/app/components/atoms/PasswordVisibilityToggle";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 export interface CreateAdminFormData {
   name: string;
@@ -189,7 +191,7 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
               <input
                 {...field}
                 type={showPassword ? "text" : "password"}
-                className={`w-full pl-10 p-3 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
+                className={`w-full pl-10 pr-14 p-3 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
                   fieldState.error
                     ? "border border-red-500 bg-red-50 focus:ring-red-200"
                     : "border border-gray-300 focus:ring-blue-500"
@@ -199,14 +201,12 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
             )}
           />
           <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
-          <button
-            type="button"
-            onClick={() => setShowPassword((previous) => !previous)}
-            className="absolute right-3 top-3.5 text-gray-500 hover:text-gray-700"
-            aria-label={showPassword ? "Hide password" : "Show password"}
-          >
-            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+          <PasswordVisibilityToggle
+            visible={showPassword}
+            onToggle={() => setShowPassword((previous) => !previous)}
+            className="text-gray-500 hover:text-gray-700"
+            size={18}
+          />
         </div>
         {errors.password && (
           <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
@@ -231,7 +231,7 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
               <input
                 {...field}
                 type={showConfirmPassword ? "text" : "password"}
-                className={`w-full pl-10 p-3 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
+                className={`w-full pl-10 pr-14 p-3 rounded-lg focus:outline-none focus:ring-2 text-gray-800 ${
                   fieldState.error
                     ? "border border-red-500 bg-red-50 focus:ring-red-200"
                     : "border border-gray-300 focus:ring-blue-500"
@@ -241,14 +241,12 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
             )}
           />
           <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
-          <button
-            type="button"
-            onClick={() => setShowConfirmPassword((previous) => !previous)}
-            className="absolute right-3 top-3.5 text-gray-500 hover:text-gray-700"
-            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-          >
-            {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+          <PasswordVisibilityToggle
+            visible={showConfirmPassword}
+            onToggle={() => setShowConfirmPassword((previous) => !previous)}
+            className="text-gray-500 hover:text-gray-700"
+            size={18}
+          />
         </div>
         {errors.confirmPassword && (
           <p className="text-red-500 text-sm mt-1">
@@ -286,7 +284,7 @@ const CreateAdminForm: React.FC<CreateAdminFormProps> = ({
           }`}
         >
           <UserPlus className="w-4 h-4" />
-          <span>{isLoading ? "Creating..." : submitLabel}</span>
+          <span>{isLoading ? <MiniSpinner size={16} /> : submitLabel}</span>
         </button>
       </div>
     </form>

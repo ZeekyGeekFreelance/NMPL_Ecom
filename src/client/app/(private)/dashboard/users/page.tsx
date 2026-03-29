@@ -20,12 +20,12 @@ import {
   Shield,
   BadgeCheck,
   KeyRound,
-  Eye,
-  EyeOff,
   ChevronDown,
   ShieldCheck,
   ShieldOff,
 } from "lucide-react";
+import LoadingDots from "@/app/components/feedback/LoadingDots";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 import useToast from "@/app/hooks/ui/useToast";
 import { useForm } from "react-hook-form";
 import UserForm, { UserFormData } from "./UserForm";
@@ -41,6 +41,7 @@ import { toAccountReference } from "@/app/lib/utils/accountReference";
 import formatDate from "@/app/utils/formatDate";
 import { getRoleBadgeClass, resolveDisplayRole } from "@/app/lib/userRole";
 import { validatePasswordPolicy } from "@/app/lib/validators/common";
+import PasswordVisibilityToggle from "@/app/components/atoms/PasswordVisibilityToggle";
 
 type UserDirectoryFilter =
   | "ALL"
@@ -551,8 +552,8 @@ const UsersDashboard = () => {
               >
                 {isDeleting && userToDelete === row.id ? (
                   <>
-                    <Loader2 size={14} className="mr-1 animate-spin" />
-                    Deleting...
+                    <MiniSpinner size={14} className="mr-1" />
+                    Delete
                   </>
                 ) : (
                   <>
@@ -797,7 +798,7 @@ const UsersDashboard = () => {
             {isLoading && (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-                <span className="ml-2 text-gray-600">Loading users...</span>
+                <LoadingDots label="Loading" className="ml-2" />
               </div>
             )}
 
@@ -879,21 +880,21 @@ const UsersDashboard = () => {
                         password: true,
                       }))
                     }
-                    className={`w-full rounded-lg p-3 pr-10 text-gray-800 focus:outline-none focus:ring-2 ${
+                    className={`w-full rounded-lg p-3 pr-14 text-gray-800 focus:outline-none focus:ring-2 ${
                       showPasswordPolicyError
                         ? "border border-red-500 bg-red-50 focus:ring-red-200"
                         : "border border-gray-300 focus:ring-blue-500"
                     }`}
                     placeholder="Enter new password"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminPassword((previous) => !previous)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    aria-label={showAdminPassword ? "Hide password" : "Show password"}
-                  >
-                    {showAdminPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
+                  <PasswordVisibilityToggle
+                    visible={showAdminPassword}
+                    onToggle={() =>
+                      setShowAdminPassword((previous) => !previous)
+                    }
+                    className="text-gray-500 hover:text-gray-700"
+                    size={18}
+                  />
                 </div>
                 {showPasswordPolicyError ? (
                   <p className="mt-1 text-xs text-red-600">{passwordPolicyError}</p>
@@ -914,29 +915,21 @@ const UsersDashboard = () => {
                         confirmPassword: true,
                       }))
                     }
-                    className={`w-full rounded-lg p-3 pr-10 text-gray-800 focus:outline-none focus:ring-2 ${
+                    className={`w-full rounded-lg p-3 pr-14 text-gray-800 focus:outline-none focus:ring-2 ${
                       showConfirmPasswordError
                         ? "border border-red-500 bg-red-50 focus:ring-red-200"
                         : "border border-gray-300 focus:ring-blue-500"
                     }`}
                     placeholder="Confirm new password"
                   />
-                  <button
-                    type="button"
-                    onClick={() =>
+                  <PasswordVisibilityToggle
+                    visible={showAdminConfirmPassword}
+                    onToggle={() =>
                       setShowAdminConfirmPassword((previous) => !previous)
                     }
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    aria-label={
-                      showAdminConfirmPassword ? "Hide password" : "Show password"
-                    }
-                  >
-                    {showAdminConfirmPassword ? (
-                      <EyeOff size={18} />
-                    ) : (
-                      <Eye size={18} />
-                    )}
-                  </button>
+                    className="text-gray-500 hover:text-gray-700"
+                    size={18}
+                  />
                 </div>
                 {showConfirmPasswordError ? (
                   <p className="mt-1 text-xs text-red-600">{confirmPasswordError}</p>
@@ -965,9 +958,10 @@ const UsersDashboard = () => {
                     Boolean(passwordPolicyError) ||
                     Boolean(confirmPasswordError)
                   }
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isUpdatingAdminPassword ? "Updating..." : "Update Password"}
+                  {isUpdatingAdminPassword ? <MiniSpinner size={16} /> : null}
+                  <span>Update Password</span>
                 </button>
               </div>
             </div>

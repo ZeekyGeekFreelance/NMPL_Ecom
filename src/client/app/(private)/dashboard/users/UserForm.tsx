@@ -4,6 +4,7 @@ import { Controller, UseFormReturn } from "react-hook-form";
 import { Users, Shield, Crown } from "lucide-react";
 import { useAuth } from "@/app/hooks/useAuth";
 import Dropdown from "@/app/components/molecules/Dropdown";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 import {
   resolveDisplayRole,
   isExternalDisplayRole,
@@ -276,7 +277,7 @@ const UserForm: React.FC<UserFormProps> = ({
             isLoading || !canSubmitForm ? "opacity-50 cursor-not-allowed" : ""
           }`}
         >
-          {isLoading ? "Saving..." : submitLabel}
+          {isLoading ? <MiniSpinner size={16} /> : submitLabel}
         </button>
       </div>
     </form>
