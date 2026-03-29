@@ -16,6 +16,7 @@ import ProductFileUpload from "./ProductFileUpload";
 import { usePathname } from "next/navigation";
 import { ProductFormData } from "./product.types";
 import { withAuth } from "@/app/components/HOC/WithAuth";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 import usePageQuery from "@/app/hooks/network/usePageQuery";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
 
@@ -41,6 +42,7 @@ const mapProductToFormData = (product: any): ProductFormData => ({
   isBestSeller: Boolean(product?.isBestSeller),
   isFeatured: Boolean(product?.isFeatured),
   categoryId: product?.categoryId || "",
+  gstId: String(product?.gstId || product?.gst?.id || ""),
   description: product?.description || "",
   variants: (Array.isArray(product?.variants) ? product.variants : []).map(
     (variant: any) => ({
@@ -122,6 +124,7 @@ const ProductsDashboard = () => {
     payload.append("isBestSeller", data.isBestSeller.toString());
     payload.append("isFeatured", data.isFeatured.toString());
     payload.append("categoryId", data.categoryId || "");
+    payload.append("gstId", data.gstId || "");
 
     // Track image indexes for each variant
     let imageIndex = 0;
@@ -188,6 +191,7 @@ const ProductsDashboard = () => {
     payload.append("isBestSeller", data.isBestSeller.toString());
     payload.append("isFeatured", data.isFeatured.toString());
     payload.append("categoryId", data.categoryId || "");
+    payload.append("gstId", data.gstId || "");
 
     let imageIndex = 0;
     data.variants.forEach((variant, index) => {
@@ -370,7 +374,7 @@ const ProductsDashboard = () => {
             className="flex items-center gap-1 text-primary hover:text-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:text-[var(--color-primary-muted)]"
           >
             <Edit size={16} />
-            {isFetchingEditProduct ? "Loading..." : "Edit"}
+            {isFetchingEditProduct ? <MiniSpinner size={16} /> : "Edit"}
           </button>
           <button
             type="button"
@@ -378,10 +382,12 @@ const ProductsDashboard = () => {
             className="flex items-center gap-1 text-red-600 hover:text-red-800"
             disabled={isDeleting}
           >
-            <Trash2 size={16} />
-            {isDeleting && productToDelete === row.id
-              ? "Deleting..."
-              : "Delete"}
+            {isDeleting && productToDelete === row.id ? (
+              <MiniSpinner size={16} />
+            ) : (
+              <Trash2 size={16} />
+            )}
+            <span>Delete</span>
           </button>
         </div>
       ),

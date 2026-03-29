@@ -12,8 +12,10 @@ const ManageProduct = () => {
   const {
     product,
     categories,
+    gsts,
     productsLoading,
     categoriesLoading,
+    gstsLoading,
     productsError,
     form,
     submitError,
@@ -32,7 +34,7 @@ const ManageProduct = () => {
   } = useProductDetail();
   const hasPendingChanges = form.formState.isDirty;
 
-  if (productsLoading || categoriesLoading) {
+  if (productsLoading || categoriesLoading || gstsLoading) {
     return <CustomLoader />;
   }
 
@@ -125,6 +127,8 @@ const ManageProduct = () => {
               form={form}
               onSubmit={onSubmit}
               categories={categories}
+              gsts={gsts}
+              isGstsLoading={gstsLoading}
               isUpdating={isUpdating}
               error={submitError ? { data: { message: submitError } } : undefined}
               onCancel={() => form.reset()}

@@ -1,9 +1,10 @@
 "use client";
-import { Archive, Loader2, Save } from "lucide-react";
+import { Archive, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { toProductReference } from "@/app/lib/utils/accountReference";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface ProductSummaryProps {
   product: {
@@ -141,11 +142,11 @@ const ProductSummary: React.FC<ProductSummaryProps> = ({
               disabled={isUpdating || !canSave}
             >
               {isUpdating ? (
-                <Loader2 size={16} className="animate-spin" />
+                <MiniSpinner size={16} />
               ) : (
                 <Save size={16} />
               )}
-              {isUpdating ? "Saving..." : canSave ? "Save Changes" : "No Changes"}
+              {canSave ? "Save Changes" : "No Changes"}
             </button>
             <button
               type="button"

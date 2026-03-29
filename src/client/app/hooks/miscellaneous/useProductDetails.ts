@@ -9,6 +9,7 @@ import {
   useGetProductByIdQuery,
 } from "@/app/store/apis/ProductApi";
 import { useGetAllCategoriesQuery } from "@/app/store/apis/CategoryApi";
+import { useGetAllGstsQuery } from "@/app/store/apis/GstApi";
 import useToast from "@/app/hooks/ui/useToast";
 import { ProductFormData } from "@/app/(private)/dashboard/products/product.types";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
@@ -43,12 +44,22 @@ export const useProductDetail = () => {
 
   const { data: categoriesData, isLoading: categoriesLoading } =
     useGetAllCategoriesQuery({});
+  const { data: gstResponse, isLoading: gstsLoading } =
+    useGetAllGstsQuery(undefined);
 
   const categories =
     categoriesData?.categories.map((c) => ({
       label: c.name,
       value: c.id,
     })) || [];
+  const gsts =
+    ((gstResponse as any)?.gsts || (gstResponse as any)?.data?.gsts || []).map(
+      (gst: any) => ({
+        label: `${gst.name} (${Number(gst.rate || 0)}%)`,
+        value: gst.id,
+        disabled: gst.isActive === false,
+      })
+    );
 
   const [updateProduct, { isLoading: isUpdating }] = useUpdateProductMutation();
   const [deleteProduct, { isLoading: isDeleting }] = useDeleteProductMutation();
@@ -65,6 +76,7 @@ export const useProductDetail = () => {
       name: "",
       description: "",
       categoryId: "",
+      gstId: "",
       isNew: false,
       isTrending: false,
       isBestSeller: false,
@@ -82,6 +94,7 @@ export const useProductDetail = () => {
         name: product.name || "",
         description: product.description || "",
         categoryId: product.categoryId || "",
+        gstId: product.gstId || product.gst?.id || "",
         isNew: product.isNew || false,
         isTrending: product.isTrending || false,
         isBestSeller: product.isBestSeller || false,
@@ -150,6 +163,7 @@ export const useProductDetail = () => {
     payload.append("isBestSeller", data.isBestSeller.toString());
     payload.append("isFeatured", data.isFeatured.toString());
     payload.append("categoryId", data.categoryId || "");
+    payload.append("gstId", data.gstId || "");
 
     // Handle variants
     let imageIndex = 0;
@@ -280,8 +294,10 @@ export const useProductDetail = () => {
   return {
     product,
     categories,
+    gsts,
     productsLoading,
     categoriesLoading,
+    gstsLoading,
     productsError,
     form,
     submitError,

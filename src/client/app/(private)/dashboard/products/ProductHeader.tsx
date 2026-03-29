@@ -1,7 +1,8 @@
 "use client";
-import { Loader2, Package, Trash2 } from "lucide-react";
+import { Package, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import useFormatPrice from "@/app/hooks/ui/useFormatPrice";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface ProductHeaderProps {
   product: {
@@ -82,13 +83,11 @@ const ProductHeader: React.FC<ProductHeaderProps> = ({
             disabled={isDeleting}
           >
             {isDeleting ? (
-              <Loader2 size={16} className="animate-spin" />
+              <MiniSpinner size={16} />
             ) : (
               <Trash2 size={16} />
             )}
-            <span className="hidden sm:inline">
-              {isDeleting ? "Deleting..." : "Delete"}
-            </span>
+            <span className="hidden sm:inline">Delete</span>
           </button>
         </div>
       </div>

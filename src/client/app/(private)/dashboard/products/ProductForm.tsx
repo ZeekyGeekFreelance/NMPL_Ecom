@@ -6,17 +6,20 @@ import { ProductFormData } from "./product.types";
 import CheckBox from "@/app/components/atoms/CheckBox";
 import VariantForm from "./VariantForm";
 import { getApiErrorMessage } from "@/app/utils/getApiErrorMessage";
+import MiniSpinner from "@/app/components/feedback/MiniSpinner";
 
 interface ProductFormProps {
   form: UseFormReturn<ProductFormData>;
   onSubmit: (data: ProductFormData) => void;
   categories?: { label: string; value: string }[];
+  gsts?: { label: string; value: string; disabled?: boolean }[];
   categoryAttributes?: {
     id: string;
     name: string;
     isRequired: boolean;
     values: { id: string; value: string; slug: string }[];
   }[];
+  isGstsLoading?: boolean;
   isLoading?: boolean;
   error?: any;
   submitLabel?: string;
@@ -30,7 +33,9 @@ const ProductForm: React.FC<ProductFormProps> = ({
   form,
   onSubmit,
   categories = [],
+  gsts = [],
   categoryAttributes = [],
+  isGstsLoading = false,
   isLoading,
   error,
   submitLabel = "Save",
@@ -63,7 +68,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
       className="flex h-full min-h-0 flex-col"
     >
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Product Name
@@ -117,6 +122,33 @@ const ProductForm: React.FC<ProductFormProps> = ({
             {errors.categoryId && (
               <p className="text-red-500 text-xs mt-1">
                 {errors.categoryId.message}
+              </p>
+            )}
+          </div>
+
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              GST
+            </label>
+            <Controller
+              name="gstId"
+              control={control}
+              rules={{ required: "GST is required" }}
+              render={({ field }) => (
+                <Dropdown
+                  onChange={(value) => field.onChange(value || "")}
+                  options={gsts}
+                  value={field.value ?? ""}
+                  label="Select GST"
+                  className="py-2.5"
+                  isLoading={isGstsLoading}
+                  clearable={false}
+                />
+              )}
+            />
+            {errors.gstId && (
+              <p className="text-red-500 text-xs mt-1">
+                {errors.gstId.message}
               </p>
             )}
           </div>
@@ -201,12 +233,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <button
             type="submit"
             disabled={submitDisabled}
-            className={`flex min-w-24 items-center justify-center rounded-md px-5 py-2.5 font-medium text-white ${
+            className={`flex min-w-32 items-center justify-center gap-2 rounded-md px-5 py-2.5 font-medium text-white ${
               submitDisabled ? "cursor-not-allowed" : ""
             }`}
             style={{ backgroundColor: submitDisabled ? 'var(--color-primary-muted)' : 'var(--color-primary)' }}
           >
-            {isLoading ? "Saving..." : submitLabel}
+            {isLoading ? <MiniSpinner size={16} /> : null}
+            <span>{submitLabel}</span>
           </button>
         </div>
       </div>

@@ -8,6 +8,8 @@ interface ProductEditFormProps {
   form: UseFormReturn<ProductFormData>;
   onSubmit: (data: ProductFormData) => void;
   categories: { label: string; value: string }[];
+  gsts: { label: string; value: string; disabled?: boolean }[];
+  isGstsLoading?: boolean;
   isUpdating: boolean;
   onCancel?: () => void;
   error?: unknown;
@@ -17,6 +19,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   form,
   onSubmit,
   categories,
+  gsts,
+  isGstsLoading = false,
   isUpdating,
   onCancel,
   error,
@@ -39,9 +43,11 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
           form={form}
           onSubmit={onSubmit}
           categories={categories}
+          gsts={gsts}
+          isGstsLoading={isGstsLoading}
           isLoading={isUpdating}
           error={error}
-          submitLabel={isUpdating ? "Saving..." : "Save Changes"}
+          submitLabel="Save Changes"
           onCancel={onCancel || (() => form.reset())}
           isEditMode
           disableSubmit={!isDirty}

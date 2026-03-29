@@ -3,6 +3,7 @@ export interface ProductFormData {
   name: string;
   description?: string;
   categoryId: string;
+  gstId: string;
   isNew: boolean;
   isTrending: boolean;
   isBestSeller: boolean;

@@ -5,6 +5,7 @@ import {
   useGetAllCategoriesQuery,
   useGetCategoryAttributesQuery,
 } from "@/app/store/apis/CategoryApi";
+import { useGetAllGstsQuery } from "@/app/store/apis/GstApi";
 import Modal from "@/app/components/organisms/Modal";
 import { ProductFormData } from "./product.types";
 import ProductForm from "./ProductForm";
@@ -27,11 +28,20 @@ const ProductModal: React.FC<ProductModalProps> = ({
   error,
 }) => {
   const { data: categoriesData } = useGetAllCategoriesQuery({});
+  const { data: gstResponse, isLoading: isGstsLoading } = useGetAllGstsQuery(undefined);
   const categories =
     categoriesData?.categories?.map((category) => ({
       label: category.name,
       value: category.id,
     })) || [];
+  const gsts =
+    ((gstResponse as any)?.gsts || (gstResponse as any)?.data?.gsts || []).map(
+      (gst: any) => ({
+        label: `${gst.name} (${Number(gst.rate || 0)}%)`,
+        value: gst.id,
+        disabled: gst.isActive === false,
+      })
+    );
 
   const form = useForm<ProductFormData>({
     mode: "onBlur",
@@ -44,6 +54,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
       isFeatured: false,
       isBestSeller: false,
       categoryId: "",
+      gstId: "",
       description: "",
       variants: [
         {
@@ -90,6 +101,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
         isFeatured: initialData.isFeatured || false,
         isBestSeller: initialData.isBestSeller || false,
         categoryId: initialData.categoryId || "",
+        gstId: initialData.gstId || "",
         description: initialData.description || "",
         variants: initialData.variants || [],
       });
@@ -102,6 +114,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
         isFeatured: false,
         isBestSeller: false,
         categoryId: "",
+        gstId: "",
         description: "",
         variants: [],
       });
@@ -132,7 +145,9 @@ const ProductModal: React.FC<ProductModalProps> = ({
             form={form}
             onSubmit={handleFormSubmit}
             categories={categories}
+            gsts={gsts}
             categoryAttributes={categoryAttributes}
+            isGstsLoading={isGstsLoading}
             isLoading={isLoading}
             error={error}
             submitLabel={initialData ? "Update" : "Create"}
