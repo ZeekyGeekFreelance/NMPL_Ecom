@@ -1,429 +1,202 @@
-# NMPL Ecom
+# NMPL E-Commerce — v50
 
-Full-stack ecommerce platform for NMPL with role-based workflows (`SUPERADMIN`, `ADMIN`, `USER`, `DEALER`) across a Next.js client and an Express/Apollo/Prisma API.
+A production-grade, full-stack e-commerce platform built with **Next.js 15** (App Router) + **Express/GraphQL** backend.
 
-## Production Docs
+---
 
-Supported production topology:
+## Architecture
 
-- API on Railway
-- Client on Vercel
-- Docker Compose for development only
-- Managed TLS on Railway and Vercel only
-
-Production failure policy:
-
-- the API container must fail closed if the real server cannot boot
-- the diagnostic health server is manual-only via `npm --prefix ./src/server run diag:health`
-- a healthy production `/health` response must come from the real API, never from a fallback process
-
-- [Quick Start Production Guide](QUICK_START_PRODUCTION.md)
-- [Detailed Production Deployment](PRODUCTION_DEPLOYMENT.md)
-- [Environment Source Of Truth](ENVIRONMENT_SOURCE_OF_TRUTH.md)
-- [Security Checklist](SECURITY_CHECKLIST.md)
-- [Production Launch Checklist](PRODUCTION_LAUNCH_CHECKLIST.md)
-- [Monitoring Setup](MONITORING_SETUP.md)
-- [Privileged Access Runbook](PRIVILEGED_ACCESS_RUNBOOK.md)
-
-## Working Dev Baseline
-
-This repository is currently locked around the following local development ports:
-
-- Client: `http://localhost:3000`
-- Server health: `http://localhost:5000/health`
-- REST API: `http://localhost:5000/api/v1`
-- GraphQL: `http://localhost:5000/api/v1/graphql`
-- Postgres (Docker dev): `localhost:5433`
-- Redis (Docker dev): `localhost:6379`
-
-Use Node.js `22.x` for host-based commands.
-
-## Fast Path: Production-Like Local Preview With Real DB
-
-If your goal is:
-
-- built server and built client
-- `NODE_ENV=production`
-- real DB and real credentials from `src/server/.env`
-- local browser access on `localhost`
-
-run this and skip the Docker app containers:
-
-### 1. Point the env files correctly
-
-- keep real database and credential values in `src/server/.env`
-- keep `src/client/.env` on `http://localhost:5000/api/v1`
-- do not run the Docker `server` or `client` containers on ports `5000` or `3000`
-
-### 2. Build and start the server in production-like Neon mode
-
-```bash
-cd src/server
-npm ci
-npm run build
-npm run start:preview:neon
+```
+NMPL_Ecom/
+├── src/
+│   ├── client/          # Next.js 15 — App Router, TypeScript, Tailwind CSS
+│   └── server/          # Express 4 — Apollo GraphQL, Prisma, PostgreSQL, Redis
+├── package.json         # Root monorepo convenience scripts
+└── README.md
 ```
 
-### 3. Build and start the client in local preview mode
+### Frontend (`src/client`)
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 15.x (App Router, React 19) |
+| Styling | Tailwind CSS v4 |
+| State | Redux Toolkit + RTK Query |
+| API | Apollo Client (GraphQL) + Axios (REST) |
+| Auth | Cookie-based JWT with CSRF protection |
+| Payments | Stripe.js |
+| Forms | React Hook Form + Zod |
 
-Open a second shell:
+### Backend (`src/server`)
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js ≥22 |
+| HTTP | Express 4 |
+| API | Apollo Server 5 (GraphQL) |
+| ORM | Prisma 6 + PostgreSQL |
+| Cache/Queue | Redis (ioredis) + BullMQ |
+| Payments | Stripe |
+| Storage | Cloudinary |
+| Auth | JWT (bcryptjs) + CSRF |
+| Email | Nodemailer |
+
+---
+
+## Routes
+
+### Public
+| Path | Description |
+|------|-------------|
+| `/` | Home — SSR product sections |
+| `/products` | Product listing with filters |
+| `/product/[slug]` | Product detail page |
+| `/shop` | Shop by category |
+| `/brands` | Brand browser |
+| `/cart` | Shopping cart |
+| `/about-us` | About page |
+
+### Auth
+| Path | Description |
+|------|-------------|
+| `/sign-in` | User login |
+| `/sign-up` | User registration |
+| `/password-reset` | Password reset flow |
+| `/dealer/sign-in` | Dealer portal login |
+| `/dealer/register` | Dealer registration |
+
+### Private (authenticated)
+| Path | Description |
+|------|-------------|
+| `/orders` | Order history |
+| `/orders/[orderId]` | Order detail |
+| `/profile` | User profile |
+| `/dashboard` | Admin dashboard |
+| `/dashboard/products` | Product management |
+| `/dashboard/categories` | Category management |
+| `/dashboard/orders` | Order management |
+| `/dashboard/users` | User management |
+| `/dashboard/analytics` | Analytics & charts |
+| `/dashboard/payments` | Payment management |
+| `/dashboard/inventory` | Inventory & restock |
+| `/dashboard/transactions` | Transaction history |
+| `/dashboard/reports` | Reports & exports |
+| `/dashboard/dealers` | Dealer management |
+| `/dashboard/gst` | GST configuration |
+| `/dashboard/attributes` | Product attributes |
+| `/dashboard/delivery-fees` | Delivery fee config |
+| `/dashboard/logs` | System logs |
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js ≥ 22
+- PostgreSQL
+- Redis
+
+### 1. Client
 
 ```bash
 cd src/client
-npm ci
-npm run build:preview
-npm run start:preview
+cp .env.example .env.local
+# Fill in your NEXT_PUBLIC_API_URL, NEXT_PUBLIC_PLATFORM_NAME, etc.
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-### 4. Verify
-
-Open a third shell:
-
-```bash
-curl.exe http://localhost:5000/health
-curl.exe -I http://localhost:3000/
-curl.exe -I http://localhost:3000/sign-in
-```
-
-Expected result:
-
-- `/health` returns `"healthy": true`
-- the app opens at `http://localhost:3000`
-- the local app talks to the locally running production-mode server, which uses `src/server/.env`
-
-Important:
-
-- use `npm run build:preview` for the client, not plain `npm run build`
-- use `npm run start:preview:neon` for the server, not `npm run dev:neon`
-- do not run `npm run seed` unless you intentionally want seed data in the real DB
-
-## Recommended Setup: Docker Dev
-
-This is the most reproducible path for a fresh clone on a standalone machine.
-It runs:
-
-- local Postgres 15 in Docker
-- local Redis 7 in Docker
-- server in Docker on port `5000`
-- client in Docker on port `3000`
-
-### 1. Clone and copy env files
-
-```bash
-git clone https://github.com/ZeekyGeekFreelance/NMPL_Ecom.git
-cd NMPL_Ecom
-```
-
-```powershell
-Copy-Item src/server/.env.example src/server/.env
-Copy-Item src/client/.env.example src/client/.env
-```
-
-Notes:
-
-- `src/docker-compose.yml` overrides the server database and redis URLs to the local Docker services.
-- `src/client/.env.example` already points the client to `http://localhost:5000/api/v1`.
-- In development, placeholder secrets from `src/server/.env.example` are acceptable, but replace them before any shared or staging deployment.
-
-### 2. Start the stack
-
-```bash
-cd src
-docker compose up -d --build
-docker compose exec server npx prisma migrate deploy
-docker compose exec server npm run seed
-```
-
-### 3. Verify
-
-```bash
-curl.exe http://localhost:5000/health
-curl.exe -I http://localhost:3000/
-curl.exe -I http://localhost:3000/sign-in
-```
-
-Expected result:
-
-- `/health` returns a JSON payload with `"healthy": true`
-- `/` returns `200`
-- `/sign-in` returns `200`
-
-### 4. Seeded login accounts
-
-- `superadmin@example.com` / `password123`
-- `admin@example.com` / `password123`
-- `user@example.com` / `password123`
-
-## Host Dev With Local Node Processes
-
-Two host-side server profiles are supported.
-
-### Option A: Host App + Local Docker Postgres/Redis
-
-Use Docker only for infra:
-
-```bash
-cd src
-docker compose up -d db redis
-```
-
-In another shell:
+### 2. Server
 
 ```bash
 cd src/server
-npm ci
+cp .env.example .env
+# Fill in DATABASE_URL, REDIS_URL, JWT secrets, Stripe keys, etc.
+npm install
 npx prisma migrate deploy
-npm run seed
-npm run dev:localdocker
+npm run dev        # http://localhost:5000
 ```
 
-In another shell:
+---
+
+## Environment Variables
+
+### Client (`src/client/.env.local`)
+```env
+NODE_ENV=development
+NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1
+INTERNAL_API_URL=http://localhost:5000/api/v1
+NEXT_PUBLIC_PLATFORM_NAME=NMPL
+NEXT_PUBLIC_SUPPORT_EMAIL=support@nmpl.online
+NEXT_PUBLIC_ENABLE_NATIVE_CONFIRM=false
+```
+
+### Server (`src/server/.env`)
+See `src/server/.env.example` for the full list.
+Key variables:
+```env
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://...
+ACCESS_TOKEN_SECRET=...
+REFRESH_TOKEN_SECRET=...
+STRIPE_SECRET_KEY=...
+CLOUDINARY_URL=...
+```
+
+---
+
+## Production Build
 
 ```bash
-cd src/client
-npm ci
-npm run dev
+# Client
+cd src/client && npm run build && npm start
+
+# Server
+cd src/server && npm run build && npm start
 ```
 
-### Option B: Host App + Neon
+The client produces a `standalone` Next.js output in `.next/standalone` — ready for Docker or direct Node deployment.
 
-Run the app directly on the host with the base `src/server/.env`:
+---
 
-```bash
-cd src/server
-npm ci
-npm run dev:neon
-```
+## Docker
 
-In another shell:
-
-```bash
-cd src/client
-npm ci
-npm run dev
-```
-
-For host mode:
-
-- keep `src/server/.env` on port `5000`
-- keep `src/client/.env` on `http://localhost:5000/api/v1`
-- `npm run dev:neon` uses the base `src/server/.env`
-- `npm run dev:localdocker` overlays `src/server/.env.localdocker` on top of `src/server/.env` so the host server targets Docker Postgres/Redis on `127.0.0.1`
-- do not run the Docker client/server and the host client/server on the same ports at the same time
-- do not run migrations or seed against Neon unless that is intentional
-
-## Migrate Local Docker State To Neon
-
-If your current source of truth is the local Docker Postgres volume on `localhost:5433`
-and you want to promote that exact state into Neon:
-
-```bash
-npm run db:migrate:localdocker:to:neon:plan
-```
-
-Then execute the migration:
-
-```bash
-npm run db:migrate:localdocker:to:neon
-```
-
-How it works:
-
-- source: `src/server/.env.localdocker` (or `.env.localdocker.example`) using the local direct Postgres URL
-- target: `src/server/.env` using `DIRECT_URL` for Neon
-- engine: Dockerized `pg_dump` + `pg_restore`, so you do not need host PostgreSQL client tools installed
-
-Safety rules:
-
-- the target Neon connection must be `DIRECT_URL`, not the pooled `DATABASE_URL`
-- the restore is destructive for conflicting target objects because it uses `pg_restore --clean --if-exists`
-- if your local DB still contains seeded demo accounts like `superadmin@example.com`, `admin@example.com`, or `user@example.com`, do not promote that state directly into production Neon
-- use a disposable Neon branch first, validate login/catalog/order flows there, then cut over production
-
-Recommended Neon contract:
-
-- `DATABASE_URL` = pooled Neon URL
-- `DIRECT_URL` = non-pooled Neon URL
-
-## Bootstrap First SuperAdmin / Admin In Neon
-
-For the full operational runbook for privileged account creation, password
-rotation, and break-glass recovery, see:
-
-- [Privileged Access Runbook](PRIVILEGED_ACCESS_RUNBOOK.md)
-
-Neon does not need any special role configuration. The application accepts
-privileged logins only when the `User` table contains a row with `role=SUPERADMIN`
-or `role=ADMIN`.
-
-Public registration never creates those roles.
-
-If you migrated your local state, your existing privileged users move with that data.
-If Neon is blank, bootstrap the first privileged account manually:
-
-```bash
-npm run bootstrap:privileged -- SUPERADMIN owner@nmpl.online "Owner Name" "TempPass1!" 9190362986
-```
-
-Or create a temporary admin:
-
-```bash
-npm run bootstrap:privileged -- ADMIN admin@nmpl.online "Admin Name" "TempPass1!" 9190362986
-```
-
-Fastest recommended path:
-
-1. Create exactly one `SUPERADMIN` with the bootstrap script.
-2. Sign in with that temporary password.
-3. Complete the forced password change.
-4. Create all later `ADMIN` accounts from inside the app, not from SQL.
-
-Bootstrap rules:
-
-- the script is non-destructive and refuses to overwrite an existing email
-- both `SUPERADMIN` and `ADMIN` are created with `mustChangePassword=true`
-- the first sign-in returns `requiresPasswordChange=true`, and the user must finish `/auth/change-password` before panel access
-- after the first `SUPERADMIN` exists, create all later `ADMIN` accounts from the app itself via `POST /api/v1/users/admin`
-
-### Direct Neon SQL Option
-
-Yes, you can create the first privileged user directly from the Neon SQL editor.
-The app only cares that the row exists in the `User` table with the correct role,
-hashed password, and `mustChangePassword=true`.
-
-Use this only for the very first bootstrap if you do not want to run the script.
-Do **not** store a plain-text password in the database.
-
-```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-INSERT INTO "User" (
-  "id",
-  "email",
-  "password",
-  "name",
-  "phone",
-  "role",
-  "tokenVersion",
-  "mustChangePassword",
-  "isBillingSupervisor",
-  "createdAt",
-  "updatedAt"
-)
-VALUES (
-  gen_random_uuid(),
-  'owner@nmpl.online',
-  crypt('TempPass1!', gen_salt('bf', 12)),
-  'Owner Name',
-  '9190362986',
-  'SUPERADMIN'::"ROLE",
-  0,
-  TRUE,
-  FALSE,
-  NOW(),
-  NOW()
-);
-```
-
-To create an admin instead, change:
-
-- `'SUPERADMIN'::"ROLE"` to `'ADMIN'::"ROLE"`
-- email / name / phone / temporary password to the intended values
-
-Important SQL rules:
-
-- never insert a plain password; always bcrypt-hash it
-- set `"mustChangePassword" = TRUE`
-- do not manually promote an existing public user to `ADMIN` or `SUPERADMIN` in production unless you intend to bypass the normal audit trail
-- after the first `SUPERADMIN` exists, stop doing this in SQL and create later admins from the app
-
-## Local Built Preview
-
-Two preview profiles exist:
-
-- `npm run start:preview:localdocker`: production-mode server using `src/server/.env.localdocker`
-- `npm run start:preview:neon`: production-mode server using `src/server/.env`
-
-For the client, always use:
-
-```bash
-cd src/client
-npm run build:preview
-npm run start:preview
-```
-
-Reason:
-
-- `build:preview` keeps the local client pointed at `src/client/.env`
-- plain `npm run build` uses deployment-oriented production env semantics
-
-## Privileged Account Policy
-
-For production safety:
-
-- keep only one or two `SUPERADMIN` accounts, owned by named humans
-- create `ADMIN` accounts only from a signed-in `SUPERADMIN`
-- every newly created `ADMIN` now lands with `mustChangePassword=true`, so the initial password is temporary only
-- every SuperAdmin-driven admin password reset now forces first-login rotation before the admin can use the panel
-- public forgot/reset remains blocked for `ADMIN` and `SUPERADMIN`
-- keep `SUPERADMIN_RESET_SECRET` in a password manager and use it only as break-glass recovery when a SuperAdmin is locked out
-- never carry seeded demo credentials into shared Neon or production
-
-## Reproducibility Notes
-
-- The Docker dev client now stores `.next` in a dedicated container volume instead of the host bind mount.
-- The client dev startup clears stale `.next` contents before `next dev` starts.
-- The Docker dev client uses Turbopack so route-to-route navigation does not repeatedly fall back to slow webpack recompiles on bind-mounted source trees.
-- If you switch branches or recover from an interrupted client build, recreating only the client is enough:
+Use `src/docker-compose.yml` to spin up client + server + PostgreSQL + Redis + nginx together.
 
 ```bash
 cd src
-docker compose up -d --force-recreate --no-deps client
+docker compose up --build
 ```
 
-## Common Commands
+---
 
-```bash
-cd src
-docker compose ps
-docker compose logs -f client
-docker compose logs -f server
-docker compose down
-```
+## Key Business Logic
 
-## Tests
+- **Products**: Variants with SKU, price, stock, images, attributes (e.g. brand, color, size)
+- **Catalog Flags**: `isFeatured`, `isTrending`, `isNew`, `isBestSeller`
+- **Pricing**: Dealer-specific pricing mapped per variant; fallback to list price
+- **Cart**: Guest cart (localStorage) + authenticated cart (server-side); merged on login
+- **Checkout**: Stripe payment intent + optional Pay Later for approved dealers
+- **Orders**: Full lifecycle — pending → confirmed → shipped → delivered → cancelled
+- **Dealers**: Registration with approval flow; credit terms; pay-later support
+- **GST**: Per-product GST slabs; applied at checkout
+- **Delivery**: City-based flat rates; free pickup option
+- **Reports**: Sales, inventory, financial exports (PDF/CSV)
+- **Auth**: Access token (15 min) + refresh token (24 h); CSRF protection; token versioning
 
-Repository-level test entrypoint:
+---
 
-```bash
-npm run test
-```
+## Changes from v12 → v50
 
-Package-level test entrypoints:
+| Area | v12 | v50 |
+|------|-----|-----|
+| Client scripts | Custom `run-next.js` wrapper, `validate-env.js`, `assert-determinism.js` | Standard `next dev / build / start` |
+| Build complexity | Multi-step pipeline with sanity checks | Lean standard Next.js build |
+| tsconfig | References `.next-dev` dist dir | Clean, references only `.next` |
+| next.config.ts | NEXT_DIST_DIR / isDockerDev branching | Single clean config |
+| Root package.json | Mono scripts | Clean workspace convenience scripts |
+| Route conflicts | None (App Router enforces unique routes) | Verified clean |
 
-```bash
-npm --prefix ./src/server run test
-npm --prefix ./src/client run test
-```
+---
 
-Live smoke and browser suites against a booted local stack:
+## License
 
-```bash
-npm run test:smoke:api
-npm run test:browser
-npm run test:live
-```
-
-Live suite assumptions:
-
-- API is already booted at `http://127.0.0.1:5000` unless `SMOKE_API_BASE_URL` overrides it.
-- Client is already booted at `http://127.0.0.1:3000` unless `BROWSER_BASE_URL` overrides it.
-- Default admin smoke credentials are `admin@example.com / password123` unless `SMOKE_ADMIN_EMAIL`, `SMOKE_ADMIN_PASSWORD`, `BROWSER_ADMIN_EMAIL`, or `BROWSER_ADMIN_PASSWORD` override them.
-- Browser tests use a locally installed Chromium-family browser through Playwright. Override the channel with `PLAYWRIGHT_BROWSER_CHANNEL` if needed.
-
-## Run Rules
-
-- Run migrations before seeding.
-- Do not run Docker mode and host mode simultaneously on the same ports.
-- Development seed behavior is environment-routed in `src/server/seeds/seed.ts`.
-- Production catalog import still requires explicit `ALLOW_PROD_CATALOG_IMPORT=true`.
+Proprietary — © NMPL

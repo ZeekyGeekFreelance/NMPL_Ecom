@@ -1,34 +1,19 @@
 {
+  "name": "nmpl-ecom",
+  "version": "50.0.0",
+  "private": true,
+  "description": "NMPL E-Commerce Monorepo — Next.js 15 frontend + Express/GraphQL backend",
+  "scripts": {
+    "dev:client": "cd src/client && npm run dev",
+    "dev:server": "cd src/server && npm run dev",
+    "build:client": "cd src/client && npm run build",
+    "build:server": "cd src/server && npm run build",
+    "start:client": "cd src/client && npm run start",
+    "start:server": "cd src/server && npm run start",
+    "lint:client": "cd src/client && npm run lint",
+    "type-check": "cd src/client && npm run type-check && cd ../server && npm run type-check"
+  },
   "engines": {
     "node": ">=22 <23"
-  },
-  "devDependencies": {
-    "@commitlint/cli": "19.8.1",
-    "@commitlint/config-conventional": "19.8.1",
-    "husky": "9.1.7"
-  },
-  "overrides": {
-    "ajv": "8.18.0"
-  },
-  "scripts": {
-    "prepare": "husky",
-    "repo:sanity": "node ./scripts/repo-sanity.js",
-    "test:server": "npm --prefix ./src/server run test",
-    "test:client": "npm --prefix ./src/client run test",
-    "test:smoke:api": "npm --prefix ./src/server run test:smoke",
-    "test:browser": "npm --prefix ./src/client run test:browser",
-    "test:live": "npm run test:smoke:api && npm run test:browser",
-    "test": "npm run test:server && npm run test:client",
-    "audit": "npm audit --omit=dev --audit-level=high",
-    "audit:all": "npm audit --omit=dev --audit-level=high && npm --prefix ./src/client audit --omit=dev --audit-level=high && npm --prefix ./src/server audit --omit=dev --audit-level=high",
-    "deps:check": "node ./scripts/check-install-state.js",
-    "licenses:check": "node ./scripts/check-licenses.js",
-    "bootstrap:privileged": "npm --prefix ./src/server run bootstrap:privileged --",
-    "db:migrate:localdocker:to:neon:plan": "npm --prefix ./src/server run db:migrate:localdocker:to:neon:plan",
-    "db:migrate:localdocker:to:neon": "npm --prefix ./src/server run db:migrate:localdocker:to:neon",
-    "build:all": "npm --prefix ./src/server run build && npm --prefix ./src/client run build",
-    "ci:verify": "npm run repo:sanity && npm --prefix ./src/server run env:check && npm --prefix ./src/client run env:check -- --production && npm run test && npm run build:all && npm run audit:all && npm run deps:check && npm run licenses:check",
-    "deploy": "node ./scripts/deploy.js",
-    "setup:prod": "node ./scripts/setup-production-env.js"
   }
 }

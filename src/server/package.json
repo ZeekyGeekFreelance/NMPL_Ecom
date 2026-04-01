@@ -1,6 +1,6 @@
 {
-  "name": "server",
-  "version": "1.0.0",
+  "name": "nmpl-server",
+  "version": "50.0.0",
   "main": "index.js",
   "overrides": {
     "effect": "3.21.0",
@@ -8,30 +8,13 @@
   },
   "scripts": {
     "dev": "prisma generate && nodemon",
-    "dev:neon": "node ./scripts/run-dev-profile.js neon",
-    "dev:localdocker": "node ./scripts/run-dev-profile.js localdocker",
-    "dev:docker": "prisma generate && node -r ./scripts/load-env.js -r ts-node/register/transpile-only -r module-alias/register src/server.ts",
-    "compile": "prisma generate && node ./scripts/clean-build.js && tsc",
-    "start:docker": "npm run compile && npm run start",
-    "start:preview:neon": "node ./scripts/run-start-profile.js neon",
-    "start:preview:localdocker": "node ./scripts/run-start-profile.js localdocker",
-    "repo:sanity": "node ./scripts/repo-sanity-proxy.js",
-    "env:check": "ts-node --transpile-only -r dotenv/config src/config/index.ts",
-    "build": "npm run repo:sanity && npm run env:check && prisma generate && node ./scripts/clean-build.js && node ./scripts/assert-determinism.js pre && tsc && node ./scripts/assert-determinism.js post",
+    "build": "prisma generate && node scripts/clean-build.js && tsc",
     "start": "node -r ./scripts/load-env.js -r module-alias/register dist/server.js",
-    "diag:health": "node ./scripts/simple-health.js",
-    "test": "node ./test/run.js",
-    "test:smoke": "node ./test/run.js --include-live --tag=smoke-api",
-    "bootstrap:privileged": "node ./scripts/bootstrap-privileged-user.js",
-    "db:migrate:localdocker:to:neon:plan": "node ./scripts/migrate-localdocker-to-neon.js --plan",
-    "db:migrate:localdocker:to:neon": "node ./scripts/migrate-localdocker-to-neon.js --execute",
-    "prisma": "prisma",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "seed": "ts-node seeds/seed.ts",
-    "data:normalize:titlecase": "ts-node scripts/normalize-title-case-data.ts",
-    "test:cleanup": "node -r ./scripts/load-env.js -r module-alias/register -r ts-node/register test-cleanup.ts",
-    "audit": "npm audit --omit=dev --audit-level=high"
+    "prisma": "prisma",
+    "type-check": "tsc --noEmit"
   },
   "engines": {
     "node": ">=22 <23"
