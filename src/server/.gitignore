@@ -1,7 +1,0 @@
-node_modules
-.env
-.env.localdocker
-.env.neon
-dist/
-*.log
-src/infra/logs/*.log

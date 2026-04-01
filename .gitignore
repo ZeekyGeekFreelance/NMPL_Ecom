@@ -1,32 +1,35 @@
+# dependencies
 node_modules/
-.recovery/
-assets/screenshots/
-.github/ISSUE_TEMPLATE/
-.husky/
-.idea/
-.vscode/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+
+# production
+build/
+dist/
+
+# env files
 .env
-.env.*
-!.env.example
-src/.env
-src/.env.*
-src/client/.env
-src/client/.env.*
-!src/client/.env.example
-src/server/.env
-src/server/.env.*
-!src/server/.env.example
-!src/server/.env.production.example
-!src/server/.env.localdocker.example
-src/client/.next/
-src/client/.next-dev/
-src/client/.next-prod/
-src/client/node_modules/
-src/server/node_modules/
-src/server/src/infra/logs/*.log
-src/server/dist/infra/logs/*.log
-.tmp-login-cookies.txt
-src/tmp-cookies.txt
-src/client/.codex-client-dev.err.log
-src/client/.codex-client-dev.out.log
-tmp/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS
+.DS_Store
+Thumbs.db
